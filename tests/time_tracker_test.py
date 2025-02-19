@@ -27,14 +27,53 @@ from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction
 TEST_DATE = dt.date(year=2025, month=12, day=31)
 TEST_EMPLOYEE_ID = "000"
 
+# ODS Time Tracker
+ODS_SAMPLES_FOLDER = "samples/"
+ODS_CACHE_FOLDER = ".cache/samples-test"
+
+################################################
+#       ODS Time Tracker provider              #
+################################################
+
+def build_ods_time_tracker(employee_id: str, date: dt.date) -> ITodayTimeTracker:
+    """
+    Build an ITodayTimeTracker that uses ODS files for data storage.
+
+    Returns:
+        ODSTodayTimeTracker: ITodayTimeTracker implementation
+    """
+    from spreadsheet_time_tracker import SpreadsheetTimeTracker
+    return SpreadsheetTimeTracker(ODS_CACHE_FOLDER, employee_id, date)
+
+@pytest.fixture
+def arrange_ods_time_tracker():
+    """
+    Prepare the cache folder that will be used to store temporary ODS file(s) for the tests.
+    """
+    import shutil, pathlib
+    # Get source samples and cache folder
+    samples = pathlib.Path(ODS_SAMPLES_FOLDER)
+    cache = pathlib.Path(ODS_CACHE_FOLDER)
+    # Check samples folder exists 
+    if not samples.exists():
+        raise FileNotFoundError(f"Samples folder not found at {samples.resolve()}")
+    # Delete old cache folder if existing
+    if cache.exists():
+        shutil.rmtree(cache)
+    # Copy samples to cache
+    shutil.copytree(samples, cache)
+
 #################################################
 # Time tracker implementation provider fixtures #
 #################################################
 
 @pytest.fixture(params=[
     # List of implementation provider methods
+    build_ods_time_tracker
 ])
-def time_tracker_provider(request) -> Callable[[str, dt.date], ITodayTimeTracker]:
+def time_tracker_provider(request, 
+                          arrange_ods_time_tracker
+                          ) -> Callable[[str, dt.date], ITodayTimeTracker]:
     """
     Parametrized fixture for retrieving instances of time tracker implementations.
 
