@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+"""
+File: time_tracker_test.py
+Author: Bastian Cerf
+Date: 17/02/2025
+Description: 
+    Unit test the ITodayTimeTracker interface implementations to validate expected behaviors.
+Usage:
+    Use pytest to execute the tests. You can run it by executing the command below in the TeamBridge/ folder.
+    - pytest
+
+Company: Mecacerf SA
+Website: http://mecacerf.ch
+Contact: info@mecacerf.ch
+"""
+
+import pytest
+import datetime as dt
+from typing import Callable
+from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction
+
+################################################
+#               Tests constants                #
+################################################
+
+# General
+TEST_DATE = dt.date(year=2025, month=12, day=31)
+TEST_EMPLOYEE_ID = "000"
+
+#################################################
+# Time tracker implementation provider fixtures #
+#################################################
+
+@pytest.fixture(params=[
+    # List of implementation provider methods
+])
+def time_tracker_provider(request) -> Callable[[str, dt.date], ITodayTimeTracker]:
+    """
+    Parametrized fixture for retrieving instances of time tracker implementations.
+
+    Returns:
+        Callable: call the provider method to get a time tracker instance that is using the implementation under test
+    """
+    return request.param
+
+################################################
+#           Time tracker unit tests            #
+################################################
+
+def test_open_employee(time_tracker_provider):
+    """
+    Try to open the employee template data and retrieve his firstname and name.
+    Expected firstname, name: Meca, Cerf
+    """
+    # Get time tracker instance for this employee
+    employee = time_tracker_provider(TEST_EMPLOYEE_ID, TEST_DATE)
+
+    # Check expected firstname and name
+    assert employee.get_firstname() == "Meca"
+    assert employee.get_name() == "Cerf"
+
+def test_initial_state(time_tracker_provider):
+    """
+    Check that the openened employee is not clocked in and hasn't worked today or this month.
+    """
+    # Get time tracker instance for this employee
+    employee = time_tracker_provider(TEST_EMPLOYEE_ID, TEST_DATE)
+
+    assert employee.is_clocked_in_today() is False # Not clocked in
+    assert not employee.get_clock_events_today() # No event today
+    assert employee.get_worked_time_today() == dt.timedelta(hours=0, minutes=0, seconds=0) # No work today
+    assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0) # No work this month
+
+def test_clock_in(time_tracker_provider):
+    """
+    Clock in the employee and verify the registration.
+    """
+    # Get time tracker instance for this employee
+    employee = time_tracker_provider(TEST_EMPLOYEE_ID, TEST_DATE)
+    
+    # Act
+    # Create clock in event at 7h35 
+    clock_in_time = dt.time(hour=7, minute=35)
+    event = ClockEvent(clock_in_time, ClockAction.CLOCK_IN)
+    # Register event
+    employee.register_clock(event)
+
+    # Assert
+    assert employee.is_clocked_in_today() is True # Now the employee is clocked in
+    assert len(employee.get_clock_events_today()) == 1 # One clock event today
+    
+    event = employee.get_clock_events_today()[0] # Get clock event
+    assert event.action == ClockAction.CLOCK_IN # Clock in event
+    assert event.time == clock_in_time # At expected time
+
+    assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0) # No work this month
+    assert employee.get_worked_time_today() == dt.timedelta(hours=0, minutes=0, seconds=0) # No work today until clock out event
+    # Check worked time from 7h35 to 8h10 is 35 minutes
+    assert employee.get_worked_time_today(now=dt.time(hour=8, minute=10)) == dt.timedelta(minutes=35)
+
+def test_clock_out(time_tracker_provider):
+    """
+    Clock in / clock out sequence and verify registrations.
+    """
+    # Get time tracker instance for this employee
+    employee = time_tracker_provider(TEST_EMPLOYEE_ID, TEST_DATE)
+
+    # Act
+    # Create clock in event at 7h35 
+    clock_in_time = dt.time(hour=7, minute=35)
+    event_in = ClockEvent(clock_in_time, ClockAction.CLOCK_IN)
+    # Create clock out event at 12h10
+    clock_out_time = dt.time(hour=12, minute=10)
+    event_out = ClockEvent(clock_out_time, ClockAction.CLOCK_OUT)
+    # Register events
+    employee.register_clock(event_in)
+    employee.register_clock(event_out)
+
+    # Assert
+    assert employee.is_clocked_in_today() is False # Clocked out
+    assert len(employee.get_clock_events_today()) == 2 # Two clock events today
+
+    event = employee.get_clock_events_today()[0] # Get clock in event
+    assert event.action == ClockAction.CLOCK_IN # Clock in event
+    assert event.time == clock_in_time # At expected time
+
+    event = employee.get_clock_events_today()[1] # Get clock out event
+    assert event.action == ClockAction.CLOCK_OUT # Clock in event
+    assert event.time == clock_out_time # At expected time
+
+    # Monthly balance is updated the next day
+    assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0)
+    # Clocked in at 7h35 and clocked out at 12h10 results in 4h35 of work 
+    assert employee.get_worked_time_today() == dt.timedelta(hours=4, minutes=35, seconds=0)
+    # Checking the worked time at 12h40 doesn't change the result since the employee is clocked out 
+    assert employee.get_worked_time_today(now=dt.time(hour=12, minute=40)) == dt.timedelta(hours=4, minutes=35, seconds=0)
+
+def test_full_day(time_tracker_provider):
+    """
+    Work for a full day with midday break including a little break at 10h and check results.
+    Clock in: 8h
+    Clock out: 10h
+    Clock in: 10h15
+    Clock out: 12h20
+    Clock in: 13h
+    Clock out: 16h40
+    Worked time: 2h + 2h05 + 3h40 = 7h45 
+    """
+    # Get time tracker instance for this employee
+    employee = time_tracker_provider(TEST_EMPLOYEE_ID, TEST_DATE)
+
+    # Act
+    # Create clock in/out events
+    clock_in_time_0 = dt.time(hour=8)
+    event_in_0 = ClockEvent(clock_in_time_0, ClockAction.CLOCK_IN)
+    clock_out_time_0 = dt.time(hour=10)    
+    event_out_0 = ClockEvent(clock_out_time_0, ClockAction.CLOCK_OUT)
+    clock_in_time_1 = dt.time(hour=10, minute=15)
+    event_in_1 = ClockEvent(clock_in_time_1, ClockAction.CLOCK_IN)
+    clock_out_time_1 = dt.time(hour=12, minute=20)
+    event_out_1 = ClockEvent(clock_out_time_1, ClockAction.CLOCK_OUT)
+    clock_in_time_2 = dt.time(hour=13)
+    event_in_2 = ClockEvent(clock_in_time_2, ClockAction.CLOCK_IN)
+    clock_out_time_2 = dt.time(hour=16, minute=40)
+    event_out_2 = ClockEvent(clock_out_time_2, ClockAction.CLOCK_OUT)
+
+    # Create events list
+    events = [event_in_0, event_out_0, event_in_1, event_out_1, event_in_2, event_out_2]
+    
+    # Register events
+    for event in events:
+        employee.register_clock(event)
+
+    # Assert
+    assert employee.is_clocked_in_today() is False # Clocked out
+    assert len(employee.get_clock_events_today()) == len(events)
+
+    # Verify registered events
+    for i, event in enumerate(employee.get_clock_events_today(), 0):
+        # Assert clock type and time match
+        assert event.action == events[i].action
+        assert event.time == events[i].time
+
+    # Monthly balance is updated the next day
+    assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0)
+    # The employee worked 7h45 today
+    assert employee.get_worked_time_today() == dt.timedelta(hours=7, minutes=45, seconds=0)
+
+def test_wrong_clock_action(time_tracker_provider):
+    """
+    Test to clock out while not clocked in, double clock in and double clock out must all fail.
+    """
+    # Get time tracker instance for this employee
+    employee = time_tracker_provider(TEST_EMPLOYEE_ID, TEST_DATE)
+
+    # Try to clock out while not clocked in
+    event_out = ClockEvent(dt.time(hour=8, minute=20), ClockAction.CLOCK_OUT)
+
+    # Assert that it throws an error
+    with pytest.raises(ValueError):
+        employee.register_clock(event_out)
+
+    # Try double clock in at the same time
+    event_in = ClockEvent(dt.time(hour=8, minute=20), ClockAction.CLOCK_IN)
+
+    # First register works
+    employee.register_clock(event_in)
+    # Second clock in throws an error
+    with pytest.raises(ValueError):
+        employee.register_clock(event_in)
+
+    # Register clock out event at 11h
+    event_out = ClockEvent(dt.time(hour=11), ClockAction.CLOCK_OUT)
+    # First register work
+    employee.register_clock(event_out)
+
+    # Clock out again at 11h01
+    event_out = ClockEvent(dt.time(hour=11, minute=1), ClockAction.CLOCK_OUT)
+    # Second clock out throws an error, since the employee is already clocked out
+    with pytest.raises(ValueError):
+        employee.register_clock(event_out)
+
+def test_unordered_clock_events(time_tracker_provider):
+    """
+    Try to register unordered clock events and verify that it throws errors.
+    """
+    # Get time tracker instance for this employee
+    employee = time_tracker_provider(TEST_EMPLOYEE_ID, TEST_DATE)
+
+    # Register a clock in at 11h
+    event_in = ClockEvent(dt.time(hour=11), ClockAction.CLOCK_IN)
+    employee.register_clock(event_in)
+
+    # Register a clock out at 8h must throw an error
+    event_out = ClockEvent(dt.time(hour=8), ClockAction.CLOCK_OUT)
+    with pytest.raises(ValueError):
+        employee.register_clock(event_out)
+
+def test_monthly_balance(time_tracker_provider):
+    """
+    Verify the monthly balance after a few days of work.
+    """
+    # Get time tracker instance for this employee
+    employee = time_tracker_provider(TEST_EMPLOYEE_ID, TEST_DATE)
+
+    # TODO: The behavior regarding the availability of the monthly balance is not clear and must be tested
+    # and discussed before implementing this test.
+    pass 
