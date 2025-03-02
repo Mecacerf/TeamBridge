@@ -12,22 +12,20 @@ Contact: info@mecacerf.ch
 """
 
 import sys
-import datetime
+from time_tracker_model import TimeTrackerModel
 from spreadsheet_time_tracker import SpreadsheetTimeTracker
-from time_tracker_interface import ClockEvent, ClockAction
+import time
 
 def main() -> int:
     """
     """
+    # Create the application model using a SpreadsheetTimeTracker
+    model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker("samples/", code, date))
 
-    employee = SpreadsheetTimeTracker("samples/", "000", datetime.datetime.now().date())
-    print(employee.get_firstname())
-    print(employee.get_name())
-    employee.register_clock(ClockEvent(datetime.datetime.now().time(), ClockAction.CLOCK_IN))
-    employee.register_clock(ClockEvent((datetime.datetime.now()+datetime.timedelta(hours=1)).time(), ClockAction.CLOCK_OUT))
-    print(f"Today events: {employee.get_clock_events_today()}")
-    print(f"Monthly balance: {employee.get_monthly_balance()}")
-    print(f"Today balance: {employee.get_worked_time_today()}")
+    # Run
+    while True:
+        time.sleep(0.1)
+        model.run()
 
 if __name__ == "__main__":
     sys.exit(main())
