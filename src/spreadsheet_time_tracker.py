@@ -20,6 +20,8 @@ import openpyxl.worksheet
 import subprocess
 import pathlib
 import shutil
+# Import Callable for callback declaration
+from typing import Callable
 # Import the time tracker interface
 from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction
 # Import datetime
@@ -37,16 +39,31 @@ SHEET_JANUARY = 1
 CELL_NAME = 'A6'
 # Cell containing the firstname information
 CELL_FIRSTNAME = 'A7'
+# Cell containing the current date information
+CELL_DATE = 'A8'
+# Cell containing the current hour information
+CELL_HOUR = 'A9'
 # Cell containing the first day of the month
 CELL_START_DATE = 'B9'
 # Cell containing the last day of a 31 days month
 CELL_END_DATE = 'B39'
 # Top left cell containing the first clock in hour of the month
-CELL_TOP_LEFT_CLOCK_IN = 'F9'
+CELL_TOP_LEFT_CLOCK_IN = 'G9'
 # Bottom right cell containing the last clock out hour of the month
-CELL_BOT_RIGHT_CLOCK_OUT = 'M39'
-# Cell containing the employee monthly balance, days balance are in the same column
+CELL_BOT_RIGHT_CLOCK_OUT = 'R39'
+# Cell containing the employee monthly balance, individual day balances are in the same column below
 CELL_MONTHLY_BALANCE = 'D8'
+# First cell containing the working hours of the day
+CELL_WORKING_HOURS = 'E9'
+
+################################################
+#              General constants               #
+################################################
+
+# Path to 'soffice' in the filesystem
+LIBREOFFICE_PATH = "C:\\Program Files\\LibreOffice\\program\\soffice"
+# Temporary folder in which evaluated spreadsheets are placed
+SPREADSHEET_CACHE_FOLDER = ".tmp_calc/"
 
 class SpreadsheetTimeTracker(ITodayTimeTracker):
     """
@@ -74,9 +91,8 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Throw a file not found error if necessary
         if self._file_path is None:
             raise FileNotFoundError(f"File not found for employee's ID '{employee_id}'.")
-        
-        # Reload employee's workbook so all formulas values are up to date
-        self.__reload_workbook()
+        # Load workbook
+        self.__load_workbook()
 
     def __get_employee_file(self, employee_id: str) -> pathlib.Path | None:
         """
@@ -202,34 +218,19 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             timedelta: delta time object
         """
-        # This function currently calculates itself the employee balance for the day instead of reading the
-        # balance cell. This behavior might change in next spreadsheet versions.
-        # Get today clock events
-        clock_events = self.get_clock_events_today()
-        # Total calculated delta time 
-        delta = dt.timedelta(0)
-        # Save previous clock in time
-        clock_in_datetime = None
-        # Iterate through clock events and sum the deltas
-        for event in clock_events:
-            # By definition, first event is a clock in action
-            if event.action == ClockAction.CLOCK_IN:
-                # Set clock in time
-                # Since minus and plus operators are available only for dates, create a date object by combining the current
-                # date with the clock action time 
-                clock_in_datetime = dt.datetime.combine(self._date, event.time)
-            elif event.action == ClockAction.CLOCK_OUT:
-                # Calculate and add the delta time
-                delta += (dt.datetime.combine(self._date, event.time) - clock_in_datetime)
-                # Reset clock in time
-                clock_in_datetime = None
-        # Once all clock events have been iterated, if clock_in_datetime is not None that means the employee is still clocked in
-        # If the now argument is available, add the difference between now and last clock in time
-        if now and clock_in_datetime:
-            # Add the difference
-            delta += (dt.datetime.combine(self._date, now) - clock_in_datetime)
-        # Return the delta time
-        return delta
+        # Get current date cell and identify the working hours row
+        row = self.__get_current_date_cell().row
+        # Get working hours column
+        _, column = openpyxl.utils.coordinate_to_tuple(CELL_WORKING_HOURS)
+        # Get current month's sheet in read mode
+        sheet_rd = self._workbook_rd.worksheets[self._date.month - 1 + SHEET_JANUARY]
+        # Get the timedelta object
+        timedelta = sheet_rd.cell(row=row, column=column).value
+        # It might happen that the object is a dt.time
+        if isinstance(timedelta, dt.time):
+            timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
+        # Return the timedelta
+        return timedelta
 
     def get_monthly_balance(self) -> dt.timedelta:
         """
@@ -283,6 +284,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
                 # Save as HH:MM, do not take seconds into account for final user simplicity
                 cell.number_format = 'HH:MM'
                 cell.value = dt.time(hour=event.time.hour, minute=event.time.minute, second=0)
+                # Log action, set written flag and leave
                 print(f"Written {cell.value} in cell {cell.coordinate}")
                 written = True
                 break
@@ -291,42 +293,44 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         if not written:
             raise ValueError(f"Event ({event.action} at {event.time}) has not been correctly registered.")
         
-        # Save and reload the workbook after write
-        self.__save_workbook_and_reload()
+        # Save the workbook
+        self.save_workbook()
 
-    def __save_workbook_and_reload(self):
+    def refresh(self, callback: Callable[[], None] = None):
         """
-        Save the workbook.
-        """
-        # Log action
-        print(f"Starting (re)evaluation of '{self._file_path.name}'...")
-        # Save/overwrite the spreadsheet
-        self._workbook_wr.save(self._file_path)
-        # Reload
-        self.__reload_workbook()
+        Refresh the employee's data. This function must be called before any read function is called, in
+        order to ensure the data are up-to-date. This process might take some time depending on the
+        implementation in use. An optional callback argument can be passed to know when the refreshing
+        process finishes. If None is used, the refreshing process is synchronous, meaning it will block
+        the calling thread.
 
-    def __reload_workbook(self, tmp=".tmp_calc/"):
+        Parameters:
+            callback: an optional callback argument to know when the refresh finishes
         """
-        After cell values are modified, use libreoffice in headless mode to update the values of formula cells. 
-        This requires 'soffice' to be in the system path.
-        """
+        # TODO !warning! Current implementation is only synchronous
+        if callback:
+            raise NotImplementedError("This implementation currently doesn't implement this feature.")
+
+        # After cell values are modified, use libreoffice in headless mode to update the values of formula cells. 
+        # This requires 'soffice' to be installed.
+        
         # Get temporary file path based on real file path and temporary folder path
-        tmp_file = pathlib.Path(tmp) / self._file_path.name
+        tmp_file = pathlib.Path(SPREADSHEET_CACHE_FOLDER) / self._file_path.name
         # Ensure the temporary folder doesn't contain a file with the same name
         if tmp_file.exists():
             raise FileExistsError(f"The temporary file '{tmp_file}' already exists and may contain unsaved data. Manual check required.")
         # Create libreoffice command to evaluate and save a spreadsheet
         command = [
-            "C:\Program Files\LibreOffice\program\soffice", # libreoffice invokation
-            "--headless",       # Headless means no GUI
-            "--calc",           # Spreadsheets mode
-            "--convert-to", "xlsx", # Go to xlsx format
-            "--outdir", tmp,    # Output in temporary folder
-            str(self._file_path.absolute()) # Input employee file
+            LIBREOFFICE_PATH,                       # libreoffice invokation
+            "--headless",                           # Headless means no GUI
+            "--calc",                               # Spreadsheets mode
+            "--convert-to", "xlsx",                 # Go to xlsx format
+            "--outdir", SPREADSHEET_CACHE_FOLDER,   # Output in temporary folder
+            str(self._file_path.absolute())         # Input employee file
         ]
         # Run command with subprocess
         # Use check=True to ensure raising an exception if the process fails
-        # By definition, run() waits for the process to finish
+        # By definition, run() is blocking so it waits for the process to finish
         result = subprocess.run(command, check=True, capture_output=True)
         # It seems like the soffice process can fail and still return 0. Double check for error:
         if result.returncode != 0 or len(result.stderr) > 0:
@@ -343,6 +347,16 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Load workbook
         self.__load_workbook()
 
+    def save_workbook(self):
+        """
+        Save the workbook in the filesystem.
+        """
+        # Save/overwrite the spreadsheet
+        self._workbook_wr.save(self._file_path)
+        # Important Note related to known limitation #
+        # Once saved, the cached values are reset to None since openpyxl decides that they are outdated.
+        # If a load_workbook is called again, the reading sheet will see only None values in formula cells.
+
     def __load_workbook(self):
         """
         Load the employee's workbook.
@@ -353,6 +367,4 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         self._workbook_rd = openpyxl.load_workbook(self._file_path, data_only=True)
         # Open employee spreadsheet in write mode
         self._workbook_wr = openpyxl.load_workbook(self._file_path, data_only=False)
-        # Log action
-        print(f"Successfully (re)loaded '{self._file_path.name}'.")
         

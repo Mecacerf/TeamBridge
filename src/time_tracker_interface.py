@@ -13,6 +13,7 @@ Contact: info@mecacerf.ch
 
 import datetime as dt
 from enum import Enum
+from typing import Callable
 
 ###############################################
 # Employee Time Tracker Interface Declaration #
@@ -59,16 +60,29 @@ class ITodayTimeTracker:
     Typical use cases include daily time tracking, attendance validation, and working hours reporting.
     """
 
-    def __init__(self, employee_id: str, index: dt.date):
+    def __init__(self, employee_id: str, date: dt.date):
         """
         Open the employee's data for given date.
 
         Parameters:
             id: employee unique ID
-            index: date index
+            date: date index
         Raise:
             ValueError: employee not found
             ValueError: wrong / unavailable date time
+        """
+        pass
+
+    def refresh(self, callback: Callable[[], None] = None):
+        """
+        Refresh the employee's data. This function must be called before any read function is called, in
+        order to ensure the data are up-to-date. This process might take some time depending on the
+        implementation in use. An optional callback argument can be passed to know when the refreshing
+        process finishes. If None is used, the refreshing process is synchronous, meaning it will block
+        the calling thread.
+
+        Parameters:
+            callback: an optional callback argument to know when the refresh finishes
         """
         pass
 
