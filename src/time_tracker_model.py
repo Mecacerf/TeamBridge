@@ -20,7 +20,7 @@ import datetime as dt
 from live_data import LiveData
 
 # Timeout in seconds during which an already scanned code will be ignored
-TIMEOUT = 30
+TIMEOUT = 15
 
 class EmployeeEvent:
     """
@@ -37,7 +37,7 @@ class EmployeeEvent:
             id: employee's id
             clock_evt: related ClockEvent
         """
-        # Save other parameters
+        # Save event parameters
         self.name = name
         self.firstname = firstname
         self.id = id
@@ -70,6 +70,8 @@ class TimeTrackerModel:
         self._employee_events_bus = LiveData[EmployeeEvent](None)
         # Create the scanning signal
         self._scanning_sig = LiveData[bool](False)
+        # Create the loading signal
+        self._loading_sig = LiveData[bool](False)
         # Create the errors bus
         self._error_bus = LiveData[str](None)
 
@@ -107,6 +109,9 @@ class TimeTrackerModel:
         # Put the code in the waiting list to prevent it to be processed multiple times
         self._waiting_codes[code] = time.time()
 
+        # Set the loading state
+        self._loading_sig.set_value(True)
+
         # Get today date and time from system info
         today = dt.datetime.now().date()
         now = dt.datetime.now().time()
@@ -115,6 +120,8 @@ class TimeTrackerModel:
         try:
             # Open the employee time tracker 
             employee = self._time_tracker_provider(today, code)
+            # Refresh it
+            employee.refresh()
 
             # Get employee name and firstname
             name = employee.get_name()
@@ -140,6 +147,10 @@ class TimeTrackerModel:
         except Exception as e:
             # Notify that an exception occurred on the errors bus
             self._error_bus.set_value(str(e))
+        
+        finally:
+            # Reset the loading signal
+            self._loading_sig.set_value(False)
 
     def get_employee_events_bus(self) -> LiveData[EmployeeEvent]:
         """
@@ -154,6 +165,13 @@ class TimeTrackerModel:
             LiveData[str]: observable bus on which errors are published
         """
         return self._error_bus
+
+    def is_loading(self) -> LiveData[bool]:
+        """
+        Returns:
+            LiveData[bool]: loading state as an observable
+        """
+        return self._loading_sig
 
     def is_scanning(self) -> LiveData[bool]:
         """

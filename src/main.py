@@ -23,7 +23,7 @@ def main() -> int:
     """
     """
     # Create the application model using a SpreadsheetTimeTracker
-    model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker("samples/", code, date), debug=True, scan_rate=10)
+    model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker("samples/", code, date), debug=True, scan_rate=8)
     viewmodel = TimeTrackerViewModel(model)
 
     viewmodel.get_current_state().observe(lambda state: print(f"View model state = {state}"))
@@ -34,10 +34,10 @@ def main() -> int:
 
     def update_model():
         model.run()
-        root.after(ms=100, func=update_model)
+        root.after(ms=50, func=update_model)
 
     app = TimeTrackerView(root, viewmodel)
-    root.after(ms=100, func=update_model)
+    root.after(ms=50, func=update_model)
     root.mainloop()
 
 if __name__ == "__main__":

@@ -24,10 +24,12 @@ class ScannerViewModelState(Enum):
     """
     # Waiting for a QR scan
     SCANNING = 0,
+    # Loading an employee's data
+    LOADING = 1,
     # Successfully done the action
-    SUCCESS = 1,
+    SUCCESS = 2,
     # Failed to do the action
-    ERROR = 2
+    ERROR = 3
 
 class TimeTrackerViewModel:
     """
@@ -50,6 +52,8 @@ class TimeTrackerViewModel:
         self._model.get_employee_events_bus().observe(self.__on_employee_event)
         # Observe the errors bus
         self._model.get_errors_bus().observe(self.__on_error)
+        # Observe the loading state
+        self._model.is_loading().observe(self.__is_loading)
 
     def __on_employee_event(self, event: EmployeeEvent):
         """
@@ -60,7 +64,7 @@ class TimeTrackerViewModel:
         if event.clock_evt.action == ClockAction.CLOCK_IN:
             msg = f"Bonjour {event.firstname} ! "
         else:
-            msg = f"Au revoir {event.firstname} !"
+            msg = f"Au revoir {event.firstname} ! "
         # Append clock time
         time = event.clock_evt.time
         msg += f"Timbrage enregistré à {time.hour}h{time.minute}."
@@ -77,6 +81,15 @@ class TimeTrackerViewModel:
         self._text_state.set_value(f"Une erreur est survenue: {error}")
         # Go in error state
         self._state.set_value(ScannerViewModelState.ERROR)
+
+    def __is_loading(self, loading: bool):
+        """
+        Called when the loading state changes.
+        """
+        # Go in loading state is currently in scanning state
+        if loading and self._state.get_value() == ScannerViewModelState.SCANNING:
+            self._text_state.set_value("Chargement des données...")
+            self._state.set_value(ScannerViewModelState.LOADING)
 
     def get_scanning_state(self) -> LiveData[bool]:
         """
