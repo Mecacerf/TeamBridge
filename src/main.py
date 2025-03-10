@@ -15,15 +15,21 @@ import sys
 from time_tracker_model import TimeTrackerModel
 from time_tracker_viewmodel import TimeTrackerViewModel
 from spreadsheet_time_tracker import SpreadsheetTimeTracker
-import time
 from time_tracker_view import TimeTrackerView
 import tkinter as tk
+import argparse
 
 def main() -> int:
     """
     """
+    # Create the argument parser
+    parser = argparse.ArgumentParser(description="TeamBridge Mecacerf Timbreuse.")
+    parser.add_argument("--database-path", type=str, default="samples/", help="Database folder path")
+    # Parse the arguments
+    args = parser.parse_args()
+
     # Create the application model using a SpreadsheetTimeTracker
-    model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker("samples/", code, date), debug=True, scan_rate=8)
+    model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(args.database_path, code, date), debug=True, scan_rate=8)
     viewmodel = TimeTrackerViewModel(model)
 
     viewmodel.get_current_state().observe(lambda state: print(f"View model state = {state}"))
