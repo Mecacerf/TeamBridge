@@ -55,16 +55,20 @@ class TimeTrackerView:
 
         # Scanning label
         self.scanning_label = Label(root, text="", font=("Arial", 12))
-        self.scanning_label.grid(row=1, column=0, sticky="nsew", pady=10)
+        self.scanning_label.grid(row=2, column=0, sticky="nsew", pady=10)
+
+        self.data_label = Label(root, text="", font=("Arial", 12))
+        self.data_label.grid(row=1, column=0, sticky="nsew", pady=10)
 
         # Close button
         self.close_button = Button(root, text="Close", command=self.close)
-        self.close_button.grid(row=2, column=0, sticky="nsew", pady=20)
+        self.close_button.grid(row=3, column=0, sticky="nsew", pady=20)
 
         # Observe ViewModel state changes
         self.viewmodel.get_current_state().observe(self.update_view)
         self.viewmodel.get_info_text().observe(self.update_view)
         self.viewmodel.get_scanning_state().observe(self.update_view)
+        self.viewmodel.get_employee_info_text().observe(self.update_view)
 
         # Play a sound on scanning
         self.old_state = ScannerViewModelState.SCANNING
@@ -116,6 +120,7 @@ class TimeTrackerView:
         scanning = self.viewmodel.get_scanning_state().get_value()
         state = self.viewmodel.get_current_state().get_value()
         info_text = self.viewmodel.get_info_text().get_value()
+        data_text = self.viewmodel.get_employee_info_text().get_value()
 
         # Avoid redundant updates
         if self.scanning_label["text"] != f"Scanning: {scanning}":
@@ -133,9 +138,11 @@ class TimeTrackerView:
         if self.status_label["text"] != info_text or self.status_label["fg"] != new_color:
             self.status_label.config(text=info_text, fg=new_color)
 
+        self.data_label.config(text=data_text, fg='black')
+
         # Schedule automatic reset for success and error states
         if state == ScannerViewModelState.SUCCESS:
-            self.root.after(4000, self.viewmodel.reset_state)
+            self.root.after(10000, self.viewmodel.reset_state)
         elif state == ScannerViewModelState.ERROR:
             self.root.after(6000, self.viewmodel.reset_state)
 
@@ -145,65 +152,3 @@ class TimeTrackerView:
         """Handle window close event."""
         self.viewmodel.close()
         self.root.destroy()
-
-
-# import tkinter as tk
-# from tkinter import Label, Button
-# from time_tracker_viewmodel import TimeTrackerViewModel, ScannerViewModelState
-
-# class TimeTrackerView:
-#     """
-#     """
-    
-#     def __init__(self, root, viewmodel: TimeTrackerViewModel):
-#         """
-#         """
-#         self.viewmodel = viewmodel
-#         self.root = root
-#         self.root.title("Time Tracker")
-#         self.root.geometry("640x480")
-        
-#         # Status label
-#         self.status_label = Label(root, text="Waiting for scan...", font=("Arial", 14))
-#         self.status_label.grid()
-        
-#         # Scanning label
-#         self.scanning_label = Label(root, text="", font=("Arial", 12))
-#         self.scanning_label.grid()
-        
-#         # Action button
-#         self.close_button = Button(root, text="Close", command=self.close)
-#         self.close_button.grid()
-
-#         # Observe the viewmodel
-#         self.viewmodel.get_current_state().observe(lambda x: self.update_view())
-#         self.viewmodel.get_info_text().observe(lambda x: self.update_view())
-#         self.viewmodel.get_scanning_state().observe(lambda x: self.update_view())
-        
-#         # Initial view update
-#         self.update_view()
-
-#     def update_view(self):
-#         # Update UI based on ViewModel state
-#         scanning = self.viewmodel.get_scanning_state().get_value()
-#         state = self.viewmodel.get_current_state().get_value()
-#         info_text = self.viewmodel.get_info_text().get_value()
-        
-#         self.scanning_label.config(text=f"Scanning: {scanning}")
-        
-#         if state == ScannerViewModelState.SCANNING:
-#             self.status_label.config(text=info_text, fg="blue")
-#         elif state == ScannerViewModelState.LOADING:
-#             self.status_label.config(text=info_text, fg="black")
-#         elif state == ScannerViewModelState.SUCCESS:
-#             self.status_label.config(text=info_text, fg="green")
-#             self.root.after(4000, lambda: self.viewmodel.reset_state())
-#         elif state == ScannerViewModelState.ERROR:
-#             self.status_label.config(text=info_text, fg="red")
-#             self.root.after(6000, lambda: self.viewmodel.reset_state())
-
-#         self.root.update()
-    
-#     def close(self):
-#         self.viewmodel.close()
-#         self.root.destroy()

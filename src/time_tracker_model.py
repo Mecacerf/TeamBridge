@@ -51,6 +51,28 @@ class EmployeeEvent:
         self.id = id
         self.clock_evt = clock_evt
 
+class EmployeeData:
+    """
+    Container of different information about an employee.
+    """
+
+    def __init__(self, name: str, 
+                 firstname: str, 
+                 id: str, 
+                 worked_time: dt.timedelta, 
+                 scheduled_time: dt.timedelta, 
+                 monthly_balance: dt.timedelta):
+        """
+        Create an employee's data container.
+        """
+        # Save parameters
+        self.name = name
+        self.firstname = firstname
+        self.id = id
+        self.worked_time = worked_time
+        self.scheduled_time = scheduled_time
+        self.monthly_balance = monthly_balance
+
 class TimeTrackerModel:
     """
     This class is intended to hold the application backend logic: 
@@ -76,6 +98,8 @@ class TimeTrackerModel:
         self._waiting_codes = {}
         # Create the employees events bus
         self._employee_events_bus = LiveData[EmployeeEvent](None, bus_mode=True)
+        # Create the employees info bus
+        self._employee_info_bus = LiveData[EmployeeData](None, bus_mode=True)
         # Create the scanning signal
         self._scanning_sig = LiveData[bool](False)
         # Create the loading signal
@@ -86,6 +110,8 @@ class TimeTrackerModel:
         self._processing = threading.Event()
         # Create the employee events queue
         self._event_queue = queue.Queue()
+        # Create the employee info queue
+        self._info_queue = queue.Queue()
         # Create the errors queue
         self._error_queue = queue.Queue()
 
@@ -127,6 +153,14 @@ class TimeTrackerModel:
             try:
                 # Notify of the new event on the bus
                 self._employee_events_bus.set_value(self._event_queue.get_nowait())
+            except queue.Empty:
+                pass
+
+        # Publish pending employee's info 
+        if not self._info_queue.empty():
+            try:
+                # Notify of the new event on the bus
+                self._employee_info_bus.set_value(self._info_queue.get_nowait())
             except queue.Empty:
                 pass
 
@@ -202,13 +236,33 @@ class TimeTrackerModel:
             # Nullify to prevent closing it again
             employee = None
 
-            LOGGER.info(f"Operation finished for employee ['{firstname} {name}' with id '{id}'].")
+            LOGGER.info(f"Clock action saved for employee ['{firstname} {name}' with id '{id}'].")
 
             # Everything went fine
             # Create the employee event
             event = EmployeeEvent(name=name, firstname=firstname, id=id, clock_evt=clock_evt)
             # Put the event in the queue
             self._event_queue.put(event)
+
+            # Start the inquiry process
+            # Open again for read
+            employee = self._time_tracker_provider(today, id)
+            # Evaluate to allow reading
+            if not employee.is_readable():
+                employee.evaluate()
+            # Read and fill an employee info container
+            worked_time = employee.get_worked_time_today()
+            scheduled = employee.get_daily_schedule()
+            balance = employee.get_monthly_balance()
+            event = EmployeeData(name=name, firstname=firstname, id=id, 
+                                 worked_time=worked_time, scheduled_time=scheduled, monthly_balance=balance)
+            # Publish
+            self._info_queue.put(event)
+            # Close again and nullify
+            employee.close()
+            employee = None
+
+            LOGGER.info(f"Operation finished for employee ['{firstname} {name}' with id '{id}'].")
 
         # Catch the exceptions that may occur during the process
         except Exception as e:
@@ -232,6 +286,13 @@ class TimeTrackerModel:
             LiveData[EmployeeEvent]: observable bus on which employees events are published
         """
         return self._employee_events_bus
+    
+    def get_employee_info_bus(self) -> LiveData[EmployeeEvent]:
+        """
+        Returns:
+            LiveData[EmployeeInfo]: observable bus on which employees info are published
+        """
+        return self._employee_info_bus
 
     def get_errors_bus(self) -> LiveData[str]:
         """

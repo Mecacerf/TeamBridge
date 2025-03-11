@@ -49,13 +49,13 @@ def main() -> int:
 
     # Create the arguments parser
     parser = argparse.ArgumentParser(description="Mecacerf TeamBridge Application")
-    parser.add_argument("--database-path", type=str, default="samples/", help="Database folder path")
+    parser.add_argument("--repository", type=str, default="samples/", help="Spreadsheets repository folder path")
     # Parse the arguments
     args = parser.parse_args()
 
     # Create the application model using a SpreadsheetTimeTracker
-    database = SpreadsheetsRepository(args.database_path)
-    model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(database=database, employee_id=code, date=date), debug=True, scan_rate=8)
+    repository = SpreadsheetsRepository(args.repository)
+    model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date), debug=True, scan_rate=8)
     viewmodel = TimeTrackerViewModel(model)
 
     # Log some state changes
