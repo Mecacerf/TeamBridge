@@ -20,6 +20,7 @@ import openpyxl.worksheet
 import subprocess
 import pathlib
 import shutil
+import os
 # Import Callable for callback declaration
 from typing import Callable
 # Import the time tracker interface
@@ -351,8 +352,11 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         """
         Save the workbook in the filesystem.
         """
-        # Save/overwrite the spreadsheet
-        self._workbook_wr.save(self._file_path)
+        # Save the spreadsheet in the cache folder
+        tmp_file = pathlib.Path(SPREADSHEET_CACHE_FOLDER) / self._file_path.name
+        self._workbook_wr.save(tmp_file)
+        # Move and overwrite the original file
+        os.replace(src=tmp_file, dst=self._file_path)
         # Important Note related to known limitation #
         # Once saved, the cached values are reset to None since openpyxl decides that they are outdated.
         # If a load_workbook is called again, the reading sheet will see only None values in formula cells.
