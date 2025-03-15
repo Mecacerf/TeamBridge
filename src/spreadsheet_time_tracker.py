@@ -11,6 +11,73 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+################################################################################################
+#                           Note about spreadsheets management                                 #
+# 
+# - Library choice
+# After some tests of the different available libraries for spreadsheet access, openpyxl appeared
+# to be the most advanced one, with the only disadvantage that it supports only the XLSX format.
+# 
+# - Cells evaluation
+# The software is designed to be optional, meaning the spreadsheets alone can be used to save and
+# calculate employees information such as clock in / out events, monthly and daily balances, and 
+# so on. That means that when an event is added in the spreadsheet by the software, the sheet
+# must be reevaluated in order to update the affected cells values. The evaluation cannot be done
+# directly by Python, since no formula interpreter seems to exist at this time. So the solution
+# is to invoke libreoffice calc in headless mode (subprocess) and use it to save an evaluated 
+# version of the sheet, then replace the old version by the new evaluated file.  
+#
+# - Spreadsheet file states
+# According to the process described above, a spreadsheet can be in the following states:
+#
+# +---------------------+-------------+---------------------+--------------+-------------+
+# |        State        | File System | Cached Cells Values | Write Access | Read Access |
+# +---------------------+-------------+---------------------+--------------+-------------+
+# | Saved and evaluated | Up to date  | Up to date          | Yes          | Yes         |
+# | Modified in RAM     | Outdated    | Outdated            | Yes          | No          |
+# | Saved on disk       | Up to date  | Unavailable         | Yes          | No          |
+# | Evaluating          | Up to date  | Unavailable         | Yes          | No          |
+# +---------------------+-------------+---------------------+--------------+-------------+
+# 
+# In the initial state, the file is saved on disk and the forumla cells have been evaluated, 
+# meaning their values are available in the cells cache (when opnening the file in 
+# data_only=True). 
+# Once the employee's data have been modified, the file on disk is outdated as well as the 
+# cells values (since the modified cell may be used in a formula). The read access is unset
+# because the read values would be outdated.
+# Once the file has been saved, changes are saved on disk but the file cache is deleted
+# (this process is done automatically by openpyxl because it cannot evaluate the formulas). The
+# read access is obviously still unavailable. 
+# To evaluate the formula cells, libreoffice is invoked in a subprocess. The evaluation can take
+# some time to finish. Once the evaluation is done, the old sheet file is replaced by the new
+# one. The sheet is saved and evaluated again and the read access is available. Note that if
+# a write is done during the sheet evaluation, it would be outdated on disk again.
+# 
+# When a file is initially opened (the Time Tracker is created), it is in the third state by
+# default (saved on disk, data unavailable). This is because the formulas use the current
+# date and time to calculate their values, and an evaluation is required to update these
+# fields.
+#
+# - Design
+# The problem arises when thinking about a common interface for both time trackers based on 
+# spreadsheets or a database. With a database, read and write accesses would be faster and the 
+# formula evaluation mechanism would probably be done on the fly with SQL commands.
+# Nevertheless, two mechanisms can be identified:
+# * Commit: after changes have been done, committing them would save the data in the file 
+#   system. With the spreadsheets version that involves saving the file on disk. With a DB it 
+#   would probably involve sending the queued SQL commands. This mechanism is implementation
+#   dependant though. This function changes the state from "modified in RAM" to "saved on disk".
+# * Evaluate: once changes have been committed, an evaluation must be done in order to calculate
+#   the formula cells and read up-to-date data. A function can be used to know whether the read
+#   functions are accessible or not at this moment. This function changes the state from "saved
+#   on disk" to "evaluating" and finally "saved and evaluated".
+#
+# The state change functions can take a while to execute, depending on IO bound operations such
+# as accessing the file system, a NAS or an external executable (libreoffice). It has been 
+# decided that all functions will be blocking and synchronous and that a time tracker object
+# will typically be used by a background thread.
+################################################################################################
+
 # Import openpyxl for spreadsheet manipulation
 import openpyxl
 import openpyxl.cell
@@ -24,9 +91,13 @@ import os
 # Import Callable for callback declaration
 from typing import Callable
 # Import the time tracker interface
-from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction
+from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, IllegalReadException
+# Import the spreadsheets database access
+from spreadsheets_database import SpreadsheetsDatabase
 # Import datetime
 import datetime as dt
+# Import logging module
+import logging
 
 ################################################
 #           Spreadsheet constants              #
@@ -63,55 +134,46 @@ CELL_WORKING_HOURS = 'E9'
 
 # Path to 'soffice' in the filesystem
 LIBREOFFICE_PATH = "C:\\Program Files\\LibreOffice\\program\\soffice"
-# Temporary folder in which evaluated spreadsheets are placed
-SPREADSHEET_CACHE_FOLDER = ".tmp_calc/"
+# Temporary folder in which evaluated spreadsheets are placed by libreoffice
+LIBREOFFICE_CACHE_FOLDER = ".tmp_calc/"
+
+# Get file logger
+LOGGER = logging.getLogger(__name__)
 
 class SpreadsheetTimeTracker(ITodayTimeTracker):
     """
     Implementation of the time tracker that uses spreadsheet files as database.
     """
 
-    def __init__(self, path: str, employee_id: str, today: dt.date):
+    def __init__(self, database: SpreadsheetsDatabase, employee_id: str, date: dt.date):
         """
         Open the employee's data for given date.
 
         Parameters:
-            path: file system path to employees folder
+            database: spreadsheets database access provider 
             id: employee unique ID
-            index: date index
+            date: date index
         Raise:
             ValueError: employee not found
-            ValueError: wrong / unavailable date time
+            ValueError: wrong / unavailable date time                       TODO
+            RuntimeError: employee's file is already opened
+            OSError: error related to file access
+            TimeoutError: failed to access database folder after timeout
+            FileNotFoundError: employee's file not found
         """
         # Save current date
-        self._date = today
-        # Save employees database path
-        self._database_path = pathlib.Path(path)
-        # Search employee's file
-        self._file_path = self.__get_employee_file(employee_id)
+        self._date = date
+        # Save employees database access provider
+        self._database = database
+        # Set readable flag to be initially False
+        self._readable = False
+        # Acquire employee's file
+        self._file_path = self._database.acquire_employee_file(employee_id)
         # Throw a file not found error if necessary
         if self._file_path is None:
             raise FileNotFoundError(f"File not found for employee's ID '{employee_id}'.")
         # Load workbook
         self.__load_workbook()
-
-    def __get_employee_file(self, employee_id: str) -> pathlib.Path | None:
-        """
-        Search the employee's file in given folder.
-
-        Returns:
-            pathlib.Path: employee's file or None if not found
-        """
-        # Get path to employees data files
-        folder = pathlib.Path(self._database_path)
-        # Search the employee's file based on given id by iterating on all spreadsheet files
-        for file in folder.glob("*.xlsx"):
-            # Check that this is a file and its name starts with correct id
-            if file.is_file() and file.name.startswith(employee_id):
-                # Employee's file is found
-                return file
-        # Employee's file not found
-        return None
 
     def get_firstname(self) -> str:
         """
@@ -120,8 +182,8 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             str: employee's firstname
         """
-        # Get firstname information in cell
-        return str(self._workbook_rd.worksheets[SHEET_INIT][CELL_FIRSTNAME].value)
+        # Get firstname information in write notebook that is always available
+        return str(self._workbook_wr.worksheets[SHEET_INIT][CELL_FIRSTNAME].value)
 
     def get_name(self) -> str:
         """
@@ -130,12 +192,25 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             str: employee's name
         """
-        # Get name information in cell
-        return str(self._workbook_rd.worksheets[SHEET_INIT][CELL_NAME].value)
+        # Get name information in write notebook that is always available
+        return str(self._workbook_wr.worksheets[SHEET_INIT][CELL_NAME].value)
     
+    def is_readable(self) -> bool:
+        """
+        Check if the reading functions are accessible at this moment. 
+        They get unaccessible after a write action and accessible after an 
+        evaluation.
+
+        Returns:
+            bool: reading flag
+        """
+        return self._readable
+
     def __get_current_date_cell(self) -> openpyxl.cell.Cell:
         """
         Get the cell containing the current date.
+        Note: it is legal to use this function even when readable is False, since it accesses 
+        static cells (dates won't change after write actions).
         """
         # Get current month's sheet in read mode
         sheet_rd = self._workbook_rd.worksheets[self._date.month - 1 + SHEET_JANUARY]
@@ -182,6 +257,9 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             list[ClockEvent]: list of today's clock events (can be empty)
         """
+        # Check read status
+        if not self.is_readable():
+            raise IllegalReadException()
         # Get current date cell to identify the row
         date_cell = self.__get_current_date_cell()
         # Get current month's sheet in read mode
@@ -219,6 +297,9 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             timedelta: delta time object
         """
+        # Check read status
+        if not self.is_readable():
+            raise IllegalReadException()
         # Get current date cell and identify the working hours row
         row = self.__get_current_date_cell().row
         # Get working hours column
@@ -240,6 +321,9 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             timedelta: delta time object
         """
+        # Check read status
+        if not self.is_readable():
+            raise IllegalReadException()
         # Get current month's sheet in read mode
         sheet_rd = self._workbook_rd.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Get monthly balance value as a timedelta
@@ -286,47 +370,47 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
                 cell.number_format = 'HH:MM'
                 cell.value = dt.time(hour=event.time.hour, minute=event.time.minute, second=0)
                 # Log action, set written flag and leave
-                print(f"Written {cell.value} in cell {cell.coordinate}")
+                LOGGER.info(f"Written {cell.value} in cell {cell.coordinate}")
                 written = True
                 break
             
         # Check if event has been correctly registered
-        if not written:
+        if written:
+            # Clear readable flag
+            self._readable = False
+        else:
             raise ValueError(f"Event ({event.action} at {event.time}) has not been correctly registered.")
-        
-        # Save the workbook
-        self.save_workbook()
 
-    def refresh(self, callback: Callable[[], None] = None):
+    def commit(self) -> None:
         """
-        Refresh the employee's data. This function must be called before any read function is called, in
-        order to ensure the data are up-to-date. This process might take some time depending on the
-        implementation in use. An optional callback argument can be passed to know when the refreshing
-        process finishes. If None is used, the refreshing process is synchronous, meaning it will block
-        the calling thread.
-
-        Parameters:
-            callback: an optional callback argument to know when the refresh finishes
+        Commit changes. This must be called after changes have been done (typically after new clock events
+        have been registered) to save the modifications.
         """
-        # TODO !warning! Current implementation is only synchronous
-        if callback:
-            raise NotImplementedError("This implementation currently doesn't implement this feature.")
+        # Save the write notebook in the local cache
+        self._workbook_wr.save(self._file_path)
 
+    def evaluate(self) -> None:
+        """
+        Start an employee's data evaluation. This must be done after changes have been committed.
+        Once done, the reading functions are available again and will provide up to date results.
+        """
         # After cell values are modified, use libreoffice in headless mode to update the values of formula cells. 
-        # This requires 'soffice' to be installed.
-        
+        # This requires 'soffice' to be installed on the system.
+
+        # Make sure the libre office cache folder exists
+        os.makedirs(LIBREOFFICE_CACHE_FOLDER, exist_ok=True)
         # Get temporary file path based on real file path and temporary folder path
-        tmp_file = pathlib.Path(SPREADSHEET_CACHE_FOLDER) / self._file_path.name
+        tmp_file = pathlib.Path(LIBREOFFICE_CACHE_FOLDER) / self._file_path.name
         # Ensure the temporary folder doesn't contain a file with the same name
         if tmp_file.exists():
             raise FileExistsError(f"The temporary file '{tmp_file}' already exists and may contain unsaved data. Manual check required.")
         # Create libreoffice command to evaluate and save a spreadsheet
         command = [
-            LIBREOFFICE_PATH,                       # libreoffice invokation
+            LIBREOFFICE_PATH,                       # Libreoffice invokation
             "--headless",                           # Headless means no GUI
             "--calc",                               # Spreadsheets mode
             "--convert-to", "xlsx",                 # Go to xlsx format
-            "--outdir", SPREADSHEET_CACHE_FOLDER,   # Output in temporary folder
+            "--outdir", LIBREOFFICE_CACHE_FOLDER,   # Output in temporary folder
             str(self._file_path.absolute())         # Input employee file
         ]
         # Run command with subprocess
@@ -342,24 +426,22 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Delete old spreadsheet
         self._file_path.unlink(missing_ok=False)
         # Copy temporary spreadsheet to deleted spreadsheet location
-        shutil.copy(src=tmp_file, dst=self._file_path)
+        shutil.copy2(src=tmp_file, dst=self._file_path)
         # Delete temporary file
         tmp_file.unlink(missing_ok=True)
         # Load workbook
         self.__load_workbook()
+        # Set readable flag
+        self._readable = True
 
-    def save_workbook(self):
+    def close(self) -> None:
         """
-        Save the workbook in the filesystem.
+        Close the time tracker, save and release resources.
         """
-        # Save the spreadsheet in the cache folder
-        tmp_file = pathlib.Path(SPREADSHEET_CACHE_FOLDER) / self._file_path.name
-        self._workbook_wr.save(tmp_file)
-        # Move and overwrite the original file
-        os.replace(src=tmp_file, dst=self._file_path)
-        # Important Note related to known limitation #
-        # Once saved, the cached values are reset to None since openpyxl decides that they are outdated.
-        # If a load_workbook is called again, the reading sheet will see only None values in formula cells.
+        # Save the employee's file on repository
+        self._database.save_employee_file(self._file_path)
+        # Close employee's file
+        self._database.close_employee_file(self._file_path)
 
     def __load_workbook(self):
         """
@@ -371,4 +453,3 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         self._workbook_rd = openpyxl.load_workbook(self._file_path, data_only=True)
         # Open employee spreadsheet in write mode
         self._workbook_wr = openpyxl.load_workbook(self._file_path, data_only=False)
-        

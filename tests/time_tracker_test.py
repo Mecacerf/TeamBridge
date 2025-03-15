@@ -18,15 +18,17 @@ Contact: info@mecacerf.ch
 import pytest
 import datetime as dt
 from typing import Callable
-from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction
+from collections.abc import Generator
+from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, IllegalReadException
 # Specific implementation imports
-from spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR
+from spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR, SHEET_INIT
+from spreadsheets_database import SpreadsheetsDatabase
 
 ################################################
 #               Tests constants                #
 ################################################
 
-# General
+# General tests configuration
 TEST_DATE = dt.date(year=2025, month=3, day=9)
 TEST_TIME = dt.time(hour=8, minute=10)
 TEST_DATETIME = dt.datetime.combine(date=TEST_DATE, time=TEST_TIME)
@@ -47,23 +49,26 @@ def build_spreadsheet_time_tracker(employee_id: str, date: dt.date) -> ITodayTim
     Returns:
         ITodayTimeTracker: specific implementation
     """
+    # Create the database provider 
+    database = SpreadsheetsDatabase(SPREADSHEET_CACHE_FOLDER)
     # Create and return instance
-    return SpreadsheetTimeTracker(SPREADSHEET_CACHE_FOLDER, employee_id, date)
+    return SpreadsheetTimeTracker(database, employee_id, date)
 
-def refresh_spreadsheet_time_tracker(time_tracker: SpreadsheetTimeTracker, date: dt.datetime):
+def evaluate_spreadsheet_time_tracker(time_tracker: SpreadsheetTimeTracker, date: dt.datetime):
     """
-    Refresh the spreadsheet time tracker at given date and time.
+    Evaluate the spreadsheet time tracker at given date and time.
     """
     # For test purpose, access private attributes
     # Get the init sheet in write mode
-    init_sheet = time_tracker._workbook_wr.worksheets[0]
+    init_sheet = time_tracker._workbook_wr.worksheets[SHEET_INIT]
+    # Overwrite the TODAY() function by the test date and time
     # Write the date
     init_sheet[CELL_DATE] = date.date()
     # Write the time
     init_sheet[CELL_HOUR] = date.time()
-    # Save and refresh
-    time_tracker.save_workbook()
-    time_tracker.refresh()
+    # Commit and evaluate
+    time_tracker.commit()
+    time_tracker.evaluate()
 
 @pytest.fixture
 def arrange_spreadsheet_time_tracker():
@@ -88,8 +93,8 @@ def arrange_spreadsheet_time_tracker():
 #################################################
 
 @pytest.fixture(params=[
-    # List of (implementation provider methods, refresh method)
-    (build_spreadsheet_time_tracker, refresh_spreadsheet_time_tracker)
+    # List of (implementation provider methods, evaluate method)
+    (build_spreadsheet_time_tracker, evaluate_spreadsheet_time_tracker)
 ])
 def time_tracker_provider(request, 
                           arrange_spreadsheet_time_tracker
@@ -100,63 +105,89 @@ def time_tracker_provider(request,
     Returns:
         tuple: tuple containing the two functions described below
         tuple[0]: call the provider method to get a time tracker instance that is using the implementation under test
-        tuple[1]: call this method to refresh the time tracker under test at given date and time
+        tuple[1]: call this method to evaluate the time tracker under test at given date and time
     """
     return request.param
+
+@pytest.fixture
+def default_time_tracker_provider(time_tracker_provider) -> Generator[tuple[ITodayTimeTracker, Callable[[ITodayTimeTracker, dt.datetime], None]], None, None]:
+    """
+    Get a default time tracker opened for default test employee at default test date.
+    Automatically manages opening and closing.
+
+    Returns:
+        tuple: tuple containing two objects described below
+        tuple[0]: the time tracker instance
+        tuple[1]: call this method to evaluate the time tracker under test at given date and time
+    """
+    # Unpack the provider methods
+    provider, evaluate = time_tracker_provider
+    # Create the time tracker for the default employee 
+    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
+    # Give the time tracker and the evaluation method to the test
+    yield (employee, evaluate)
+    # Close the time tracker
+    employee.close()
 
 ################################################
 #           Time tracker unit tests            #
 ################################################
 
-def test_open_employee(time_tracker_provider):
+def test_open_employee(default_time_tracker_provider):
     """
     Try to open the employee template data and retrieve his firstname and name.
     Expected firstname, name: Meca, Cerf
     """
-    # Unpack the provider methods
-    provider, _ = time_tracker_provider
-    # Get time tracker instance for this employee
-    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
+    # Unpack the provider
+    employee, _ = default_time_tracker_provider
 
     # Check expected firstname and name
     assert employee.get_firstname() == "Meca"
     assert employee.get_name() == "Cerf"
 
-def test_initial_state(time_tracker_provider):
+def test_read_unavailable(default_time_tracker_provider):
     """
-    Check that the openened employee is not clocked in and hasn't worked today or this month.
+    The read functions are not available before first evaluation.
     """
-    # Unpack the provider methods
-    provider, refresher = time_tracker_provider
-    # Get time tracker instance for this employee
-    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
-    # Refresh required before accessing employee's data
-    refresher(employee, TEST_DATETIME)
+    # Unpack the provider
+    employee, _ = default_time_tracker_provider
+
+    # Try to access clock events directly
+    with pytest.raises(IllegalReadException):
+        employee.get_clock_events_today()
+
+def test_initial_state(default_time_tracker_provider):
+    """
+    Check that the opened employee is not clocked in and hasn't worked today or this month.
+    """
+    # Unpack the provider
+    employee, evaluate = default_time_tracker_provider
+    # Evaluation is required before accessing employee's data
+    evaluate(employee, TEST_DATETIME)
 
     assert employee.is_clocked_in_today() is False # Not clocked in
     assert not employee.get_clock_events_today() # No event today
     assert employee.get_worked_time_today() == dt.timedelta(hours=0, minutes=0, seconds=0) # No work today
     assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0) # No work this month
 
-def test_clock_in(time_tracker_provider):
+def test_clock_in(default_time_tracker_provider):
     """
     Clock in the employee and verify the registration.
     """
-    # Unpack the provider methods
-    provider, refresher = time_tracker_provider
-    # Get time tracker instance for this employee
-    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
+    # Unpack the provider
+    employee, evaluate = default_time_tracker_provider
     
     # Act
-    # Create clock in event at 7h35 
+    # The write functions shall be accessible even though the time tracker is not readable
+    # Create clock in event at 7h35
     clock_in_time = dt.time(hour=7, minute=35)
     event = ClockEvent(clock_in_time, ClockAction.CLOCK_IN)
     # Register event
     employee.register_clock(event)
 
-    # Refresh before accessing next values
-    # Refresh at clock in time: no worked time for now
-    refresher(employee, dt.datetime.combine(date=TEST_DATE, time=clock_in_time))
+    # Evaluate before accessing next values
+    # Evaluate at clock in time: no worked time for now
+    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_in_time))
 
     # Assert
     assert employee.is_clocked_in_today() is True # Now the employee is clocked in
@@ -171,18 +202,16 @@ def test_clock_in(time_tracker_provider):
     # No work this month
     assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0) 
     # Check worked time from 7h35 to 8h10 is 35 minutes
-    refresher(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=8, minute=10)))
+    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=8, minute=10)))
     assert employee.get_worked_time_today(now=dt.time(hour=8, minute=10)) == dt.timedelta(minutes=35)
 
-def test_clock_out(time_tracker_provider):
+def test_clock_out(default_time_tracker_provider):
     """
     Clock in / clock out sequence and verify registrations.
     """
-    # Unpack the provider methods
-    provider, refresher = time_tracker_provider
-    # Get time tracker instance for this employee
-    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
-
+    # Unpack the provider
+    employee, evaluate = default_time_tracker_provider
+    
     # Act
     # Create clock in event at 7h35 
     clock_in_time = dt.time(hour=7, minute=35)
@@ -196,7 +225,7 @@ def test_clock_out(time_tracker_provider):
 
     # Refresh before accessing next values
     # Refresh at clock out time
-    refresher(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time))
+    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time))
 
     # Assert
     assert employee.is_clocked_in_today() is False # Clocked out
@@ -215,10 +244,10 @@ def test_clock_out(time_tracker_provider):
     # Clocked in at 7h35 and clocked out at 12h10 results in 4h35 of work 
     assert employee.get_worked_time_today() == dt.timedelta(hours=4, minutes=35, seconds=0)
     # Checking the worked time at 12h40 doesn't change the result since the employee is clocked out
-    refresher(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=12, minute=40)))
+    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=12, minute=40)))
     assert employee.get_worked_time_today() == dt.timedelta(hours=4, minutes=35, seconds=0)
 
-def test_full_day(time_tracker_provider):
+def test_full_day(default_time_tracker_provider):
     """
     Work for a full day with midday break including a little break at 10h and check results.
     Clock in: 8h
@@ -229,11 +258,9 @@ def test_full_day(time_tracker_provider):
     Clock out: 16h40
     Worked time: 2h + 2h05 + 3h40 = 7h45 
     """
-    # Unpack the provider methods
-    provider, refresher = time_tracker_provider
-    # Get time tracker instance for this employee
-    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
-
+    # Unpack the provider
+    employee, evaluate = default_time_tracker_provider
+    
     # Act
     # Create clock in/out events
     clock_in_time_0 = dt.time(hour=8)
@@ -258,7 +285,7 @@ def test_full_day(time_tracker_provider):
 
     # Refresh before accessing next values
     # Refresh at last clock out time
-    refresher(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time_2))
+    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time_2))
 
     # Assert
     assert employee.is_clocked_in_today() is False # Clocked out
@@ -275,14 +302,12 @@ def test_full_day(time_tracker_provider):
     # The employee worked 7h45 today
     assert employee.get_worked_time_today() == dt.timedelta(hours=7, minutes=45, seconds=0)
 
-def test_wrong_clock_action(time_tracker_provider):
+def test_wrong_clock_action(default_time_tracker_provider):
     """
     Test to clock out while not clocked in, double clock in and double clock out must all fail.
     """
-    # Unpack the provider methods
-    provider, _ = time_tracker_provider
-    # Get time tracker instance for this employee
-    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
+    # Unpack the provider
+    employee, _ = default_time_tracker_provider
 
     # Try to clock out while not clocked in
     event_out = ClockEvent(dt.time(hour=8, minute=20), ClockAction.CLOCK_OUT)
@@ -311,15 +336,13 @@ def test_wrong_clock_action(time_tracker_provider):
     with pytest.raises(ValueError):
         employee.register_clock(event_out)
 
-def test_unordered_clock_events(time_tracker_provider):
+def test_unordered_clock_events(default_time_tracker_provider):
     """
     Try to register unordered clock events and verify that it throws errors.
     """
-    # Unpack the provider methods
-    provider, _ = time_tracker_provider
-    # Get time tracker instance for this employee
-    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
-
+    # Unpack the provider
+    employee, _ = default_time_tracker_provider
+    
     # Register a clock in at 11h
     event_in = ClockEvent(dt.time(hour=11), ClockAction.CLOCK_IN)
     employee.register_clock(event_in)
@@ -329,15 +352,13 @@ def test_unordered_clock_events(time_tracker_provider):
     with pytest.raises(ValueError):
         employee.register_clock(event_out)
 
-def test_monthly_balance(time_tracker_provider):
+def test_monthly_balance(default_time_tracker_provider):
     """
     Verify the monthly balance after a few days of work.
     """
-    # Unpack the provider methods
-    provider, refresher = time_tracker_provider
-    # Get time tracker instance for this employee
-    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
-
+    # Unpack the provider
+    employee, evaluate = default_time_tracker_provider
+    
     # TODO: The behavior regarding the availability of the monthly balance is not clear and must be tested
     # and discussed before implementing this test.
     pass 

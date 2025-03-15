@@ -18,6 +18,7 @@ from spreadsheet_time_tracker import SpreadsheetTimeTracker
 from time_tracker_view import TimeTrackerView
 import tkinter as tk
 import argparse
+from spreadsheets_database import SpreadsheetsDatabase
 
 def main() -> int:
     """
@@ -29,7 +30,8 @@ def main() -> int:
     args = parser.parse_args()
 
     # Create the application model using a SpreadsheetTimeTracker
-    model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(args.database_path, code, date), debug=True, scan_rate=8)
+    database = SpreadsheetsDatabase(args.database_path)
+    model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(database=database, employee_id=code, date=date), debug=True, scan_rate=8)
     viewmodel = TimeTrackerViewModel(model)
 
     viewmodel.get_current_state().observe(lambda state: print(f"View model state = {state}"))

@@ -13,7 +13,6 @@ Contact: info@mecacerf.ch
 
 import datetime as dt
 from enum import Enum
-from typing import Callable
 
 ###############################################
 # Employee Time Tracker Interface Declaration #
@@ -47,6 +46,13 @@ class ClockEvent:
         Get a string representation of this clock event.
         """
         return f"ClockEvent[time={self.time}, action={self.action}]"
+    
+class IllegalReadException(Exception):
+    """
+    Custom exception for illegal read operations.
+    """
+    def __init__(self, message="Illegal read operation attempted"):
+        super().__init__(message)
 
 class ITodayTimeTracker:
     """
@@ -73,22 +79,10 @@ class ITodayTimeTracker:
         """
         pass
 
-    def refresh(self, callback: Callable[[], None] = None):
-        """
-        Refresh the employee's data. This function must be called before any read function is called, in
-        order to ensure the data are up-to-date. This process might take some time depending on the
-        implementation in use. An optional callback argument can be passed to know when the refreshing
-        process finishes. If None is used, the refreshing process is synchronous, meaning it will block
-        the calling thread.
-
-        Parameters:
-            callback: an optional callback argument to know when the refresh finishes
-        """
-        pass
-
     def get_firstname(self) -> str:
         """
         Get employee's firstname.
+        Always accessible.
 
         Returns:
             str: employee's firstname
@@ -98,16 +92,29 @@ class ITodayTimeTracker:
     def get_name(self) -> str:
         """
         Get employee's name.
+        Always accessible.
 
         Returns:
             str: employee's name
         """
         pass
 
+    def is_readable(self) -> bool:
+        """
+        Check if the reading functions are accessible at this moment. 
+        They get unaccessible after a write action and accessible after an 
+        evaluation.
+
+        Returns:
+            bool: reading flag
+        """
+        pass
+
     def get_clock_events_today(self) -> list[ClockEvent]:
         """
-        Get all clock-in/out events for today.
-
+        Get all clock-in/out events for the date.
+        Accessible when is_readable() returns True.
+        
         Returns:
             list[ClockEvent]: list of today's clock events (can be empty)
         """
@@ -116,6 +123,7 @@ class ITodayTimeTracker:
     def is_clocked_in_today(self) -> bool:
         """
         Check if the employee is currently clocked in (today).
+        Accessible when is_readable() returns True.
 
         Returns:
             bool: True if clocked in
@@ -124,15 +132,13 @@ class ITodayTimeTracker:
         events = self.get_clock_events_today()
         return bool(events) and (events[-1].action == ClockAction.CLOCK_IN)
 
-    def get_worked_time_today(self, now: dt.time = None) -> dt.timedelta:
+    def get_worked_time_today(self) -> dt.timedelta:
         """
         Get employee's worked time today.
-        If the employee is clocked in the optional argument can be passed to calculate the worked time
-        until the given hour (typically now). If None, the worked time is calculated based on previous
-        clock events.
+        If the employee is clocked in the value is calculated based on the time the last evaluation
+        has been done.
+        Accessible when is_readable() returns True.
         
-        Parameters:
-            now: used when the employee is clocked in to calculate the worked time until the given hour
         Returns:
             timedelta: delta time object
         """
@@ -141,6 +147,7 @@ class ITodayTimeTracker:
     def get_monthly_balance(self) -> dt.timedelta:
         """
         Get employee's balance for the current month.
+        Accessible when is_readable() returns True.
 
         Returns:
             timedelta: delta time object
@@ -150,10 +157,32 @@ class ITodayTimeTracker:
     def register_clock(self, event: ClockEvent) -> None:
         """
         Register a clock in/out event.
+        After a clock event is registered, the reading functions are not available until a
+        new evaluation is performed.
 
         Parameters:
             event: clock event object
         Raise:
             ValueError: double clock in/out detected
+        """
+        pass
+
+    def commit(self) -> None:
+        """
+        Commit changes. This must be called after changes have been done (typically after new clock events
+        have been registered) to save the modifications.
+        """
+        pass
+
+    def evaluate(self) -> None:
+        """
+        Start an employee's data evaluation. This must be done after changes have been committed.
+        Once done, the reading functions are available again and will provide up to date results.
+        """
+        pass
+
+    def close(self) -> None:
+        """
+        Close the time tracker, save and release resources.
         """
         pass

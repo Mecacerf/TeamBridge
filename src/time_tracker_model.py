@@ -120,8 +120,8 @@ class TimeTrackerModel:
         try:
             # Open the employee time tracker 
             employee = self._time_tracker_provider(today, code)
-            # Refresh it
-            employee.refresh()
+            # Evaluate
+            employee.evaluate()
 
             # Get employee name and firstname
             name = employee.get_name()
@@ -137,6 +137,9 @@ class TimeTrackerModel:
             # Create and register the clock event
             clock_evt = ClockEvent(time=now, action=action)
             employee.register_clock(clock_evt)
+            # Save and close
+            employee.commit()
+            employee.close()
 
             # Everything went fine
             # Create the employee event
