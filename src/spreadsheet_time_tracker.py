@@ -165,13 +165,15 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         self._date = date
         # Save employees database access provider
         self._database = database
+        # Save employee's id
+        self._employee_id = employee_id
         # Set readable flag to be initially False
         self._readable = False
         # Acquire employee's file
-        self._file_path = self._database.acquire_employee_file(employee_id)
+        self._file_path = self._database.acquire_employee_file(self._employee_id)
         # Throw a file not found error if necessary
         if self._file_path is None:
-            raise FileNotFoundError(f"File not found for employee's ID '{employee_id}'.")
+            raise FileNotFoundError(f"File not found for employee's ID '{self._employee_id}'.")
         # Load workbook
         self.__load_workbook()
 
@@ -370,8 +372,8 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
                 cell.number_format = 'HH:MM'
                 cell.value = dt.time(hour=event.time.hour, minute=event.time.minute, second=0)
                 # Log action, set written flag and leave
-                LOGGER.info(f"Written {cell.value} in cell {cell.coordinate}")
                 written = True
+                LOGGER.debug(f"[Employee '{self._employee_id}'] Registered {cell.value} in cell {cell.coordinate}")
                 break
             
         # Check if event has been correctly registered
@@ -388,6 +390,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         """
         # Save the write notebook in the local cache
         self._workbook_wr.save(self._file_path)
+        LOGGER.debug(f"[Employee '{self._employee_id}'] Saved local file '{self._file_path}'.")
 
     def evaluate(self) -> None:
         """
@@ -396,7 +399,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         """
         # After cell values are modified, use libreoffice in headless mode to update the values of formula cells. 
         # This requires 'soffice' to be installed on the system.
-
+        LOGGER.debug(f"[Employee '{self._employee_id}'] Evaluation of '{self._file_path}' started...")
         # Make sure the libre office cache folder exists
         os.makedirs(LIBREOFFICE_CACHE_FOLDER, exist_ok=True)
         # Get temporary file path based on real file path and temporary folder path
@@ -433,6 +436,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         self.__load_workbook()
         # Set readable flag
         self._readable = True
+        LOGGER.debug(f"[Employee '{self._employee_id}'] File evaluation succeeded.")
 
     def close(self) -> None:
         """
@@ -442,6 +446,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         self._database.save_employee_file(self._file_path)
         # Close employee's file
         self._database.close_employee_file(self._file_path)
+        LOGGER.debug(f"[Employee '{self._employee_id}'] Time tracker successfully closed.")
 
     def __load_workbook(self):
         """
@@ -453,3 +458,4 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         self._workbook_rd = openpyxl.load_workbook(self._file_path, data_only=True)
         # Open employee spreadsheet in write mode
         self._workbook_wr = openpyxl.load_workbook(self._file_path, data_only=False)
+        LOGGER.debug(f"[Employee '{self._employee_id}'] (Re)loaded workbook '{self._file_path}'.")

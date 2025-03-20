@@ -16,6 +16,10 @@ import pyzbar.pyzbar
 import time
 import threading
 import numpy as np
+import logging
+
+# Get module logger
+LOGGER = logging.getLogger(__name__)
 
 class QRScanner:
     """
@@ -59,8 +63,7 @@ class QRScanner:
         self._frame_period_sec = 1.0 / scan_rate
         # Create internal thread
         self._thread = threading.Thread(target=self.__run, daemon=daemon, name="QR-Scanner-Thread")
-        # Set the scanning flag and start the thread
-        self._scanning.set()
+        # Start the thread
         self._thread.start()
 
     def __run(self):
@@ -72,12 +75,14 @@ class QRScanner:
         # Check device was successfully opened
         if device.isOpened():
             # Show a message
-            print(f"Opened video capture device '{device.getBackendName()}'")
+            LOGGER.info(f"Opened video capture device '{device.getBackendName()}'")
         else:
             # Cannot open device, abort scanning
             self._scanning.clear()
-            print("Error opening video capture device.")
+            LOGGER.error("Error opening video capture device.")
 
+        # Set the scanning flag
+        self._scanning.set()
         # Run while scanning flag is set
         while self._scanning.is_set():
             # Get current timestamp

@@ -126,7 +126,7 @@ class SpreadsheetsDatabase:
             # Replace old file on remote, cached file is moved so it won't exist after the replace
             os.replace(remote_cache_file, remote_file)
             # Log activity
-            LOGGER.info(f"Successfully saved '{remote_file}'.")
+            LOGGER.info(f"Successfully saved '{path}' under '{remote_file}'.")
 
     def close_employee_file(self, path: pathlib.Path):
         """
@@ -149,7 +149,7 @@ class SpreadsheetsDatabase:
             # Remove file from local cache
             path.unlink()
             # Log activity
-            LOGGER.info(f"Closed '{path}'.")
+            LOGGER.info(f"Removed local file '{path}'.")
 
     def __acquire_database_path(self) -> pathlib.Path:
         """
