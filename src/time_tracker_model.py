@@ -18,9 +18,15 @@ from typing import Callable
 import time
 import datetime as dt
 from live_data import LiveData
+import logging
+
+# Get module logger
+LOGGER = logging.getLogger(__name__)
 
 # Timeout in seconds during which an already scanned code will be ignored
 TIMEOUT = 15
+# Token a code must start with in order to be valid. Example: teambridge@000, id='000'
+CODE_TOKEN = "teambridge@"
 
 class EmployeeEvent:
     """
@@ -86,6 +92,10 @@ class TimeTrackerModel:
         while self._scanner.available():
             # Get the code as a string
             code = self._scanner.get_next()
+            # Ensure that the code starts with the token
+            if not code.startswith(CODE_TOKEN):
+                # Ignore wrong code
+                continue
             # Check if the code is present in the waiting codes
             if code in self._waiting_codes:
                 # Calculate delta time between first scan and now
@@ -115,11 +125,14 @@ class TimeTrackerModel:
         # Get today date and time from system info
         today = dt.datetime.now().date()
         now = dt.datetime.now().time()
+
+        # Get the employee's id from scanned code
+        id = code.removeprefix(CODE_TOKEN)
         
         # Next operations might fail, surround with a try except block to capture errors
         try:
             # Open the employee time tracker 
-            employee = self._time_tracker_provider(today, code)
+            employee = self._time_tracker_provider(today, id)
             # Evaluate
             employee.evaluate()
 
