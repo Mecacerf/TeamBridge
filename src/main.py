@@ -58,10 +58,11 @@ def main() -> int:
     model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(database=database, employee_id=code, date=date), debug=True, scan_rate=8)
     viewmodel = TimeTrackerViewModel(model)
 
-    viewmodel.get_current_state().observe(lambda state: print(f"View model state = {state}"))
-    viewmodel.get_info_text().observe(lambda txt: print(txt))
-    viewmodel.get_scanning_state().observe(lambda scanning: print(f"Scanning: {scanning}"))
-
+    # Log some state changes
+    viewmodel.get_scanning_state().observe(lambda scanning: logger.info(f"Camera scanning state: {scanning}"))
+    viewmodel.get_current_state().observe(lambda state: logger.debug(f"ViewModel in state '{state}'"))
+    
+    # Run tkinter
     root = tk.Tk()
 
     def update_model():

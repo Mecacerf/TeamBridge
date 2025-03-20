@@ -19,6 +19,8 @@ import time
 import datetime as dt
 from live_data import LiveData
 import logging
+import threading
+import queue
 
 # Get module logger
 LOGGER = logging.getLogger(__name__)
@@ -80,6 +82,12 @@ class TimeTrackerModel:
         self._loading_sig = LiveData[bool](False)
         # Create the errors bus
         self._error_bus = LiveData[str](None)
+        # Create the processing flag
+        self._processing = threading.Event()
+        # Create the employee events queue
+        self._event_queue = queue.Queue()
+        # Create the errors queue
+        self._error_queue = queue.Queue()
 
     def run(self):
         """
@@ -88,13 +96,14 @@ class TimeTrackerModel:
         # Report the scanning state
         self._scanning_sig.set_value(self._scanner.is_scanning())
         
-        # Read pending codes
-        while self._scanner.available():
+        # Read pending codes if not already processing
+        while not self._processing.is_set() and self._scanner.available():
             # Get the code as a string
             code = self._scanner.get_next()
             # Ensure that the code starts with the token
             if not code.startswith(CODE_TOKEN):
                 # Ignore wrong code
+                LOGGER.debug(f"Ignored wrong scanned code '{code}'")
                 continue
             # Check if the code is present in the waiting codes
             if code in self._waiting_codes:
@@ -107,38 +116,77 @@ class TimeTrackerModel:
                 # Otherwise remove the code from the waiting list and process it
                 self._waiting_codes.pop(code)
             # Process the code
-            self.__process_code(code)
+            self.__start_code_processing(code)
 
-    def __process_code(self, code: str):
+        # Clear loading state when processing finishes
+        if not self._processing.is_set() and self._loading_sig.get_value():
+            self._loading_sig.set_value(False)
+
+        # Publish pending employee's events 
+        if not self._event_queue.empty():
+            try:
+                # Notify of the new event on the bus
+                self._employee_events_bus.set_value(self._event_queue.get_nowait())
+            except queue.Empty:
+                pass
+
+        # Publish pending error events
+        if not self._error_queue.empty():
+            try:
+                # Notify of the error on the bus
+                self._error_bus.set_value(self._error_queue.get_nowait())
+            except queue.Empty:
+                pass
+
+    def __start_code_processing(self, code: str):
         """
-        Process the code that has been scanned.
+        Prepare and start the processing thread.
 
         Parameters:
             code: scanned code
         """
         # Put the code in the waiting list to prevent it to be processed multiple times
         self._waiting_codes[code] = time.time()
+        # Get the employee's id from scanned code
+        id = code.removeprefix(CODE_TOKEN)
+        # Log processing will start
+        LOGGER.info(f"Start processing code '{code}', employee's id is '{id}'.")
 
-        # Set the loading state
+        # Set the processing state
+        self._processing.set()
         self._loading_sig.set_value(True)
 
+        # Start the processing thread
+        executor = threading.Thread(target=self.__process_id, args=(id,), name=f"ID{id}-Executor")
+        executor.start()
+    
+    def __process_id(self, id: str):
+        """
+        Process the employee's action.
+
+        Parameters:
+            id: employee's id
+        """
         # Get today date and time from system info
         today = dt.datetime.now().date()
         now = dt.datetime.now().time()
-
-        # Get the employee's id from scanned code
-        id = code.removeprefix(CODE_TOKEN)
         
         # Next operations might fail, surround with a try except block to capture errors
         try:
             # Open the employee time tracker 
             employee = self._time_tracker_provider(today, id)
-            # Evaluate
-            employee.evaluate()
 
             # Get employee name and firstname
             name = employee.get_name()
             firstname = employee.get_firstname()
+
+            # Log that time tracker is open
+            LOGGER.info(f"Opened time tracker for employee '{firstname} {name}' with id '{id}'. Initially readable: {employee.is_readable()}.")
+
+            # Evaluate the time tracker in order to read it and discover if the next action
+            # is a clock in or a clock out.
+            if not employee.is_readable():
+                employee.evaluate() 
 
             # Check if the employee is clocked in to define next action
             if employee.is_clocked_in_today():
@@ -150,23 +198,27 @@ class TimeTrackerModel:
             # Create and register the clock event
             clock_evt = ClockEvent(time=now, action=action)
             employee.register_clock(clock_evt)
-            # Save and close
+            # Commit and close
             employee.commit()
             employee.close()
 
+            LOGGER.info(f"Operation finished for employee ['{firstname} {name}' with id '{id}'].")
+
             # Everything went fine
             # Create the employee event
-            event = EmployeeEvent(name=name, firstname=firstname, id=code, clock_evt=clock_evt)
-            # Notify of the new event on the bus
-            self._employee_events_bus.set_value(event)
+            event = EmployeeEvent(name=name, firstname=firstname, id=id, clock_evt=clock_evt)
+            # Put the event in the queue
+            self._event_queue.put(event)
 
+        # Catch the exceptions that may occur during the process
         except Exception as e:
             # Notify that an exception occurred on the errors bus
-            self._error_bus.set_value(str(e))
-        
+            self._error_queue.put(str(e))
+            # Log error
+            LOGGER.error(f"Error occurred operating time tracker of employee ['{firstname} {name}' with id '{id}'].", exc_info=True)
         finally:
-            # Reset the loading signal
-            self._loading_sig.set_value(False)
+            # Reset the processing flag
+            self._processing.clear()
 
     def get_employee_events_bus(self) -> LiveData[EmployeeEvent]:
         """
