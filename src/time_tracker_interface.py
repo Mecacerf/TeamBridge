@@ -134,8 +134,8 @@ class ITodayTimeTracker:
     def is_readable(self) -> bool:
         """
         Check if the reading functions are accessible at this moment. 
-        They get unaccessible after a write action and accessible after an 
-        evaluation.
+        They are initially not accessible (since the opened data are not evaluated) and
+        get accessible after an evaluation is performed.
 
         Returns:
             bool: reading flag

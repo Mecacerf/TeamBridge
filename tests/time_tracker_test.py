@@ -22,7 +22,7 @@ from collections.abc import Generator
 from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, IllegalReadException
 # Specific implementation imports
 from spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR, SHEET_INIT
-from spreadsheets_database import SpreadsheetsDatabase
+from spreadsheets_repository import SpreadsheetsRepository
 
 ################################################
 #               Tests constants                #
@@ -36,7 +36,9 @@ TEST_EMPLOYEE_ID = "000"
 
 # Spreadsheet Time Tracker
 SPREADSHEET_SAMPLES_FOLDER = "samples/"
-SPREADSHEET_CACHE_FOLDER = ".cache/samples-test"
+SPREADSHEET_SAMPLES_TEST_FOLDER = ".cache/samples/"
+SPREADSHEET_LOCAL_CACHE_TEST_FOLDER = ".cache/local-cache/"
+SPREADSHEET_TEST_FILE_NAME = f"{TEST_EMPLOYEE_ID}-template.xlsx"
 
 ################################################
 #      Spreadsheet Time Tracker provider       #
@@ -49,8 +51,10 @@ def build_spreadsheet_time_tracker(employee_id: str, date: dt.date) -> ITodayTim
     Returns:
         ITodayTimeTracker: specific implementation
     """
+    # Ensure the 
     # Create the database provider 
-    database = SpreadsheetsDatabase(SPREADSHEET_CACHE_FOLDER)
+    database = SpreadsheetsRepository(repository_path=SPREADSHEET_SAMPLES_TEST_FOLDER, 
+                                    local_cache=SPREADSHEET_LOCAL_CACHE_TEST_FOLDER)
     # Create and return instance
     return SpreadsheetTimeTracker(database, employee_id, date)
 
@@ -59,8 +63,8 @@ def evaluate_spreadsheet_time_tracker(time_tracker: SpreadsheetTimeTracker, date
     Evaluate the spreadsheet time tracker at given date and time.
     """
     # For test purpose, access private attributes
-    # Get the init sheet in write mode
-    init_sheet = time_tracker._workbook_wr.worksheets[SHEET_INIT]
+    # Get the raw init sheet 
+    init_sheet = time_tracker._workbook_raw.worksheets[SHEET_INIT]
     # Overwrite the TODAY() function by the test date and time
     # Write the date
     init_sheet[CELL_DATE] = date.date()
@@ -81,21 +85,27 @@ def arrange_spreadsheet_time_tracker():
     import shutil, pathlib
     # Get source samples and cache folder
     samples = pathlib.Path(SPREADSHEET_SAMPLES_FOLDER)
-    cache = pathlib.Path(SPREADSHEET_CACHE_FOLDER)
+    samples_cache = pathlib.Path(SPREADSHEET_SAMPLES_TEST_FOLDER)
+    local_cache = pathlib.Path(SPREADSHEET_LOCAL_CACHE_TEST_FOLDER)
     # Check samples folder exists 
     if not samples.exists():
         raise FileNotFoundError(f"Samples folder not found at {samples.resolve()}")
-    # Delete old cache folder if existing
-    if cache.exists():
-        def remove_readonly(func, path, exc_info):
+    
+    # Remove with privileges
+    def remove_readonly(func, path, exc_info):
             """Changes the file attribute and retries deletion if permission is denied."""
             import os
             os.chmod(path, 0o777) # Grant full permissions
             func(path) # Retry the function
-        # Remove previous cache
-        shutil.rmtree(cache, onexc=remove_readonly)   
-    # Copy samples to cache
-    shutil.copytree(samples, cache)
+
+    # Delete old cache folder if existing
+    if samples_cache.exists():
+        shutil.rmtree(samples_cache, onexc=remove_readonly)
+    # Delete local cache folder if last time tracker wasn't correctly closed
+    if local_cache.exists():
+        shutil.rmtree(local_cache, onexc=remove_readonly)   
+    # Copy samples to test samples cache
+    shutil.copytree(samples, samples_cache)
 
 #################################################
 # Time tracker implementation provider fixtures #
@@ -159,11 +169,18 @@ def test_read_unavailable(default_time_tracker_provider):
     The read functions are not available before first evaluation.
     """
     # Unpack the provider
-    employee, _ = default_time_tracker_provider
-
-    # Try to access clock events directly
+    employee, evaluate = default_time_tracker_provider
+    # Readable is initially False
+    assert employee.is_readable() is False
+    # Try to access worked time directly
     with pytest.raises(IllegalReadException):
         employee.get_worked_time_today()
+    # Try to access monthly balance directly
+    with pytest.raises(IllegalReadException):
+        employee.get_monthly_balance()
+    # Evaluate and check readable gets True
+    evaluate(employee, TEST_DATETIME)
+    assert employee.is_readable() is True
 
 def test_initial_state(default_time_tracker_provider):
     """
@@ -372,10 +389,11 @@ def test_unordered_clock_events(default_time_tracker_provider):
 
 def test_multiple_openings(time_tracker_provider):
     """
-    Try to open the same time tracker multiple times.
+    Try to open the same time tracker multiple times without evaluating it and see
+    if the clock events correctly persist. 
     """
     # Unpack the provider methods
-    provider, evaluate = time_tracker_provider
+    provider, _ = time_tracker_provider
     # Open a time tracker
     employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
 
@@ -390,27 +408,26 @@ def test_multiple_openings(time_tracker_provider):
 
     # Writing a new clock in event should fail
     event_in = ClockEvent(dt.time(hour=11), ClockAction.CLOCK_IN)
-    error = True
-    try:
-        with pytest.raises(ValueError, match="while expecting a"):
-            employee.register_clock(event_in)
-        error = False
-    finally:
-        if error:
-            # Always close the time tracker before leaving
-            employee.close()
+    with pytest.raises(ValueError, match="while expecting a"):
+        employee.register_clock(event_in)
 
-    # Time tracker is not readable
-    assert not employee.is_readable()
-    # Evaluate, check readable and close
-    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=14)))
-    assert employee.is_readable()
+    # Write a clock out event
+    event_out = ClockEvent(dt.time(hour=11), ClockAction.CLOCK_OUT)
+    employee.register_clock(event_out)
+    employee.commit()
+
+    # Close and reopen
     employee.close()
-
-    # Reopen and assert it is not readable
     employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
-    assert not employee.is_readable()
-    # Finally close
+
+    # Check that the two events have been correctly registered
+    assert employee.is_clocked_in_today() is False
+    events = employee.get_clock_events_today()
+    assert events[0].action == ClockAction.CLOCK_IN
+    assert events[0].time == dt.time(hour=10)
+    assert events[1].action == ClockAction.CLOCK_OUT
+    assert events[1].time == dt.time(hour=11)
+    # Close
     employee.close()
 
 def test_monthly_balance(time_tracker_provider):
@@ -430,3 +447,39 @@ def test_monthly_balance(time_tracker_provider):
     employee.close()
 
     # NOTE: TODO This test must be completed once the spreadsheet behaviour has been clarified.
+
+#################################################
+# Spreadsheets Time tracker specific unit tests #
+#################################################
+
+def test_spreadsheet_time_tracker_write(arrange_spreadsheet_time_tracker):
+    """
+    Open, write and close a SpreadsheetTimeTracker and verify the document.
+    """
+    # Define test constants
+    DATE = dt.date(year=2025, day=12, month=3)
+    CLOCK_IN_CELL_AT_DATE = 'G20'
+    CLOCK_OUT_CELL_AT_DATE = 'H20'
+    # Build the time tracker by directly accessing the build function
+    employee = build_spreadsheet_time_tracker(TEST_EMPLOYEE_ID, DATE)
+    # Write a clock in event
+    event_in = ClockEvent(dt.time(hour=8, minute=35), ClockAction.CLOCK_IN)
+    employee.register_clock(event_in)
+    # Write a clock out event
+    event_out = ClockEvent(dt.time(hour=9, minute=45), ClockAction.CLOCK_OUT)
+    employee.register_clock(event_out)
+    # Commit and close
+    employee.commit()
+    employee.close()
+
+    # Get file path
+    from pathlib import Path
+    file_path = Path(SPREADSHEET_SAMPLES_TEST_FOLDER) / Path(SPREADSHEET_TEST_FILE_NAME)
+    # Use openpyxl to verify the file
+    import openpyxl
+    workbook = openpyxl.load_workbook(filename=file_path)
+    # Get sheet for test month
+    month_sheet = workbook.worksheets[DATE.month] # Assuming sheet 0 is init
+    # Check values
+    assert month_sheet[CLOCK_IN_CELL_AT_DATE].value == dt.time(hour=8, minute=35)
+    assert month_sheet[CLOCK_OUT_CELL_AT_DATE].value == dt.time(hour=9, minute=45)
