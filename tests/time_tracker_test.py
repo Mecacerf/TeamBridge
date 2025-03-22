@@ -87,7 +87,13 @@ def arrange_spreadsheet_time_tracker():
         raise FileNotFoundError(f"Samples folder not found at {samples.resolve()}")
     # Delete old cache folder if existing
     if cache.exists():
-        shutil.rmtree(cache)
+        def remove_readonly(func, path, exc_info):
+            """Changes the file attribute and retries deletion if permission is denied."""
+            import os
+            os.chmod(path, 0o777) # Grant full permissions
+            func(path) # Retry the function
+        # Remove previous cache
+        shutil.rmtree(cache, onexc=remove_readonly)   
     # Copy samples to cache
     shutil.copytree(samples, cache)
 
