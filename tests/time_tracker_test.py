@@ -171,11 +171,13 @@ def test_initial_state(default_time_tracker_provider):
     """
     # Unpack the provider
     employee, evaluate = default_time_tracker_provider
-    # Evaluation is required before accessing employee's data
-    evaluate(employee, TEST_DATETIME)
 
     assert employee.is_clocked_in_today() is False # Not clocked in
     assert not employee.get_clock_events_today() # No event today
+
+    # Evaluation is required before accessing employee's evaluated data
+    evaluate(employee, TEST_DATETIME)
+
     assert employee.get_worked_time_today() == dt.timedelta(hours=0, minutes=0, seconds=0) # No work today
     assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0) # No work this month
 
@@ -195,17 +197,17 @@ def test_clock_in(default_time_tracker_provider):
     employee.register_clock(event)
     employee.commit()
 
-    # Evaluate before accessing next values
-    # Evaluate at clock in time: no worked time for now
-    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_in_time))
-
     # Assert
     assert employee.is_clocked_in_today() is True # Now the employee is clocked in
     assert len(employee.get_clock_events_today()) == 1 # One clock event today
-    
+
     event = employee.get_clock_events_today()[0] # Get clock event
     assert event.action == ClockAction.CLOCK_IN # Clock in event
     assert event.time == clock_in_time # At expected time
+
+    # Evaluate before accessing next values
+    # Evaluate at clock in time: no worked time for now
+    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_in_time))
 
     # No worked time, the employee has just clocked in
     assert employee.get_worked_time_today() == dt.timedelta(hours=0, minutes=0, seconds=0)
@@ -234,10 +236,6 @@ def test_clock_out(default_time_tracker_provider):
     employee.register_clock(event_out)
     employee.commit()
 
-    # Refresh before accessing next values
-    # Refresh at clock out time
-    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time))
-
     # Assert
     assert employee.is_clocked_in_today() is False # Clocked out
     assert len(employee.get_clock_events_today()) == 2 # Two clock events today
@@ -249,6 +247,10 @@ def test_clock_out(default_time_tracker_provider):
     event = employee.get_clock_events_today()[1] # Get clock out event
     assert event.action == ClockAction.CLOCK_OUT # Clock in event
     assert event.time == clock_out_time # At expected time
+
+    # Evaluate before accessing next values
+    # Evaluate at clock out time
+    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time))
 
     # Monthly balance is updated the next day
     assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0)
@@ -296,10 +298,6 @@ def test_full_day(default_time_tracker_provider):
     # Save events
     employee.commit()
 
-    # Refresh before accessing next values
-    # Refresh at last clock out time
-    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time_2))
-
     # Assert
     assert employee.is_clocked_in_today() is False # Clocked out
     assert len(employee.get_clock_events_today()) == len(events)
@@ -309,6 +307,10 @@ def test_full_day(default_time_tracker_provider):
         # Assert clock type and time match
         assert event.action == events[i].action
         assert event.time == events[i].time
+
+    # Evaluate before accessing next values
+    # Evaluate at last clock out time
+    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time_2))
 
     # Monthly balance is updated the next day
     assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0)

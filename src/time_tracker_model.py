@@ -184,11 +184,6 @@ class TimeTrackerModel:
             # Log that time tracker is open
             LOGGER.info(f"Opened time tracker for employee '{firstname} {name}' with id '{id}'. Initially readable: {employee.is_readable()}.")
 
-            # Evaluate the time tracker in order to read it and discover if the next action
-            # is a clock in or a clock out.
-            if not employee.is_readable():
-                employee.evaluate() 
-
             # Check if the employee is clocked in to define next action
             if employee.is_clocked_in_today():
                 # The employee is clocking out

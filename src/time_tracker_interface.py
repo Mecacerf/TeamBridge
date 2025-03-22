@@ -109,6 +109,28 @@ class ITodayTimeTracker:
         """
         pass
 
+    def get_clock_events_today(self) -> list[ClockEvent]:
+        """
+        Get all clock-in/out events for the date.
+        Always accessible.
+        
+        Returns:
+            list[ClockEvent]: list of today's clock events (can be empty)
+        """
+        pass
+
+    def is_clocked_in_today(self) -> bool:
+        """
+        Check if the employee is currently clocked in (today).
+        Always accessible.
+
+        Returns:
+            bool: True if clocked in
+        """
+        # Get last today event and check if it's a clock in action
+        events = self.get_clock_events_today()
+        return bool(events) and (events[-1].action == ClockAction.CLOCK_IN)
+
     def is_readable(self) -> bool:
         """
         Check if the reading functions are accessible at this moment. 
@@ -119,28 +141,6 @@ class ITodayTimeTracker:
             bool: reading flag
         """
         pass
-
-    def get_clock_events_today(self) -> list[ClockEvent]:
-        """
-        Get all clock-in/out events for the date.
-        Accessible when is_readable() returns True.
-        
-        Returns:
-            list[ClockEvent]: list of today's clock events (can be empty)
-        """
-        pass
-
-    def is_clocked_in_today(self) -> bool:
-        """
-        Check if the employee is currently clocked in (today).
-        Accessible when is_readable() returns True.
-
-        Returns:
-            bool: True if clocked in
-        """
-        # Get last today event and check if it's a clock in action
-        events = self.get_clock_events_today()
-        return bool(events) and (events[-1].action == ClockAction.CLOCK_IN)
 
     def get_worked_time_today(self) -> dt.timedelta:
         """

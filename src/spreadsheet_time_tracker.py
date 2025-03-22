@@ -215,17 +215,6 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Return the timedelta
         return timedelta
 
-    def is_readable(self) -> bool:
-        """
-        Check if the reading functions are accessible at this moment. 
-        They get unaccessible after a write action and accessible after an 
-        evaluation.
-
-        Returns:
-            bool: reading flag
-        """
-        return self._readable
-
     def __get_current_date_cell(self) -> openpyxl.cell.Cell:
         """
         Get the cell containing the current date.
@@ -272,24 +261,27 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
 
     def get_clock_events_today(self) -> list[ClockEvent]:
         """
-        Get all clock-in/out events for today.
-
+        Get all clock-in/out events for the date.
+        Always accessible.
+        
         Returns:
             list[ClockEvent]: list of today's clock events (can be empty)
         """
-        # Check read status
-        if not self.is_readable():
-            raise IllegalReadException()
         # Get current date cell to identify the row
         date_cell = self.__get_current_date_cell()
-        # Get current month's sheet in read mode
-        sheet_rd = self._workbook_rd.worksheets[self._date.month - 1 + SHEET_JANUARY]
+        # Get current month's sheet in write mode
+        # Careful: the write mode is used here because the clock event hours are not formula cells,
+        # meaning they can be accessed in write mode as well as in read mode. Accessing them in write
+        # mode avoids the necessity of evaluating the time tracker after a new clock event is registered.
+        # This is the reason why this function is always accessible, even though is_readable() is False:
+        # it never accesses formula cells so it is free to read in the write workbook.
+        sheet_wr = self._workbook_wr.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Create current date events list
         clock_events = []
         # Get clock actions boundaries
         min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{CELL_TOP_LEFT_CLOCK_IN}:{CELL_BOT_RIGHT_CLOCK_OUT}")
         # Iterate in clock actions row for current date
-        for column in sheet_rd.iter_cols(min_row=date_cell.row, max_row=date_cell.row, min_col=min_col, max_col=max_col):
+        for column in sheet_wr.iter_cols(min_row=date_cell.row, max_row=date_cell.row, min_col=min_col, max_col=max_col):
             # Get cell value
             cell = column[0]
             # Check if the cell exists and contains an entry
@@ -304,6 +296,17 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
 
         # Return the events list
         return clock_events
+    
+    def is_readable(self) -> bool:
+        """
+        Check if the reading functions are accessible at this moment. 
+        They get unaccessible after a write action and accessible after an 
+        evaluation.
+
+        Returns:
+            bool: reading flag
+        """
+        return self._readable
 
     def get_worked_time_today(self) -> dt.timedelta:
         """
