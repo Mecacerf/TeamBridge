@@ -29,7 +29,9 @@ Contact: info@mecacerf.ch
 import tkinter as tk
 from tkinter import Label, Button
 from time_tracker_viewmodel import TimeTrackerViewModel, ScannerViewModelState
-
+from playsound3 import playsound
+import pathlib
+import ctypes
 
 class TimeTrackerView:
     """GUI View for the Time Tracker application."""
@@ -64,8 +66,72 @@ class TimeTrackerView:
         self.viewmodel.get_info_text().observe(self.update_view)
         self.viewmodel.get_scanning_state().observe(self.update_view)
 
+        # Play a sound on scanning
+        self.old_state = ScannerViewModelState.SCANNING
+        self.viewmodel.get_current_state().observe(self.__play_state_sound)
+
         # Initial view update
         self.update_view()
+
+    def __play_state_sound(self, state):
+        scanned_file = pathlib.Path("samples/scanned.wav")
+        clocked_file = pathlib.Path("samples/clocked.wav")
+        if self.old_state == ScannerViewModelState.SCANNING and state == ScannerViewModelState.LOADING:
+            if scanned_file.exists():
+                playsound(sound=scanned_file, block=False)
+                self.key_press_cnt = 5
+                self.__press_ctrl_down()
+        elif self.old_state == ScannerViewModelState.LOADING and state == ScannerViewModelState.SUCCESS:
+            if clocked_file.exists():
+                playsound(sound=clocked_file, block=False)
+        self.old_state = state
+
+    def __wakeup_screen(self):
+        """ Move the mouse one unit to the right to wake up the monitor
+        in case it's sleeping.
+        """
+        from ctypes import windll
+    
+        MOUSEEVENTF_ABSOLUTE = 0x0000 # coordinates supplied are relative
+        MOUSEEVENTF_MOVE     = 0x0001 # this is a mouse movement
+        MOUSE_DX             = 1 # minimum movement going right in the x-axis
+        MOUSE_DY             = 0 # no movement in the y-axis
+        MOUSE_DWDATA         = 0 # should be 0 for a mouse movement
+    
+        windll.user32.mouse_event(
+            (MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE),
+            MOUSE_DX,
+            MOUSE_DY,
+            MOUSE_DWDATA
+        )
+
+        self.root.after(200, self.__press_enter_down)
+
+    def __press_enter_down(self):
+        import ctypes
+        # Simulate ENTER key press to unlock the session
+        ctypes.windll.user32.keybd_event(0x0D, 0, 0, 0)  # ENTER key down
+        self.root.after(50, self.__press_enter_up)
+
+    def __press_enter_up(self):
+        import ctypes
+        # Simulate ENTER key press to unlock the session
+        ctypes.windll.user32.keybd_event(0x0D, 0, 2, 0)  # ENTER key up
+
+    def __press_ctrl_down(self):
+        # Simulate CONTROL key press to unlock the session
+        ctypes.windll.user32.keybd_event(0x11, 0, 0, 0)  # CONTROL key down
+        # Program key up
+        self.root.after(50, self.__press_ctrl_up)
+
+    def __press_ctrl_up(self):
+        # Simulate CONTROL key press to unlock the session
+        ctypes.windll.user32.keybd_event(0x11, 0, 2, 0)  # CONTROL key up
+        # Must continue
+        if self.key_press_cnt > 0:
+            self.key_press_cnt -= 1
+            # Program key up
+            self.root.after(50, self.__press_ctrl_down)
 
     def update_view(self, *_):
         """Update UI based on ViewModel state."""
