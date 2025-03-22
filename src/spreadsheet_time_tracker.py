@@ -88,8 +88,6 @@ import subprocess
 import pathlib
 import shutil
 import os
-# Import Callable for callback declaration
-from typing import Callable
 # Import the time tracker interface
 from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, IllegalReadException
 # Import the spreadsheets database access
@@ -111,6 +109,8 @@ SHEET_JANUARY = 1
 CELL_NAME = 'A6'
 # Cell containing the firstname information
 CELL_FIRSTNAME = 'A7'
+# Cell containing the daily schedule
+CELL_DAILY_SCHEDULE = 'A1'
 # Cell containing the current date information
 CELL_DATE = 'A8'
 # Cell containing the current hour information
@@ -197,6 +197,22 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Get name information in write notebook that is always available
         return str(self._workbook_wr.worksheets[SHEET_INIT][CELL_NAME].value)
     
+    def get_daily_schedule(self) -> dt.timedelta:
+        """
+        Get employee's daily schedule.
+        Always accessible.
+
+        Returns:
+            timedelta: daily schedule
+        """
+        # Get information in write notebook that is always available
+        timedelta = self._workbook_wr.worksheets[SHEET_INIT][CELL_DAILY_SCHEDULE].value
+        # It might happen that the object is a dt.time
+        if isinstance(timedelta, dt.time):
+            timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
+        # Return the timedelta
+        return timedelta
+
     def is_readable(self) -> bool:
         """
         Check if the reading functions are accessible at this moment. 

@@ -99,6 +99,16 @@ class ITodayTimeTracker:
         """
         pass
 
+    def get_daily_schedule(self) -> dt.timedelta:
+        """
+        Get employee's daily schedule.
+        Always accessible.
+
+        Returns:
+            timedelta: daily schedule
+        """
+        pass
+
     def is_readable(self) -> bool:
         """
         Check if the reading functions are accessible at this moment. 

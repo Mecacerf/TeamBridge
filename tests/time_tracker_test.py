@@ -67,6 +67,9 @@ def evaluate_spreadsheet_time_tracker(time_tracker: SpreadsheetTimeTracker, date
     # Write the time
     init_sheet[CELL_HOUR] = date.time()
     # Commit and evaluate
+    # Known limitation: in order to save the modified cells, a commit is required, while the
+    # actual evaluate() method that is used directly from the time tracker interface  doesn't
+    # automatically commit.
     time_tracker.commit()
     time_tracker.evaluate()
 
@@ -184,6 +187,7 @@ def test_clock_in(default_time_tracker_provider):
     event = ClockEvent(clock_in_time, ClockAction.CLOCK_IN)
     # Register event
     employee.register_clock(event)
+    employee.commit()
 
     # Evaluate before accessing next values
     # Evaluate at clock in time: no worked time for now
@@ -222,6 +226,7 @@ def test_clock_out(default_time_tracker_provider):
     # Register events
     employee.register_clock(event_in)
     employee.register_clock(event_out)
+    employee.commit()
 
     # Refresh before accessing next values
     # Refresh at clock out time
@@ -282,6 +287,8 @@ def test_full_day(default_time_tracker_provider):
     # Register events
     for event in events:
         employee.register_clock(event)
+    # Save events
+    employee.commit()
 
     # Refresh before accessing next values
     # Refresh at last clock out time
@@ -321,6 +328,7 @@ def test_wrong_clock_action(default_time_tracker_provider):
 
     # First register works
     employee.register_clock(event_in)
+    employee.commit()
     # Second clock in throws an error
     with pytest.raises(ValueError):
         employee.register_clock(event_in)
@@ -329,6 +337,7 @@ def test_wrong_clock_action(default_time_tracker_provider):
     event_out = ClockEvent(dt.time(hour=11), ClockAction.CLOCK_OUT)
     # First register work
     employee.register_clock(event_out)
+    employee.commit()
 
     # Clock out again at 11h01
     event_out = ClockEvent(dt.time(hour=11, minute=1), ClockAction.CLOCK_OUT)
@@ -346,19 +355,63 @@ def test_unordered_clock_events(default_time_tracker_provider):
     # Register a clock in at 11h
     event_in = ClockEvent(dt.time(hour=11), ClockAction.CLOCK_IN)
     employee.register_clock(event_in)
+    employee.commit()
 
     # Register a clock out at 8h must throw an error
     event_out = ClockEvent(dt.time(hour=8), ClockAction.CLOCK_OUT)
     with pytest.raises(ValueError):
         employee.register_clock(event_out)
 
-def test_monthly_balance(default_time_tracker_provider):
+def test_multiple_openings(time_tracker_provider):
+    """
+    Try to open the same time tracker multiple times.
+    """
+    # Unpack the provider methods
+    provider, evaluate = time_tracker_provider
+    # Open a time tracker
+    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
+
+    # Write a clock in action
+    event_in = ClockEvent(dt.time(hour=10), ClockAction.CLOCK_IN)
+    employee.register_clock(event_in)
+    employee.commit()
+
+    # Close and reopen
+    employee.close()
+    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
+
+    # Writing a new clock in event should fail
+    event_in = ClockEvent(dt.time(hour=11), ClockAction.CLOCK_IN)
+    with pytest.raises(ValueError):
+        employee.register_clock(event_in)
+
+    # Time tracker is not readable
+    assert not employee.is_readable()
+    # Evaluate, check readable and close
+    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=14)))
+    assert employee.is_readable()
+    employee.close()
+
+    # Reopen and assert it is not readable
+    employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
+    assert not employee.is_readable()
+    # Finally close
+    employee.close()
+
+def test_monthly_balance(time_tracker_provider):
     """
     Verify the monthly balance after a few days of work.
     """
-    # Unpack the provider
-    employee, evaluate = default_time_tracker_provider
-    
-    # TODO: The behavior regarding the availability of the monthly balance is not clear and must be tested
-    # and discussed before implementing this test.
-    pass 
+    # Unpack the provider methods
+    provider, evaluate = time_tracker_provider
+
+    # Get the first day of the test month
+    first_date = dt.date(year=TEST_DATE.year, month=TEST_DATE.month, day=2)
+    # Open a time tracker at first day of the month and evaluate it at this date at 8h00
+    employee = provider(TEST_EMPLOYEE_ID, first_date)
+    evaluate(employee, dt.datetime.combine(date=first_date, time=dt.time(hour=8)))
+    # Since no activity is logged for now, the balance is negative daily schedule
+    print(f"balance: {employee.get_monthly_balance()}") 
+    employee.close()
+
+    # NOTE: TODO This test must be completed once the spreadsheet behaviour has been clarified.
