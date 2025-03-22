@@ -29,7 +29,7 @@ Contact: info@mecacerf.ch
 import tkinter as tk
 from tkinter import Label, Button
 from time_tracker_viewmodel import TimeTrackerViewModel, ScannerViewModelState
-from playsound3 import playsound
+import playsound3
 import pathlib
 import ctypes
 
@@ -68,6 +68,7 @@ class TimeTrackerView:
 
         # Play a sound on scanning
         self.old_state = ScannerViewModelState.SCANNING
+        self._playing_sound = None
         self.viewmodel.get_current_state().observe(self.__play_state_sound)
 
         # Initial view update
@@ -76,47 +77,24 @@ class TimeTrackerView:
     def __play_state_sound(self, state):
         scanned_file = pathlib.Path("samples/scanned.wav")
         clocked_file = pathlib.Path("samples/clocked.wav")
+        error_file   = pathlib.Path("samples/error.mp3")
         if self.old_state == ScannerViewModelState.SCANNING and state == ScannerViewModelState.LOADING:
-            if scanned_file.exists():
-                playsound(sound=scanned_file, block=False)
-                self.key_press_cnt = 5
-                self.__press_ctrl_down()
+            self.key_press_cnt = 5
+            self.__press_ctrl_down()
+            self.__playsound(scanned_file)
         elif self.old_state == ScannerViewModelState.LOADING and state == ScannerViewModelState.SUCCESS:
-            if clocked_file.exists():
-                playsound(sound=clocked_file, block=False)
+            self.__playsound(clocked_file)
+        elif self.old_state != ScannerViewModelState.ERROR and state == ScannerViewModelState.ERROR:
+            self.__playsound(error_file)
         self.old_state = state
 
-    def __wakeup_screen(self):
-        """ Move the mouse one unit to the right to wake up the monitor
-        in case it's sleeping.
-        """
-        from ctypes import windll
-    
-        MOUSEEVENTF_ABSOLUTE = 0x0000 # coordinates supplied are relative
-        MOUSEEVENTF_MOVE     = 0x0001 # this is a mouse movement
-        MOUSE_DX             = 1 # minimum movement going right in the x-axis
-        MOUSE_DY             = 0 # no movement in the y-axis
-        MOUSE_DWDATA         = 0 # should be 0 for a mouse movement
-    
-        windll.user32.mouse_event(
-            (MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE),
-            MOUSE_DX,
-            MOUSE_DY,
-            MOUSE_DWDATA
-        )
-
-        self.root.after(200, self.__press_enter_down)
-
-    def __press_enter_down(self):
-        import ctypes
-        # Simulate ENTER key press to unlock the session
-        ctypes.windll.user32.keybd_event(0x0D, 0, 0, 0)  # ENTER key down
-        self.root.after(50, self.__press_enter_up)
-
-    def __press_enter_up(self):
-        import ctypes
-        # Simulate ENTER key press to unlock the session
-        ctypes.windll.user32.keybd_event(0x0D, 0, 2, 0)  # ENTER key up
+    def __playsound(self, file):
+        # Stop current sound
+        if self._playing_sound and self._playing_sound.is_alive():
+            self._playing_sound.stop()
+        # If file exists, play it
+        if file.exists():
+            self._playing_sound = playsound3.playsound(sound=file, block=False)
 
     def __press_ctrl_down(self):
         # Simulate CONTROL key press to unlock the session
