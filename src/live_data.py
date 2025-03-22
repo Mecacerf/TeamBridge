@@ -23,15 +23,21 @@ class LiveData(Generic[T]):
     class from the typing package allows for better type checking and static analysis of the code.
     """
 
-    def __init__(self, value: T):
+    def __init__(self, value: T, bus_mode: bool=False):
         """
         Create a live data of type T with an initial value.
-
+        An optional bus mode is available if the live data is intended to be used for communicating 
+        events. In this mode, observers are notified each time a value is set, even if the actual
+        value didn't changed. When the bus mode is disabled, observers are called only on change.
+        
         Parameters:
             value: initial value
+            bus_mode: enable/disable bus mode
         """
         # Create generic value
         self._value = value
+        # Bus mode
+        self._bus_mode = bus_mode
         # Create observers list
         self._observers = []
 
@@ -64,8 +70,8 @@ class LiveData(Generic[T]):
         Parameters:
             value: new value
         """
-        # Notify on change
-        if self._value == value:
+        # Notify on change if not in bus mode
+        if not self._bus_mode and self._value == value:
             return
         # Set new value
         self._value = value
@@ -81,3 +87,4 @@ class LiveData(Generic[T]):
             T: value
         """
         return self._value
+    

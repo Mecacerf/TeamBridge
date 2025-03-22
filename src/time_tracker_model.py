@@ -75,13 +75,13 @@ class TimeTrackerModel:
         # Create the waiting dictionary 
         self._waiting_codes = {}
         # Create the employees events bus
-        self._employee_events_bus = LiveData[EmployeeEvent](None)
+        self._employee_events_bus = LiveData[EmployeeEvent](None, bus_mode=True)
         # Create the scanning signal
         self._scanning_sig = LiveData[bool](False)
         # Create the loading signal
         self._loading_sig = LiveData[bool](False)
         # Create the errors bus
-        self._error_bus = LiveData[str](None)
+        self._error_bus = LiveData[str](None, bus_mode=True)
         # Create the processing flag
         self._processing = threading.Event()
         # Create the employee events queue
