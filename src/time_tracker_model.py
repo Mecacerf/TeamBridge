@@ -26,7 +26,7 @@ import queue
 LOGGER = logging.getLogger(__name__)
 
 # Timeout in seconds during which an already scanned code will be ignored
-TIMEOUT = 15
+TIMEOUT = 10
 # Token a code must start with in order to be valid. Example: teambridge@000, id='000'
 CODE_TOKEN = "teambridge@"
 
