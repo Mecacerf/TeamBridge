@@ -163,7 +163,7 @@ def test_read_unavailable(default_time_tracker_provider):
 
     # Try to access clock events directly
     with pytest.raises(IllegalReadException):
-        employee.get_clock_events_today()
+        employee.get_worked_time_today()
 
 def test_initial_state(default_time_tracker_provider):
     """
@@ -213,7 +213,7 @@ def test_clock_in(default_time_tracker_provider):
     assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0) 
     # Check worked time from 7h35 to 8h10 is 35 minutes
     evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=8, minute=10)))
-    assert employee.get_worked_time_today(now=dt.time(hour=8, minute=10)) == dt.timedelta(minutes=35)
+    assert employee.get_worked_time_today() == dt.timedelta(minutes=35)
 
 def test_clock_out(default_time_tracker_provider):
     """
@@ -388,8 +388,15 @@ def test_multiple_openings(time_tracker_provider):
 
     # Writing a new clock in event should fail
     event_in = ClockEvent(dt.time(hour=11), ClockAction.CLOCK_IN)
-    with pytest.raises(ValueError):
-        employee.register_clock(event_in)
+    error = True
+    try:
+        with pytest.raises(ValueError, match="while expecting a"):
+            employee.register_clock(event_in)
+        error = False
+    finally:
+        if error:
+            # Always close the time tracker before leaving
+            employee.close()
 
     # Time tracker is not readable
     assert not employee.is_readable()

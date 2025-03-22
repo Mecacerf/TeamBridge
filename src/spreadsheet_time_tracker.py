@@ -180,6 +180,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
     def get_firstname(self) -> str:
         """
         Get employee's firstname.
+        Always accessible.
 
         Returns:
             str: employee's firstname
@@ -190,6 +191,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
     def get_name(self) -> str:
         """
         Get employee's name.
+        Always accessible.
 
         Returns:
             str: employee's name
@@ -303,15 +305,13 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Return the events list
         return clock_events
 
-    def get_worked_time_today(self, now: dt.time = None) -> dt.timedelta:
+    def get_worked_time_today(self) -> dt.timedelta:
         """
         Get employee's worked time today.
-        If the employee is clocked in the optional argument can be passed to calculate the worked time
-        until the given hour (typically now). If None, the worked time is calculated based on previous
-        clock events.
+        If the employee is clocked in the value is calculated based on the time the last evaluation
+        has been done.
+        Accessible when is_readable() returns True.
         
-        Parameters:
-            now: used when the employee is clocked in to calculate the worked time until the given hour
         Returns:
             timedelta: delta time object
         """
@@ -331,10 +331,11 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
             timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
         # Return the timedelta
         return timedelta
-
+    
     def get_monthly_balance(self) -> dt.timedelta:
         """
         Get employee's balance for the current month.
+        Accessible when is_readable() returns True.
 
         Returns:
             timedelta: delta time object
@@ -350,6 +351,8 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
     def register_clock(self, event: ClockEvent) -> None:
         """
         Register a clock in/out event.
+        After a clock event is registered, the reading functions are not available until a
+        new evaluation is performed.
 
         Parameters:
             event: clock event object

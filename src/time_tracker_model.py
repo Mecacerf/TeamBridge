@@ -172,6 +172,7 @@ class TimeTrackerModel:
         now = dt.datetime.now().time()
         
         # Next operations might fail, surround with a try except block to capture errors
+        employee = None
         try:
             # Open the employee time tracker 
             employee = self._time_tracker_provider(today, id)
@@ -198,9 +199,13 @@ class TimeTrackerModel:
             # Create and register the clock event
             clock_evt = ClockEvent(time=now, action=action)
             employee.register_clock(clock_evt)
-            # Commit and close
+            # Commit changes
             employee.commit()
+            # Close the time tracker
+            # If this operation fails the data might not be correctly saved
             employee.close()
+            # Nullify to prevent closing it again
+            employee = None
 
             LOGGER.info(f"Operation finished for employee ['{firstname} {name}' with id '{id}'].")
 
@@ -215,8 +220,14 @@ class TimeTrackerModel:
             # Notify that an exception occurred on the errors bus
             self._error_queue.put(str(e))
             # Log error
-            LOGGER.error(f"Error occurred operating time tracker of employee ['{firstname} {name}' with id '{id}'].", exc_info=True)
+            LOGGER.error(f"Error occurred operating time tracker of employee '{id}'.", exc_info=True)
         finally:
+            # Always close the time tracker once operations are finished
+            try:
+                if employee:
+                    employee.close()
+            except:
+                LOGGER.error(f"Error occurred closing time tracker of employee '{id}'.", exc_info=True)
             # Reset the processing flag
             self._processing.clear()
 
