@@ -26,7 +26,7 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-from tkinter import Label
+from tkinter import Label, Button
 from time_tracker_viewmodel import TimeTrackerViewModel, ScannerViewModelState
 import playsound3
 import pathlib
@@ -41,6 +41,7 @@ class TimeTrackerView:
     def __init__(self, root, viewmodel: TimeTrackerViewModel, fullscreen: bool=False, auto_wakeup: bool=False):
         """Initialize the UI and bind it to the ViewModel."""
         self.viewmodel = viewmodel
+        self._pending_action_id = None
         self.root = root
         self.root.title("Time Tracker")
         self.root.geometry("640x480")
@@ -50,7 +51,8 @@ class TimeTrackerView:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(0, weight=2)
         self.root.grid_rowconfigure(1, weight=2)
-        self.root.grid_rowconfigure(2, weight=1)
+        self.root.grid_rowconfigure(2, weight=2)
+        self.root.grid_rowconfigure(3, weight=1)
 
         # Labels
         self.status_label = Label(root, text="", font=("Arial", 14))
@@ -58,7 +60,11 @@ class TimeTrackerView:
         self.data_label = Label(root, text="", font=("Arial", 12))
         self.data_label.grid(row=1, column=0, sticky="nsew", pady=10)
         self.scanning_label = Label(root, text="", font=("Arial", 12))
-        self.scanning_label.grid(row=2, column=0, sticky="nsew", pady=10)
+        self.scanning_label.grid(row=3, column=0, sticky="nsew", pady=10)
+
+        # Reset button
+        self.reset_button = Button(root, text="Ok", command=self.reset_viewmodel, width=20, height=5)
+        self.reset_button.grid(row=2, column=0)
 
         # Close action
         self.root.protocol("WM_DELETE_WINDOW", self.close)
@@ -68,6 +74,9 @@ class TimeTrackerView:
         self.viewmodel.get_info_text().observe(self.update_view)
         self.viewmodel.get_scanning_state().observe(self.update_view)
         self.viewmodel.get_employee_info_text().observe(self.update_view)
+
+        # Schedule automatic reset once employee's data have been displayed
+        self.viewmodel.get_employee_info_text().observe(self.__employee_text)
 
         # Play a sound on scanning
         self.old_state = ScannerViewModelState.SCANNING
@@ -81,6 +90,10 @@ class TimeTrackerView:
 
         # Initial view update
         self.update_view()
+
+    def __employee_text(self, text:str):
+        if text.startswith("Solde"):
+            self._pending_action_id = self.root.after(8000, self.reset_viewmodel)
 
     def __auto_wakeup_screen(self, state):
         if self.wakeup_old_state == ScannerViewModelState.SCANNING and state == ScannerViewModelState.LOADING:
@@ -148,14 +161,16 @@ class TimeTrackerView:
         # Update data label
         self.data_label.config(text=data_text, fg='black')
 
-        # Schedule automatic reset for success and error states
-        if state == ScannerViewModelState.SUCCESS:
-            self.root.after(10000, self.viewmodel.reset_state)
-        elif state == ScannerViewModelState.ERROR:
-            self.root.after(10000, self.viewmodel.reset_state)
-
         # Update the root
         self.root.update()
+
+    def reset_viewmodel(self):
+        # Reset pending action
+        if self._pending_action_id:
+            self.root.after_cancel(self._pending_action_id)
+        self._pending_action_id = None
+        # Reset viewmodel
+        self.viewmodel.reset_state()
 
     def close(self):
         """Handle window close event."""

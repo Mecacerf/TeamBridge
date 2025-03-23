@@ -168,3 +168,10 @@ class QRScanner:
         """
         with self._lock:
             return self._qr_values.pop()
+        
+    def flush(self) -> None:
+        """
+        Flush the pending QR values.
+        """
+        with self._lock:
+            self._qr_values.clear()

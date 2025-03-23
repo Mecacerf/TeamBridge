@@ -108,6 +108,9 @@ class TimeTrackerModel:
         self._error_bus = LiveData[str](None, bus_mode=True)
         # Create the processing flag
         self._processing = threading.Event()
+        # Create the working flag, initially true
+        self._working = threading.Event()
+        self._working.set()
         # Create the employee events queue
         self._event_queue = queue.Queue()
         # Create the employee info queue
@@ -123,7 +126,7 @@ class TimeTrackerModel:
         self._scanning_sig.set_value(self._scanner.is_scanning())
         
         # Read pending codes if not already processing
-        while not self._processing.is_set() and self._scanner.available():
+        while self._working.is_set() and self._scanner.available():
             # Get the code as a string
             code = self._scanner.get_next()
             # Ensure that the code starts with the token
@@ -186,7 +189,8 @@ class TimeTrackerModel:
         # Log processing will start
         LOGGER.info(f"Start processing code '{code}', employee's id is '{id}'.")
 
-        # Set the processing state
+        # Set processing status and disable working status
+        self._working.clear()
         self._processing.set()
         self._loading_sig.set_value(True)
 
@@ -277,8 +281,21 @@ class TimeTrackerModel:
                     employee.close()
             except:
                 LOGGER.error(f"Error occurred closing time tracker of employee '{id}'.", exc_info=True)
-            # Reset the processing flag
+            
+            # Processing finished
             self._processing.clear()
+
+    def resume(self):
+        """
+        Resume scanning operation. Must be called after an employee has been processed to continue
+        scanning next ids.
+        """
+        # Cannot resume while processing
+        if self._processing.is_set():
+            return
+        # Flush pending QR values that may have been scanned during the processing time and set the working status
+        self._scanner.flush()
+        self._working.set()
 
     def get_employee_events_bus(self) -> LiveData[EmployeeEvent]:
         """

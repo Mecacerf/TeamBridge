@@ -68,12 +68,12 @@ class TimeTrackerViewModel:
         # Prepare a custom message based on action
         msg = ""
         if event.clock_evt.action == ClockAction.CLOCK_IN:
-            msg = f"Bonjour {event.firstname} ! "
+            msg = f"Bonjour {event.firstname} !\nEntrée "
         else:
-            msg = f"Au revoir {event.firstname} ! "
+            msg = f"Au revoir {event.firstname} !\nSortie "
         # Append clock time
         time = event.clock_evt.time
-        msg += f"Timbrage enregistré à {time.hour}h{time.minute}."
+        msg += f"enregistrée à {time.hour}h{time.minute}."
         # Notify message
         self._text_state.set_value(msg)
         # Employee action successfully terminated
@@ -99,7 +99,7 @@ class TimeTrackerViewModel:
         Called when an error occurs in the model.
         """
         # Notify error message
-        self._text_state.set_value(f"Une erreur est survenue: {error}")
+        self._text_state.set_value(f"Une erreur est survenue:\n{error}")
         # Go in error state
         self._state.set_value(ScannerViewModelState.ERROR)
 
@@ -148,6 +148,8 @@ class TimeTrackerViewModel:
         self._text_state.set_value("En attente de badge ...")
         self._state.set_value(ScannerViewModelState.SCANNING)
         self._employee_text.set_value("")
+        # Resume model operation
+        self._model.resume()
 
     def close(self):
         """
