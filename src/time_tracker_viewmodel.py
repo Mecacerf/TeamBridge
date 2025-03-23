@@ -15,8 +15,9 @@ Contact: info@mecacerf.ch
     
 from enum import Enum
 from live_data import LiveData
-from time_tracker_model import TimeTrackerModel, EmployeeEvent
+from time_tracker_model import TimeTrackerModel, EmployeeEvent, EmployeeData
 from time_tracker_interface import ClockAction
+import datetime as dt
 
 class ScannerViewModelState(Enum):
     """
@@ -48,12 +49,15 @@ class TimeTrackerViewModel:
         # Set initial state
         self._state = LiveData[ScannerViewModelState](ScannerViewModelState.SCANNING)
         self._text_state = LiveData[str]("Opening ...")
+        self._employee_text = LiveData[str]("...")
         # Observe the employee events bus
         self._model.get_employee_events_bus().observe(self.__on_employee_event)
         # Observe the errors bus
         self._model.get_errors_bus().observe(self.__on_error)
         # Observe the loading state
         self._model.is_loading().observe(self.__is_loading)
+        # Observe employee data text
+        self._model.get_employee_info_bus().observe(self.__employee_data)
 
     def __on_employee_event(self, event: EmployeeEvent):
         """
@@ -72,6 +76,19 @@ class TimeTrackerViewModel:
         self._text_state.set_value(msg)
         # Employee action successfully terminated
         self._state.set_value(ScannerViewModelState.SUCCESS)
+
+    def __employee_data(self, info: EmployeeData):
+        """
+        Called when employee's data are available.
+        """
+        # Formatter function
+        def format(td: dt.timedelta):
+            tot_minutes = td.total_seconds() // 60
+            hours, minutes = divmod(int(tot_minutes), 60)
+            return f"{hours:02}h{minutes:02}"
+
+        self._employee_text.set_value(
+        f"Solde journalier: {format(info.worked_time)} / {format(info.scheduled_time)}\nSolde mensuel: {format(info.monthly_balance)}")
 
     def __on_error(self, error: str):
         """
@@ -104,6 +121,13 @@ class TimeTrackerViewModel:
             LiveData[str]: information text as an observable
         """
         return self._text_state
+    
+    def get_employee_info_text(self) -> LiveData[str]:
+        """
+        Returns:
+            LiveData[str]: employee data text as an observable
+        """
+        return self._employee_text
 
     def get_current_state(self) -> LiveData[ScannerViewModelState]:
         """
@@ -119,6 +143,7 @@ class TimeTrackerViewModel:
         # Reset text and state
         self._text_state.set_value("Scanning...")
         self._state.set_value(ScannerViewModelState.SCANNING)
+        self._employee_text.set_value("...")
 
     def close(self):
         """

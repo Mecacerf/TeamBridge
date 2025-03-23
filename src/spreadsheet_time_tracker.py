@@ -143,12 +143,12 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
     Implementation of the time tracker that uses spreadsheet files as database.
     """
 
-    def __init__(self, database: SpreadsheetsRepository, employee_id: str, date: dt.date):
+    def __init__(self, repository: SpreadsheetsRepository, employee_id: str, date: dt.date):
         """
         Open the employee's data for given date.
 
         Parameters:
-            database: spreadsheets database access provider 
+            repository: spreadsheets repository access provider 
             id: employee unique ID
             date: date index
         Raise:
@@ -162,13 +162,13 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Save current date
         self._date = date
         # Save employees database access provider
-        self._database = database
+        self._repository = repository
         # Save employee's id
         self._employee_id = employee_id
         # Set readable flag to be initially False
         self._readable = False
         # Acquire employee's file
-        self._file_path = self._database.acquire_employee_file(self._employee_id)
+        self._file_path = self._repository.acquire_employee_file(self._employee_id)
         # Throw a file not found error if necessary
         if self._file_path is None:
             raise FileNotFoundError(f"File not found for employee's ID '{self._employee_id}'.")
@@ -446,9 +446,9 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Close the time tracker, save and release resources.
         """
         # Save the employee's file on repository
-        self._database.save_employee_file(self._file_path)
+        self._repository.save_employee_file(self._file_path)
         # Close employee's file
-        self._database.close_employee_file(self._file_path)
+        self._repository.close_employee_file(self._file_path)
         LOGGER.debug(f"[Employee '{self._employee_id}'] Time tracker successfully closed.")
 
     def __load_workbook(self):
