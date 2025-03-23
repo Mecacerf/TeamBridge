@@ -12,8 +12,8 @@ Contact: info@mecacerf.ch
 """
 
 import sys
-import os
 import logging
+from logging.handlers import TimedRotatingFileHandler
 from time_tracker_model import TimeTrackerModel
 from time_tracker_viewmodel import TimeTrackerViewModel
 from spreadsheet_time_tracker import SpreadsheetTimeTracker
@@ -37,8 +37,10 @@ def main() -> int:
         level=logging.DEBUG,    # Minimal level to log
         format=LOGGING_FORMAT,
         handlers=[
-            logging.FileHandler("teambridge.log"),  # Logs to file
-            console_handler                         # Logs to console
+            # Log to files
+            TimedRotatingFileHandler(filename="teambridge.log", when="midnight", interval=1, backupCount=7, encoding="utf-8"),
+            # Log to console
+            console_handler                         
         ],
     )
 
