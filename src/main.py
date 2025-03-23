@@ -50,17 +50,25 @@ def main() -> int:
     # Create the arguments parser
     parser = argparse.ArgumentParser(description="Mecacerf TeamBridge Application")
     parser.add_argument("--repository", type=str, default="samples/", help="Spreadsheets repository folder path")
+    parser.add_argument("--scan-rate", type=int, default=6, help="Set scanning refresh rate [Hz]")
+    parser.add_argument("--fullscreen", action="store_true", help="Enable fullscreen mode")
+    parser.add_argument("--auto-wakeup", action="store_true", help="Enable auto screen wakeup on scanning event")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     # Parse the arguments
     args = parser.parse_args()
+    # Show configuration
+    logger.info(f"Starting with configuration [repository='{args.repository}', scan-rate={args.scan_rate}, fullscreen={args.fullscreen}"+
+                f", auto-wakeup={args.auto_wakeup}, debug={args.debug}]")
 
     # Create the application model using a SpreadsheetTimeTracker
     repository = SpreadsheetsRepository(args.repository)
-    model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date), debug=True, scan_rate=8)
+    time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date)
+    model = TimeTrackerModel(time_tracker_provider=time_tracker_provider, debug=args.debug, scan_rate=args.scan_rate)
     viewmodel = TimeTrackerViewModel(model)
 
     # Log some state changes
     viewmodel.get_scanning_state().observe(lambda scanning: logger.info(f"Camera scanning state: {scanning}"))
-    viewmodel.get_current_state().observe(lambda state: logger.debug(f"ViewModel in state '{state}'"))
+    viewmodel.get_current_state().observe(lambda state: logger.debug(f"ViewModel changes state '{state}'"))
     
     # Run tkinter
     root = tk.Tk()
@@ -69,7 +77,7 @@ def main() -> int:
         model.run()
         root.after(ms=50, func=update_model)
 
-    app = TimeTrackerView(root, viewmodel)
+    app = TimeTrackerView(root, viewmodel, fullscreen=args.fullscreen, auto_wakeup=args.auto_wakeup)
     root.after(ms=50, func=update_model)
     root.mainloop()
 

@@ -48,8 +48,8 @@ class TimeTrackerViewModel:
         self._model = model
         # Set initial state
         self._state = LiveData[ScannerViewModelState](ScannerViewModelState.SCANNING)
-        self._text_state = LiveData[str]("Opening ...")
-        self._employee_text = LiveData[str]("...")
+        self._text_state = LiveData[str]("")
+        self._employee_text = LiveData[str]("")
         # Observe the employee events bus
         self._model.get_employee_events_bus().observe(self.__on_employee_event)
         # Observe the errors bus
@@ -58,6 +58,8 @@ class TimeTrackerViewModel:
         self._model.is_loading().observe(self.__is_loading)
         # Observe employee data text
         self._model.get_employee_info_bus().observe(self.__employee_data)
+        # Reset state when starting scanning
+        self._model.is_scanning().observe(lambda scanning: self.reset_state() if scanning else None)
 
     def __on_employee_event(self, event: EmployeeEvent):
         """
@@ -76,6 +78,8 @@ class TimeTrackerViewModel:
         self._text_state.set_value(msg)
         # Employee action successfully terminated
         self._state.set_value(ScannerViewModelState.SUCCESS)
+        # Set loading employee's data
+        self._employee_text.set_value("Chargement des informations ...")
 
     def __employee_data(self, info: EmployeeData):
         """
@@ -105,7 +109,7 @@ class TimeTrackerViewModel:
         """
         # Go in loading state is currently in scanning state
         if loading and self._state.get_value() == ScannerViewModelState.SCANNING:
-            self._text_state.set_value("Chargement des données...")
+            self._text_state.set_value("Chargement des données ...")
             self._state.set_value(ScannerViewModelState.LOADING)
 
     def get_scanning_state(self) -> LiveData[bool]:
@@ -141,9 +145,9 @@ class TimeTrackerViewModel:
         Reset the view model to the scanning state.
         """
         # Reset text and state
-        self._text_state.set_value("Scanning...")
+        self._text_state.set_value("En attente de badge ...")
         self._state.set_value(ScannerViewModelState.SCANNING)
-        self._employee_text.set_value("...")
+        self._employee_text.set_value("")
 
     def close(self):
         """
