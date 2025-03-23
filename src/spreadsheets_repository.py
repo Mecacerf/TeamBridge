@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-File: spreadsheets_database.py
+File: spreadsheets_repository.py
 Author: Bastian Cerf
 Date: 19/03/2025
 Description: 
@@ -29,9 +29,9 @@ import time
 # Temporary folder in which opened spreadsheets are placed
 SPREADSHEETS_CACHE_FOLDER = ".local_cache/"
 # Temporary folder on remote in which saved files are copied
-REMOTE_CACHE_FOLDER = ".nas_cache/"
+REMOTE_CACHE_FOLDER = ".remote_cache/"
 # Dummy file to create and write when trying to wakeup the NAS
-DUMMY_FILE_NAME = ".nas_wakeup.txt"
+DUMMY_FILE_NAME = ".remote_wakeup.txt"
 # Delay between accesses retries
 RETRY_ACCESS_DELAY = 5.0 # [s]
 # Number of retries
@@ -40,21 +40,26 @@ RETRY_NUMBER = 3
 # Get the file logger
 LOGGER = logging.getLogger(__name__)
 
-class SpreadsheetsDatabase:
+class SpreadsheetsRepository:
     """
-    Typically unique class shared among the spreadsheet time trackers to read and write files.
+    Typically unique class shared among the spreadsheet time trackers to read and write files
+    on a remote repository mounted on a disk drive.
     Thread-safe.
     """
 
-    def __init__(self, database_path: str):
+    def __init__(self, repository_path: str, local_cache: str=None):
         """
         """
         # Create the lock object that will prevent multiple simultaneous file accesses
         self._lock = threading.Lock()
         # Save the database path
-        self._database_path = database_path
+        self._repository_path = repository_path
+        # Save the local cache path
+        self._local_cache = SPREADSHEETS_CACHE_FOLDER
+        if local_cache:
+            self._local_cache = local_cache
         # Log activity
-        LOGGER.info(f"The spreadsheets database is located under '{self._database_path}'.")
+        LOGGER.info(f"The spreadsheets database is located under '{self._repository_path}'.")
 
     def acquire_employee_file(self, employee_id: str) -> pathlib.Path | None:
         """
@@ -71,19 +76,19 @@ class SpreadsheetsDatabase:
         with self._lock:
             # Check that the local cache doesn't already contain the file, that would mean the
             # file is already in use.
-            if any(file.name.startswith(employee_id) for file in pathlib.Path(SPREADSHEETS_CACHE_FOLDER).glob("*.xlsx")):
+            if any(file.name.startswith(employee_id) for file in pathlib.Path(self._local_cache).glob("*.xlsx")):
                 raise RuntimeError(f"The employee's file with id={employee_id} is already in use.")
             # Acquire the database files folder
-            folder = self.__acquire_database_path()
+            folder = self.__acquire_repository_path()
             # Search the employee's file based on given id by iterating on all spreadsheet files
             for remote_file in folder.glob("*.xlsx"):
                 # Check that this is a file and its name starts with correct id
                 if remote_file.is_file() and remote_file.name.startswith(employee_id):
                     # Employee's file is found
                     # Ensure local cache folder exists
-                    os.makedirs(SPREADSHEETS_CACHE_FOLDER, exist_ok=True)
+                    os.makedirs(self._local_cache, exist_ok=True)
                     # Copy file to local cache, keeping metadata
-                    local_file = pathlib.Path(SPREADSHEETS_CACHE_FOLDER) / remote_file.name
+                    local_file = pathlib.Path(self._local_cache) / remote_file.name
                     shutil.copy2(remote_file, local_file)
                     # Log activity
                     LOGGER.info(f"Successfully acquired '{remote_file}' as '{local_file}'.")
@@ -110,7 +115,7 @@ class SpreadsheetsDatabase:
         # Acquire lock
         with self._lock:
             # Acquire database folder
-            folder = self.__acquire_database_path()
+            folder = self.__acquire_repository_path()
             # Get remote cache folder and ensure the file doesn't already exist, which would mean
             # a previous operation failed.
             remote_cache_file = folder / REMOTE_CACHE_FOLDER / path.name
@@ -151,7 +156,7 @@ class SpreadsheetsDatabase:
             # Log activity
             LOGGER.info(f"Removed local file '{path}'.")
 
-    def __acquire_database_path(self) -> pathlib.Path:
+    def __acquire_repository_path(self) -> pathlib.Path:
         """
         Try to acquire the path to employees files folder.
 
@@ -161,7 +166,7 @@ class SpreadsheetsDatabase:
             TimeoutError: failed to access folder after timeout
         """
         # Get path to employees data files, it might be on a NAS
-        folder = pathlib.Path(self._database_path)
+        folder = pathlib.Path(self._repository_path)
         # Get dummy file path
         dummy_file = folder / DUMMY_FILE_NAME
         # Number of access attempts

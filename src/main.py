@@ -20,7 +20,7 @@ from spreadsheet_time_tracker import SpreadsheetTimeTracker
 from time_tracker_view import TimeTrackerView
 import tkinter as tk
 import argparse
-from spreadsheets_database import SpreadsheetsDatabase
+from spreadsheets_repository import SpreadsheetsRepository
 
 LOGGING_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
@@ -54,7 +54,7 @@ def main() -> int:
     args = parser.parse_args()
 
     # Create the application model using a SpreadsheetTimeTracker
-    database = SpreadsheetsDatabase(args.database_path)
+    database = SpreadsheetsRepository(args.database_path)
     model = TimeTrackerModel(time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(database=database, employee_id=code, date=date), debug=True, scan_rate=8)
     viewmodel = TimeTrackerViewModel(model)
 

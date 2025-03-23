@@ -109,21 +109,10 @@ class ITodayTimeTracker:
         """
         pass
 
-    def is_readable(self) -> bool:
-        """
-        Check if the reading functions are accessible at this moment. 
-        They get unaccessible after a write action and accessible after an 
-        evaluation.
-
-        Returns:
-            bool: reading flag
-        """
-        pass
-
     def get_clock_events_today(self) -> list[ClockEvent]:
         """
         Get all clock-in/out events for the date.
-        Accessible when is_readable() returns True.
+        Always accessible.
         
         Returns:
             list[ClockEvent]: list of today's clock events (can be empty)
@@ -133,7 +122,7 @@ class ITodayTimeTracker:
     def is_clocked_in_today(self) -> bool:
         """
         Check if the employee is currently clocked in (today).
-        Accessible when is_readable() returns True.
+        Always accessible.
 
         Returns:
             bool: True if clocked in
@@ -141,6 +130,17 @@ class ITodayTimeTracker:
         # Get last today event and check if it's a clock in action
         events = self.get_clock_events_today()
         return bool(events) and (events[-1].action == ClockAction.CLOCK_IN)
+
+    def is_readable(self) -> bool:
+        """
+        Check if the reading functions are accessible at this moment. 
+        They are initially not accessible (since the opened data are not evaluated) and
+        get accessible after an evaluation is performed.
+
+        Returns:
+            bool: reading flag
+        """
+        pass
 
     def get_worked_time_today(self) -> dt.timedelta:
         """

@@ -26,7 +26,7 @@ import queue
 LOGGER = logging.getLogger(__name__)
 
 # Timeout in seconds during which an already scanned code will be ignored
-TIMEOUT = 15
+TIMEOUT = 10
 # Token a code must start with in order to be valid. Example: teambridge@000, id='000'
 CODE_TOKEN = "teambridge@"
 
@@ -183,11 +183,6 @@ class TimeTrackerModel:
 
             # Log that time tracker is open
             LOGGER.info(f"Opened time tracker for employee '{firstname} {name}' with id '{id}'. Initially readable: {employee.is_readable()}.")
-
-            # Evaluate the time tracker in order to read it and discover if the next action
-            # is a clock in or a clock out.
-            if not employee.is_readable():
-                employee.evaluate() 
 
             # Check if the employee is clocked in to define next action
             if employee.is_clocked_in_today():

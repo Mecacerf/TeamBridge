@@ -91,7 +91,7 @@ import os
 # Import the time tracker interface
 from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, IllegalReadException
 # Import the spreadsheets database access
-from spreadsheets_database import SpreadsheetsDatabase
+from spreadsheets_repository import SpreadsheetsRepository
 # Import datetime
 import datetime as dt
 # Import logging module
@@ -116,9 +116,7 @@ CELL_DATE = 'A8'
 # Cell containing the current hour information
 CELL_HOUR = 'A9'
 # Cell containing the first day of the month
-CELL_START_DATE = 'B9'
-# Cell containing the last day of a 31 days month
-CELL_END_DATE = 'B39'
+CELL_FIRST_MONTH_DATE = 'B9'
 # Top left cell containing the first clock in hour of the month
 CELL_TOP_LEFT_CLOCK_IN = 'G9'
 # Bottom right cell containing the last clock out hour of the month
@@ -145,7 +143,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
     Implementation of the time tracker that uses spreadsheet files as database.
     """
 
-    def __init__(self, database: SpreadsheetsDatabase, employee_id: str, date: dt.date):
+    def __init__(self, database: SpreadsheetsRepository, employee_id: str, date: dt.date):
         """
         Open the employee's data for given date.
 
@@ -176,6 +174,10 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
             raise FileNotFoundError(f"File not found for employee's ID '{self._employee_id}'.")
         # Load workbook
         self.__load_workbook()
+        # Even though the evaluated workbook might be available, it is defined that at time tracker
+        # creation the data may be too old to be actually used. The time tracker must be evaluated
+        # to access reading functions.
+        self.__invalidate_eval_wb()
 
     def get_firstname(self) -> str:
         """
@@ -185,8 +187,8 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             str: employee's firstname
         """
-        # Get firstname information in write notebook that is always available
-        return str(self._workbook_wr.worksheets[SHEET_INIT][CELL_FIRSTNAME].value)
+        # Get information in raw notebook
+        return str(self._workbook_raw.worksheets[SHEET_INIT][CELL_FIRSTNAME].value)
 
     def get_name(self) -> str:
         """
@@ -196,8 +198,8 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             str: employee's name
         """
-        # Get name information in write notebook that is always available
-        return str(self._workbook_wr.worksheets[SHEET_INIT][CELL_NAME].value)
+        # Get information in raw notebook
+        return str(self._workbook_raw.worksheets[SHEET_INIT][CELL_NAME].value)
     
     def get_daily_schedule(self) -> dt.timedelta:
         """
@@ -207,49 +209,23 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             timedelta: daily schedule
         """
-        # Get information in write notebook that is always available
-        timedelta = self._workbook_wr.worksheets[SHEET_INIT][CELL_DAILY_SCHEDULE].value
+        # Get information in raw notebook
+        timedelta = self._workbook_raw.worksheets[SHEET_INIT][CELL_DAILY_SCHEDULE].value
         # It might happen that the object is a dt.time
         if isinstance(timedelta, dt.time):
             timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
         # Return the timedelta
         return timedelta
 
-    def is_readable(self) -> bool:
+    def __get_date_row(self) -> int:
         """
-        Check if the reading functions are accessible at this moment. 
-        They get unaccessible after a write action and accessible after an 
-        evaluation.
-
         Returns:
-            bool: reading flag
+            int: the row containing the information related to current date
         """
-        return self._readable
-
-    def __get_current_date_cell(self) -> openpyxl.cell.Cell:
-        """
-        Get the cell containing the current date.
-        Note: it is legal to use this function even when readable is False, since it accesses 
-        static cells (dates won't change after write actions).
-        """
-        # Get current month's sheet in read mode
-        sheet_rd = self._workbook_rd.worksheets[self._date.month - 1 + SHEET_JANUARY]
-        # Get dates boundaries in sheet, by definition min_col == max_col since dates are disposed along the same column
-        column, min_row, _, max_row = openpyxl.utils.range_boundaries(f"{CELL_START_DATE}:{CELL_END_DATE}")
-        # Search current date cell
-        date_cell = None
-        for row in sheet_rd.iter_rows(min_row=min_row, max_row=max_row, min_col=column, max_col=column):
-            # Check date exists and is equal to current date
-            if row[0] and row[0].value and row[0].value.date() == self._date:
-                # Match is found
-                date_cell = row[0]
-                break
-        
-        # Make sure the cell has been found
-        if not date_cell:
-            raise ValueError(f"The date {self._date} doesn't exist in {self._file_path.name} spreadsheet.")
-        # Return cell
-        return date_cell
+        # Get coordinates of the first day of the month
+        row, _ = openpyxl.utils.coordinate_to_tuple(CELL_FIRST_MONTH_DATE)
+        # Find the row corresponding to current date
+        return (row + self._date.day - 1)
 
     def __get_clock_action_for_cell(self, cell: openpyxl.cell.Cell) -> ClockAction:
         """
@@ -272,24 +248,22 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
 
     def get_clock_events_today(self) -> list[ClockEvent]:
         """
-        Get all clock-in/out events for today.
-
+        Get all clock-in/out events for the date.
+        Always accessible.
+        
         Returns:
             list[ClockEvent]: list of today's clock events (can be empty)
         """
-        # Check read status
-        if not self.is_readable():
-            raise IllegalReadException()
-        # Get current date cell to identify the row
-        date_cell = self.__get_current_date_cell()
-        # Get current month's sheet in read mode
-        sheet_rd = self._workbook_rd.worksheets[self._date.month - 1 + SHEET_JANUARY]
+        # Get current date row
+        date_row = self.__get_date_row()
+        # Get current month's sheet 
+        month_sheet = self._workbook_raw.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Create current date events list
         clock_events = []
         # Get clock actions boundaries
         min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{CELL_TOP_LEFT_CLOCK_IN}:{CELL_BOT_RIGHT_CLOCK_OUT}")
         # Iterate in clock actions row for current date
-        for column in sheet_rd.iter_cols(min_row=date_cell.row, max_row=date_cell.row, min_col=min_col, max_col=max_col):
+        for column in month_sheet.iter_cols(min_row=date_row, max_row=date_row, min_col=min_col, max_col=max_col):
             # Get cell value
             cell = column[0]
             # Check if the cell exists and contains an entry
@@ -304,6 +278,17 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
 
         # Return the events list
         return clock_events
+    
+    def is_readable(self) -> bool:
+        """
+        Check if the reading functions are accessible at this moment. 
+        They get unaccessible after a write action and accessible after an 
+        evaluation.
+
+        Returns:
+            bool: reading flag
+        """
+        return self._readable
 
     def get_worked_time_today(self) -> dt.timedelta:
         """
@@ -318,14 +303,14 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Check read status
         if not self.is_readable():
             raise IllegalReadException()
-        # Get current date cell and identify the working hours row
-        row = self.__get_current_date_cell().row
+        # Get current date row
+        row = self.__get_date_row()
         # Get working hours column
         _, column = openpyxl.utils.coordinate_to_tuple(CELL_WORKING_HOURS)
         # Get current month's sheet in read mode
-        sheet_rd = self._workbook_rd.worksheets[self._date.month - 1 + SHEET_JANUARY]
+        month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Get the timedelta object
-        timedelta = sheet_rd.cell(row=row, column=column).value
+        timedelta = month_sheet.cell(row=row, column=column).value
         # It might happen that the object is a dt.time
         if isinstance(timedelta, dt.time):
             timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
@@ -343,10 +328,10 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Check read status
         if not self.is_readable():
             raise IllegalReadException()
-        # Get current month's sheet in read mode
-        sheet_rd = self._workbook_rd.worksheets[self._date.month - 1 + SHEET_JANUARY]
+        # Get evaluated month's sheet 
+        month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Get monthly balance value as a timedelta
-        return sheet_rd[CELL_MONTHLY_BALANCE].value
+        return month_sheet[CELL_MONTHLY_BALANCE].value
 
     def register_clock(self, event: ClockEvent) -> None:
         """
@@ -360,17 +345,18 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
             ValueError: double clock in/out detected
         """
         # Get current date cell
-        date_cell = self.__get_current_date_cell()
-        # Get current month's sheet in write mode
-        sheet_wr = self._workbook_wr.worksheets[self._date.month - 1 + SHEET_JANUARY]
+        date_row = self.__get_date_row()
+        # Get current month's sheet
+        # This function will only use the raw workbook
+        month_sheet = self._workbook_raw.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Set written flag
         written = False
         # Get clock actions boundaries
         min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{CELL_TOP_LEFT_CLOCK_IN}:{CELL_BOT_RIGHT_CLOCK_OUT}")
-        # Previous clock action time
+        # Previous clock action time, used to verify that clock event times are ascending
         prev_clock_time = None
         # Iterate in clock actions row for current date
-        for column in sheet_wr.iter_cols(min_row=date_cell.row, max_row=date_cell.row, min_col=min_col, max_col=max_col):
+        for column in month_sheet.iter_cols(min_row=date_row, max_row=date_row, min_col=min_col, max_col=max_col):
             # Get cell in the column
             cell = column[0]
             # Iterate until a free cell is found
@@ -397,8 +383,8 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
             
         # Check if event has been correctly registered
         if written:
-            # Clear readable flag
-            self._readable = False
+            # Invalidate evaluated workbook
+            self.__invalidate_eval_wb()
         else:
             raise ValueError(f"Event ({event.action} at {event.time}) has not been correctly registered.")
 
@@ -407,8 +393,8 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Commit changes. This must be called after changes have been done (typically after new clock events
         have been registered) to save the modifications.
         """
-        # Save the write notebook in the local cache
-        self._workbook_wr.save(self._file_path)
+        # Save the workbook in the local cache
+        self._workbook_raw.save(self._file_path)
         LOGGER.debug(f"[Employee '{self._employee_id}'] Saved local file '{self._file_path}'.")
 
     def evaluate(self) -> None:
@@ -451,10 +437,8 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         shutil.copy2(src=tmp_file, dst=self._file_path)
         # Delete temporary file
         tmp_file.unlink(missing_ok=True)
-        # Load workbook
+        # Load workbook, it will update the readable flag
         self.__load_workbook()
-        # Set readable flag
-        self._readable = True
         LOGGER.debug(f"[Employee '{self._employee_id}'] File evaluation succeeded.")
 
     def close(self) -> None:
@@ -469,12 +453,33 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
 
     def __load_workbook(self):
         """
-        Load the employee's workbook.
+        Load the employee's workbook in raw and evaluated modes. Update the reading flag.
         """
-        # Open employee spreadsheet in data only and read only modes
-        # This is used to read evaluated cell values
-        # This workbook must not be saved since all formulas are evaluated, it would overwrite them with current values
-        self._workbook_rd = openpyxl.load_workbook(self._file_path, data_only=True)
-        # Open employee spreadsheet in write mode
-        self._workbook_wr = openpyxl.load_workbook(self._file_path, data_only=False)
-        LOGGER.debug(f"[Employee '{self._employee_id}'] (Re)loaded workbook '{self._file_path}'.")
+        # Open the employee's workbook in normal (raw) mode to access non evaluated values.
+        # Formula cells will contain the raw formula (and not the evaluated value).
+        # This workbook can be written and saved safely. It can also be used to read 
+        # non formula cell values.
+        self._workbook_raw = openpyxl.load_workbook(self._file_path, data_only=False)
+
+        # Open the employee's workbook in data only mode to access evaluated values.
+        # If the workbook hasn't been evaluated before, formula cells will contain the
+        # value 'None', which will be used to update the reading flag.
+        # This workbook is used to read evaluated cell values.
+        self._workbook_eval = openpyxl.load_workbook(self._file_path, data_only=True)
+        # Check if the workbook is evaluated by checking a formula cell value
+        month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
+        # Check the first month's day cell arbitrarily
+        self._readable = month_sheet[CELL_FIRST_MONTH_DATE].value is not None
+        # If not reable, nullify the workbook to prevent unintended access
+        if not self._readable:
+            self._workbook_eval = None 
+        # Log activity
+        LOGGER.debug(f"[Employee '{self._employee_id}'] (Re)loaded workbook '{self._file_path}', readable={self._readable}.")
+
+    def __invalidate_eval_wb(self):
+        """
+        Invalidate the evaluated workbook.
+        """
+        # Clear readable flag and nullify evaluated workbook
+        self._readable = False
+        self._workbook_eval = None
