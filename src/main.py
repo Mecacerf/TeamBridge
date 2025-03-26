@@ -53,6 +53,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Mecacerf TeamBridge Application")
     parser.add_argument("--repository", type=str, default="samples/", help="Spreadsheets repository folder path")
     parser.add_argument("--scan-rate", type=int, default=6, help="Set scanning refresh rate [Hz]")
+    parser.add_argument("--camera-id", type=int, default=0, help="Select the camera that will be used for scanning")
     parser.add_argument("--fullscreen", action="store_true", help="Enable fullscreen mode")
     parser.add_argument("--auto-wakeup", action="store_true", help="Enable auto screen wakeup on scanning event")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
@@ -65,7 +66,7 @@ def main() -> int:
     # Create the application model using a SpreadsheetTimeTracker
     repository = SpreadsheetsRepository(args.repository)
     time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date)
-    model = TimeTrackerModel(time_tracker_provider=time_tracker_provider, debug=args.debug, scan_rate=args.scan_rate)
+    model = TimeTrackerModel(time_tracker_provider=time_tracker_provider, debug=args.debug, scan_rate=args.scan_rate, device_id=args.camera_id)
     viewmodel = TimeTrackerViewModel(model)
 
     # Log some state changes
