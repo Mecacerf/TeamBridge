@@ -12,26 +12,12 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-#!/usr/bin/env python3
-"""
-File: time_tracker_view.py
-Author: Bastian Cerf
-Date: 02/03/2025
-Description: 
-    The view is responsible for displaying the view model state in an elegant manner.
-    This implementation uses the classic tkinter graphic library.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
-
 from tkinter import Label, Button
 from time_tracker_viewmodel import TimeTrackerViewModel, ScannerViewModelState
 import playsound3
 import pathlib
-import ctypes
 import logging
+import pyautogui
 
 LOGGER = logging.getLogger(__name__)
 
@@ -98,7 +84,7 @@ class TimeTrackerView:
     def __auto_wakeup_screen(self, state):
         if self.wakeup_old_state == ScannerViewModelState.SCANNING and state == ScannerViewModelState.LOADING:
             self.key_press_cnt = 5
-            self.__press_ctrl_down()
+            self.__press_ctrl()
         self.wakeup_old_state = state
 
     def __play_state_sound(self, state):
@@ -121,20 +107,15 @@ class TimeTrackerView:
         if file.exists():
             self._playing_sound = playsound3.playsound(sound=file, block=False)
 
-    def __press_ctrl_down(self):
+    def __press_ctrl(self):
         # Simulate CONTROL key press to unlock the session
-        ctypes.windll.user32.keybd_event(0x11, 0, 0, 0)  # CONTROL key down
-        # Program key up
-        self.root.after(50, self.__press_ctrl_up)
-
-    def __press_ctrl_up(self):
-        # Simulate CONTROL key press to unlock the session
-        ctypes.windll.user32.keybd_event(0x11, 0, 2, 0)  # CONTROL key up
+        pyautogui.press('ctrl')
+        pyautogui.press('ctrlleft')
         # Must continue
         if self.key_press_cnt > 0:
             self.key_press_cnt -= 1
-            # Program key up
-            self.root.after(50, self.__press_ctrl_down)
+            # Program next press
+            self.root.after(50, self.__press_ctrl)
 
     def update_view(self, *_):
         """Update UI based on ViewModel state."""
