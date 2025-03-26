@@ -4,7 +4,7 @@ File: time_tracker_model.py
 Author: Bastian Cerf
 Date: 02/03/2025
 Description: 
-    The model orchestrates how the application works by processing QR scanner inputs and
+    The model orchestrates the application work. It processes barcodes inputs and
     reading / writing in employees database.
 
 Company: Mecacerf SA
@@ -21,6 +21,7 @@ from live_data import LiveData
 import logging
 import threading
 import queue
+from enum import Enum
 
 # Get module logger
 LOGGER = logging.getLogger(__name__)
@@ -30,7 +31,14 @@ TIMEOUT = 10
 # Token a code must start with in order to be valid. Example: teambridge@000, id='000'
 CODE_TOKEN = "teambridge@"
 
-class EmployeeEvent:
+class ModelMessage:
+    """
+    A generic asynchronous message sent by the model to upper layers.
+    """
+    def __init__(self):
+        pass
+
+class EmployeeEvent(ModelMessage):
     """
     Describes an event related to an employee.
     """
@@ -51,7 +59,7 @@ class EmployeeEvent:
         self.id = id
         self.clock_evt = clock_evt
 
-class EmployeeData:
+class EmployeeData(ModelMessage):
     """
     Container of different information about an employee.
     """
@@ -64,6 +72,14 @@ class EmployeeData:
                  monthly_balance: dt.timedelta):
         """
         Create an employee's data container.
+
+        Parameters:
+            name: employee's name
+            firstname: employee's firstname
+            id: employee's id
+            worked_time: employee's worked time for current date
+            scheduled_time: employee's scheduled time
+            monthly_balance: employee's monthly balance
         """
         # Save parameters
         self.name = name
@@ -72,6 +88,33 @@ class EmployeeData:
         self.worked_time = worked_time
         self.scheduled_time = scheduled_time
         self.monthly_balance = monthly_balance
+
+class ModelError(ModelMessage):
+    """
+    Error message container.
+    """
+
+    class ErrorType(Enum):
+        """
+        Error types enumeration.
+        """
+        # Generic error, refer to the message
+        GENERIC_ERROR = 0
+        # The scanning device (likely a webcam) ran into error
+        SCANNING_DEVICE_ERROR = 1
+        # The employee wasn't found in the database
+        EMPLOYEE_NOT_FOUND = 2
+
+    def __init__(self, type: ErrorType, msg: str=None):
+        """
+        Create a model error container.
+
+        Parameters:
+            type: error type
+            msg: optional error message
+        """
+        self.type = type
+        self.message = msg
 
 class TimeTrackerModel:
     """
@@ -88,6 +131,7 @@ class TimeTrackerModel:
             time_tracker: generic access to employees data
             device_id: webcam id used by the scanner, typically 0 if only one webcam is available
             scan_rate: rate in [Hz] at which the scanner will analyze frames
+            debug: enable debug mode
         """
         # Save the time tracker provider
         self._time_tracker_provider = time_tracker_provider
@@ -96,35 +140,16 @@ class TimeTrackerModel:
         self._scanner.open(cam_idx=device_id, scan_rate=scan_rate)
         # Create the waiting dictionary 
         self._waiting_codes = {}
-        # Create the employees events bus
-        self._employee_events_bus = LiveData[EmployeeEvent](None, bus_mode=True)
-        # Create the employees info bus
-        self._employee_info_bus = LiveData[EmployeeData](None, bus_mode=True)
-        # Create the scanning signal
-        self._scanning_sig = LiveData[bool](False)
-        # Create the loading signal
-        self._loading_sig = LiveData[bool](False)
-        # Create the errors bus
-        self._error_bus = LiveData[str](None, bus_mode=True)
-        # Create the processing flag
-        self._processing = threading.Event()
-        # Create the working flag, initially true
-        self._working = threading.Event()
-        self._working.set()
-        # Create the employee events queue
-        self._event_queue = queue.Queue()
-        # Create the employee info queue
-        self._info_queue = queue.Queue()
-        # Create the errors queue
-        self._error_queue = queue.Queue()
+        # Create the messages bus
+        self._message_bus = LiveData[ModelMessage](None, bus_mode=True)
+
+
 
     def run(self):
         """
         Model loop. Read the scanner and perform associated actions.
         """
-        # Report the scanning state
-        self._scanning_sig.set_value(self._scanner.is_scanning())
-        
+
         # Read pending codes if not already processing
         while self._working.is_set() and self._scanner.available():
             # Get the code as a string
@@ -297,41 +322,13 @@ class TimeTrackerModel:
         self._scanner.clear()
         self._working.set()
 
-    def get_employee_events_bus(self) -> LiveData[EmployeeEvent]:
+    def get_message_bus(self) -> LiveData[ModelMessage]:
         """
         Returns:
-            LiveData[EmployeeEvent]: observable bus on which employees events are published
+            LiveData[ModelMessage]: observable bus on which messages are published
         """
-        return self._employee_events_bus
+        return self._message_bus
     
-    def get_employee_info_bus(self) -> LiveData[EmployeeEvent]:
-        """
-        Returns:
-            LiveData[EmployeeInfo]: observable bus on which employees info are published
-        """
-        return self._employee_info_bus
-
-    def get_errors_bus(self) -> LiveData[str]:
-        """
-        Returns:
-            LiveData[str]: observable bus on which errors are published
-        """
-        return self._error_bus
-
-    def is_loading(self) -> LiveData[bool]:
-        """
-        Returns:
-            LiveData[bool]: loading state as an observable
-        """
-        return self._loading_sig
-
-    def is_scanning(self) -> LiveData[bool]:
-        """
-        Returns:
-            LiveData[bool]: scanning state as an observable
-        """
-        return self._scanning_sig
-
     def close(self):
         """
         Terminate the model, release resources.
