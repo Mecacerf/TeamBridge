@@ -108,9 +108,15 @@ class TimeTrackerView:
             self._playing_sound = playsound3.playsound(sound=file, block=False)
 
     def __press_ctrl(self):
-        # Simulate CONTROL key press to unlock the session
-        pyautogui.press('ctrl')
-        pyautogui.press('ctrlleft')
+        try:
+            # Simulate CONTROL key press to unlock the session
+            pyautogui.FAILSAFE = False
+            pyautogui.press('ctrl')
+            pyautogui.press('ctrlleft')
+            pyautogui.FAILSAFE = True
+        except Exception as e:
+            LOGGER.warning("Unable to send virtual CTRL key presses.", exc_info=True)
+            
         # Must continue
         if self.key_press_cnt > 0:
             self.key_press_cnt -= 1
