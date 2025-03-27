@@ -1,7 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_dynamic_libs
+# Start by cleaning last build
+import shutil, pathlib, os
 
+# Remove with privileges
+def remove_readonly(func, path, exc_info):
+    """Changes the file attribute and retries deletion if permission is denied."""
+    os.chmod(path, 0o777) # Grant full permissions
+    func(path) # Retry the function
+
+# Check if output folder already exists and remove it if it does
+output = pathlib.Path("deploy/dist/")
+if output.exists():
+    shutil.rmtree(output, onexc=remove_readonly)
+
+# PyInstaller
+from PyInstaller.utils.hooks import collect_dynamic_libs
 # Auto-collect all DLLs from pyzbar that may not be correctly detected by PyInstaller.
 # See https://pypi.org/project/pyzbar/ Windows error message if an issue persists.
 binaries = collect_dynamic_libs('pyzbar')
@@ -43,10 +57,7 @@ exe = EXE(
 )
 
 print("Executable generation finished, copy utility files...")
-# Copy autostart script to dist folder
-import shutil, pathlib, os
+# Copy samples to dist folder to allow the program to access its assets
+shutil.copytree("samples/", "deploy/dist/samples/")
+# Copy autostart utility script
 shutil.copy("src/autostart-exe.ps1", "deploy/dist/autostart-exe.ps1")
-# Copy test samples to dist folder for demonstration purpose
-os.makedirs("deploy/dist/samples/", exist_ok=True)
-for sample in pathlib.Path("samples/").glob("*.xlsx"):
-    shutil.copy(sample, pathlib.Path("deploy/dist/samples/") / sample.name)

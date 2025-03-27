@@ -37,7 +37,7 @@ if(Test-Path $venvActivate)
     pip install -r requirements.txt
 
     # Build teambridge from the spec file
-    pyinstaller deploy\\TeamBridge.exe.spec --workpath deploy\\build --distpath deploy\\dist
+    pyinstaller deploy\\TeamBridge.exe.spec --clean --workpath deploy\\build --distpath deploy\\dist
 
     # Pause to allow the user to consult the logs
     pause
