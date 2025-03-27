@@ -1,4 +1,4 @@
-# File: autostart.ps1
+# File: autostart-script.ps1
 # Author: Bastian Cerf
 # Date: 23/03/2025
 # Description: 
@@ -8,6 +8,9 @@
 # Company: Mecacerf SA
 # Website: http://mecacerf.ch
 # Contact: info@mecacerf.ch
+
+# Move to the script parent folder
+Set-Location -Path (Get-Item $PSScriptRoot).Parent.FullName
 
 # Virtual environment path
 $venvDir = ".venv"
