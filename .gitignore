@@ -177,4 +177,4 @@ cython_debug/
 todo_list.txt
 
 # Ignore program log files
-*.log.[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]
+*.log.[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]
