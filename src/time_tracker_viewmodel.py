@@ -87,6 +87,10 @@ class TimeTrackerViewModel:
         """
         # Formatter function
         def format(td: dt.timedelta):
+            # Ensure the information is available
+            if not isinstance(td, dt.timedelta):
+                return "indisponible"
+            # Available, format time
             tot_minutes = td.total_seconds() // 60
             hours, minutes = divmod(int(tot_minutes), 60)
             return f"{hours:02}h{minutes:02}"
