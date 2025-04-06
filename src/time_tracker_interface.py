@@ -99,16 +99,6 @@ class ITodayTimeTracker:
         """
         pass
 
-    def get_daily_schedule(self) -> dt.timedelta:
-        """
-        Get employee's daily schedule.
-        Always accessible.
-
-        Returns:
-            timedelta: daily schedule
-        """
-        pass
-
     def get_clock_events_today(self) -> list[ClockEvent]:
         """
         Get all clock-in/out events for the date.
@@ -142,9 +132,31 @@ class ITodayTimeTracker:
         """
         pass
 
-    def get_worked_time_today(self) -> dt.timedelta:
+    def get_daily_schedule(self) -> dt.timedelta:
         """
-        Get employee's worked time today.
+        Get employee's daily schedule (how much time he's supposed to work).
+        Accessible when is_readable() returns True.
+
+        Returns:
+            timedelta: daily schedule
+        """
+        pass
+
+    def get_daily_balance(self) -> dt.timedelta:
+        """
+        Get employee's daily balance (remaining time he's supposed to work).
+        If the employee is clocked in the value is calculated based on the time the last evaluation
+        has been done.
+        Accessible when is_readable() returns True.
+
+        Returns:
+            timedelta: daily balance
+        """
+        pass
+
+    def get_daily_worked_time(self) -> dt.timedelta:
+        """
+        Get employee's worked time for the day.
         If the employee is clocked in the value is calculated based on the time the last evaluation
         has been done.
         Accessible when is_readable() returns True.

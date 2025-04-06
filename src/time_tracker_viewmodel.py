@@ -91,9 +91,11 @@ class TimeTrackerViewModel:
             if not isinstance(td, dt.timedelta):
                 return "indisponible"
             # Available, format time
-            tot_minutes = td.total_seconds() // 60
-            hours, minutes = divmod(int(tot_minutes), 60)
-            return f"{hours:02}h{minutes:02}"
+            total_minutes = int(td.total_seconds() // 60)
+            sign = "-" if total_minutes < 0 else ""
+            abs_minutes = abs(total_minutes)
+            hours, minutes = divmod(abs_minutes, 60)
+            return f"{sign}{hours:02}h{minutes:02}"
 
         self._employee_text.set_value(
         f"Solde journalier: {format(info.worked_time)} / {format(info.scheduled_time)}\nSolde mensuel: {format(info.monthly_balance)}")

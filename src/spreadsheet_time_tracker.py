@@ -101,30 +101,37 @@ import logging
 #           Spreadsheet constants              #
 ################################################
 
+## Sheets
 # Init sheet index
 SHEET_INIT = 0
 # January sheet index, next months are incremented
 SHEET_JANUARY = 1
+
+## Init sheet
 # Cell containing the name information
 CELL_NAME = 'A6'
 # Cell containing the firstname information
 CELL_FIRSTNAME = 'A7'
-# Cell containing the daily schedule
-CELL_DAILY_SCHEDULE = 'A1'
 # Cell containing the current date information
 CELL_DATE = 'A8'
 # Cell containing the current hour information
 CELL_HOUR = 'A9'
+
+## Month sheets
+# Cell containing the monthly balance (total of daily balances)
+CELL_MONTHLY_BALANCE = 'D8'
 # Cell containing the first day of the month
 CELL_FIRST_MONTH_DATE = 'B9'
-# Top left cell containing the first clock in hour of the month
-CELL_TOP_LEFT_CLOCK_IN = 'G9'
-# Bottom right cell containing the last clock out hour of the month
-CELL_BOT_RIGHT_CLOCK_OUT = 'R39'
-# Cell containing the employee monthly balance, individual day balances are in the same column below
-CELL_MONTHLY_BALANCE = 'D8'
-# First cell containing the working hours of the day
-CELL_WORKING_HOURS = 'E9'
+# Cell containing the daily schedule for the first day of the month
+CELL_DAILY_SCHEDULE = 'C9'
+# Cell containing the daily balance for the first day of the month
+CELL_DAILY_BALANCE = 'D9'
+# Cell containing the worked time for the first day of the month
+CELL_WORKED_TIME = 'E9'
+# Column containing the first clock in action of the day
+COL_FIRST_CLOCK_IN = 'G'
+# Column containing the last clock out action of the day
+COL_LAST_CLOCK_OUT = 'R'
 
 ################################################
 #              General constants               #
@@ -200,22 +207,6 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         """
         # Get information in raw notebook
         return str(self._workbook_raw.worksheets[SHEET_INIT][CELL_NAME].value)
-    
-    def get_daily_schedule(self) -> dt.timedelta:
-        """
-        Get employee's daily schedule.
-        Always accessible.
-
-        Returns:
-            timedelta: daily schedule
-        """
-        # Get information in raw notebook
-        timedelta = self._workbook_raw.worksheets[SHEET_INIT][CELL_DAILY_SCHEDULE].value
-        # It might happen that the object is a dt.time
-        if isinstance(timedelta, dt.time):
-            timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
-        # Return the timedelta
-        return timedelta
 
     def __get_date_row(self) -> int:
         """
@@ -232,7 +223,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Check if the given cell contains a clock in or a clock out action, based on its column index.
         """
         # Get first clock in column
-        _, clock_in_col = openpyxl.utils.coordinate_to_tuple(CELL_TOP_LEFT_CLOCK_IN)
+        _, clock_in_col = openpyxl.utils.coordinate_to_tuple(f"{COL_FIRST_CLOCK_IN}1")
         # Get difference between first clock in column and given cell column
         delta_actions = cell.column - clock_in_col
         # Sanity check
@@ -261,7 +252,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Create current date events list
         clock_events = []
         # Get clock actions boundaries
-        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{CELL_TOP_LEFT_CLOCK_IN}:{CELL_BOT_RIGHT_CLOCK_OUT}")
+        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{COL_FIRST_CLOCK_IN}1:{COL_LAST_CLOCK_OUT}1")
         # Iterate in clock actions row for current date
         for column in month_sheet.iter_cols(min_row=date_row, max_row=date_row, min_col=min_col, max_col=max_col):
             # Get cell value
@@ -282,31 +273,33 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
     def is_readable(self) -> bool:
         """
         Check if the reading functions are accessible at this moment. 
-        They get unaccessible after a write action and accessible after an 
-        evaluation.
+        They are initially not accessible (since the opened data are not evaluated) and
+        get accessible after an evaluation is performed.
 
         Returns:
             bool: reading flag
         """
         return self._readable
-
-    def get_worked_time_today(self) -> dt.timedelta:
+    
+    def __get_daily_info(self, first_cell: str) -> dt.timedelta:
         """
-        Get employee's worked time today.
-        If the employee is clocked in the value is calculated based on the time the last evaluation
-        has been done.
-        Accessible when is_readable() returns True.
-        
+        Extract a daily information based on the given cell (column) and
+        the current date (row). 
+
+        Parameters:
+            first_cell: a cell containing the information to identify the column
         Returns:
-            timedelta: delta time object
+            timedelta: timedelta read in the identified cell
+        Raises:
+            IllegalReadException: read is unavailable  
         """
         # Check read status
         if not self.is_readable():
             raise IllegalReadException()
         # Get current date row
         row = self.__get_date_row()
-        # Get working hours column
-        _, column = openpyxl.utils.coordinate_to_tuple(CELL_WORKING_HOURS)
+        # Get column containing information
+        _, column = openpyxl.utils.coordinate_to_tuple(first_cell)
         # Get current month's sheet in read mode
         month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Get the timedelta object
@@ -314,8 +307,41 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # It might happen that the object is a dt.time
         if isinstance(timedelta, dt.time):
             timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
-        # Return the timedelta
         return timedelta
+
+    def get_daily_schedule(self) -> dt.timedelta:
+        """
+        Get employee's daily schedule (how much time he's supposed to work).
+        Accessible when is_readable() returns True.
+
+        Returns:
+            timedelta: daily schedule
+        """
+        return self.__get_daily_info(CELL_DAILY_SCHEDULE)
+    
+    def get_daily_balance(self) -> dt.timedelta:
+        """
+        Get employee's daily balance (remaining time he's supposed to work).
+        If the employee is clocked in the value is calculated based on the time the last evaluation
+        has been done.
+        Accessible when is_readable() returns True.
+
+        Returns:
+            timedelta: daily balance
+        """
+        return self.__get_daily_info(CELL_DAILY_BALANCE)
+
+    def get_daily_worked_time(self) -> dt.timedelta:
+        """
+        Get employee's worked time for the day.
+        If the employee is clocked in the value is calculated based on the time the last evaluation
+        has been done.
+        Accessible when is_readable() returns True.
+        
+        Returns:
+            timedelta: delta time object
+        """
+        return self.__get_daily_info(CELL_WORKED_TIME)
     
     def get_monthly_balance(self) -> dt.timedelta:
         """
@@ -331,7 +357,11 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Get evaluated month's sheet 
         month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Get monthly balance value as a timedelta
-        return month_sheet[CELL_MONTHLY_BALANCE].value
+        timedelta = month_sheet[CELL_MONTHLY_BALANCE].value
+        # It might happen that the object is a dt.time
+        if isinstance(timedelta, dt.time):
+            timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
+        return timedelta
 
     def register_clock(self, event: ClockEvent) -> None:
         """
@@ -352,7 +382,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Set written flag
         written = False
         # Get clock actions boundaries
-        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{CELL_TOP_LEFT_CLOCK_IN}:{CELL_BOT_RIGHT_CLOCK_OUT}")
+        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{COL_FIRST_CLOCK_IN}1:{COL_LAST_CLOCK_OUT}1")
         # Previous clock action time, used to verify that clock event times are ascending
         prev_clock_time = None
         # Iterate in clock actions row for current date

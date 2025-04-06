@@ -255,7 +255,7 @@ class TimeTrackerModel:
             if not employee.is_readable():
                 employee.evaluate()
             # Read and fill an employee info container
-            worked_time = employee.get_worked_time_today()
+            worked_time = employee.get_daily_worked_time()
             scheduled = employee.get_daily_schedule()
             balance = employee.get_monthly_balance()
             event = EmployeeData(name=name, firstname=firstname, id=id, 

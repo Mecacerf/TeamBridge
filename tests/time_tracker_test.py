@@ -29,10 +29,17 @@ from spreadsheets_repository import SpreadsheetsRepository
 ################################################
 
 # General tests configuration
-TEST_DATE = dt.date(year=2025, month=3, day=9)
+TEST_EMPLOYEE_ID = "unit-test"
+# Test date and time
+TEST_DATE = dt.date(year=2025, month=3, day=10) # 10 March 2025 is a monday
 TEST_TIME = dt.time(hour=8, minute=10)
 TEST_DATETIME = dt.datetime.combine(date=TEST_DATE, time=TEST_TIME)
-TEST_EMPLOYEE_ID = "000"
+# Expected values at configured date and time
+# Daily schedule for a day of the week
+TEST_DAILY_SCHEDULE = dt.timedelta(hours=8, minutes=17)
+# Total time the employee should have worked from the beginning of the month
+# Equal to number of working days times daily schedule
+TEST_MONTHLY_BALANCE_NO_WORK = (TEST_DAILY_SCHEDULE * 6)
 
 # Spreadsheet Time Tracker
 SPREADSHEET_SAMPLES_FOLDER = "samples/"
@@ -174,29 +181,42 @@ def test_read_unavailable(default_time_tracker_provider):
     assert employee.is_readable() is False
     # Try to access worked time directly
     with pytest.raises(IllegalReadException):
-        employee.get_worked_time_today()
+        employee.get_daily_worked_time()
     # Try to access monthly balance directly
     with pytest.raises(IllegalReadException):
         employee.get_monthly_balance()
-    # Evaluate and check readable gets True
-    evaluate(employee, TEST_DATETIME)
-    assert employee.is_readable() is True
+    # Try to access daily schedule
+    with pytest.raises(IllegalReadException):
+        employee.get_daily_schedule()
+    # Try to access daily balance
+    with pytest.raises(IllegalReadException):
+        employee.get_daily_balance()
 
-def test_initial_state(default_time_tracker_provider):
+def test_evaluation(default_time_tracker_provider):
     """
-    Check that the opened employee is not clocked in and hasn't worked today or this month.
+    Evaluate the employee's time tracker and check initial state.
     """
     # Unpack the provider
     employee, evaluate = default_time_tracker_provider
 
+    # Always accessible
     assert employee.is_clocked_in_today() is False # Not clocked in
     assert not employee.get_clock_events_today() # No event today
 
     # Evaluation is required before accessing employee's evaluated data
+    assert employee.is_readable() is False
     evaluate(employee, TEST_DATETIME)
+    assert employee.is_readable() is True
 
-    assert employee.get_worked_time_today() == dt.timedelta(hours=0, minutes=0, seconds=0) # No work today
-    assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0) # No work this month
+    # Check initial state
+    # Check daily schedule 
+    assert employee.get_daily_schedule() == TEST_DAILY_SCHEDULE
+    # No work today
+    assert employee.get_daily_worked_time().total_seconds() == 0
+    # Should work for the daily schedule
+    assert employee.get_daily_balance() == -TEST_DAILY_SCHEDULE
+    # No work this month, complete month until the date is due
+    assert employee.get_monthly_balance() == -TEST_MONTHLY_BALANCE_NO_WORK
 
 def test_clock_in(default_time_tracker_provider):
     """
@@ -227,12 +247,18 @@ def test_clock_in(default_time_tracker_provider):
     evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_in_time))
 
     # No worked time, the employee has just clocked in
-    assert employee.get_worked_time_today() == dt.timedelta(hours=0, minutes=0, seconds=0)
-    # No work this month
-    assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0) 
-    # Check worked time from 7h35 to 8h10 is 35 minutes
+    assert employee.get_daily_worked_time().total_seconds() == 0
+    assert employee.get_daily_balance() == -TEST_DAILY_SCHEDULE
+
+    # Evaluate at 8h10
     evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=8, minute=10)))
-    assert employee.get_worked_time_today() == dt.timedelta(minutes=35)
+
+    # Check worked time from 7h35 to 8h10 is 35 minutes
+    worked_time = dt.timedelta(minutes=35)
+    assert employee.get_daily_worked_time() == worked_time
+    # Daily balance has lost 35 minutes on the daily schedule, as well as monthly balance
+    assert employee.get_daily_balance() == (worked_time - employee.get_daily_schedule())
+    assert employee.get_monthly_balance() == (worked_time - TEST_MONTHLY_BALANCE_NO_WORK)
 
 def test_clock_out(default_time_tracker_provider):
     """
@@ -269,13 +295,15 @@ def test_clock_out(default_time_tracker_provider):
     # Evaluate at clock out time
     evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time))
 
-    # Monthly balance is updated the next day
-    assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0)
     # Clocked in at 7h35 and clocked out at 12h10 results in 4h35 of work 
-    assert employee.get_worked_time_today() == dt.timedelta(hours=4, minutes=35, seconds=0)
+    worked_time = dt.timedelta(hours=4, minutes=35, seconds=0)
+    assert employee.get_daily_worked_time() == worked_time
+    assert employee.get_daily_balance() == (worked_time - employee.get_daily_schedule())
+    assert employee.get_monthly_balance() == (worked_time - TEST_MONTHLY_BALANCE_NO_WORK)
+
     # Checking the worked time at 12h40 doesn't change the result since the employee is clocked out
     evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=12, minute=40)))
-    assert employee.get_worked_time_today() == dt.timedelta(hours=4, minutes=35, seconds=0)
+    assert employee.get_daily_worked_time() == worked_time
 
 def test_full_day(default_time_tracker_provider):
     """
@@ -329,10 +357,11 @@ def test_full_day(default_time_tracker_provider):
     # Evaluate at last clock out time
     evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time_2))
 
-    # Monthly balance is updated the next day
-    assert employee.get_monthly_balance() == dt.timedelta(hours=0, minutes=0, seconds=0)
     # The employee worked 7h45 today
-    assert employee.get_worked_time_today() == dt.timedelta(hours=7, minutes=45, seconds=0)
+    worked_time = dt.timedelta(hours=7, minutes=45, seconds=0)
+    assert employee.get_daily_worked_time() == worked_time
+    assert employee.get_daily_balance() == (worked_time - employee.get_daily_schedule())
+    assert employee.get_monthly_balance() == (worked_time - TEST_MONTHLY_BALANCE_NO_WORK)
 
 def test_wrong_clock_action(default_time_tracker_provider):
     """
@@ -430,23 +459,33 @@ def test_multiple_openings(time_tracker_provider):
     # Close
     employee.close()
 
-def test_monthly_balance(time_tracker_provider):
+def test_monthly_daily_balance(time_tracker_provider):
     """
-    Verify the monthly balance after a few days of work.
+    Verify the monthly and daily balance.
     """
     # Unpack the provider methods
     provider, evaluate = time_tracker_provider
 
-    # Get the first day of the test month
-    first_date = dt.date(year=TEST_DATE.year, month=TEST_DATE.month, day=2)
-    # Open a time tracker at first day of the month and evaluate it at this date at 8h00
-    employee = provider(TEST_EMPLOYEE_ID, first_date)
-    evaluate(employee, dt.datetime.combine(date=first_date, time=dt.time(hour=8)))
-    # Since no activity is logged for now, the balance is negative daily schedule
-    print(f"balance: {employee.get_monthly_balance()}") 
-    employee.close()
+    # Get first day of the month at 8h, it is a saturday
+    datetime = dt.datetime(year=TEST_DATE.year, month=TEST_DATE.month, day=1, hour=8)
+    # Open a time tracker at test date
+    employee = provider(TEST_EMPLOYEE_ID, datetime.date())
+    # Evaluate the time tracker at first day of the month, which is a weekend.
+    evaluate(employee, datetime)
+    # The monthly and daily balances shall be 0
+    employee.get_monthly_balance().total_seconds() == 0
+    employee.get_daily_balance().total_seconds() == 0
 
-    # NOTE: TODO This test must be completed once the spreadsheet behaviour has been clarified.
+    # Move to monday
+    datetime = dt.datetime(year=TEST_DATE.year, month=TEST_DATE.month, day=3, hour=8)
+    # Evaluate the time tracker
+    evaluate(employee, datetime)
+    # Since one working day is due, the monthly balance is the daily schedule, as well as teh daily balance
+    employee.get_monthly_balance() == -employee.get_daily_schedule()
+    employee.get_daily_balance() == -employee.get_daily_schedule()
+
+    # Close the time tracker
+    employee.close()
 
 #################################################
 # Spreadsheets Time tracker specific unit tests #
