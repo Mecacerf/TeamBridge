@@ -30,7 +30,7 @@ from qr_scanner import QRScanner
 ################################################
 
 @pytest.fixture(params=[
-    ("samples/qrscan-000.mp4", '000')
+    ("tests/assets/qrscan-000.mp4", '000')
 ])
 def open_virtual_device(request):
     """
