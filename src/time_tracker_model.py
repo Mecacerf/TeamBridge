@@ -4,8 +4,9 @@ File: time_tracker_model.py
 Author: Bastian Cerf
 Date: 02/03/2025
 Description: 
-    The model orchestrates the application work. It processes barcodes inputs and
-    reading / writing in employees database.
+    Gives an asynchronous way of manipulating employees time tracker through the
+    TimeTrackerModel object. Different tasks can be started and responses can
+    be listened by observing the message bus.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -15,21 +16,18 @@ Contact: info@mecacerf.ch
 from barcode_scanner import BarcodeScanner
 from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction
 from typing import Callable
-import time
 import datetime as dt
 from live_data import LiveData
 import logging
 import threading
-import queue
 from enum import Enum
+from concurrent.futures import ThreadPoolExecutor, Future
 
 # Get module logger
 LOGGER = logging.getLogger(__name__)
 
-# Timeout in seconds during which an already scanned code will be ignored
-TIMEOUT = 10
-# Token a code must start with in order to be valid. Example: teambridge@000, id='000'
-CODE_TOKEN = "teambridge@"
+# Maximal number of asynchronous tasks that can be handled simultaneously
+MAX_TASK_WORKERS = 4
 
 class ModelMessage:
     """
@@ -47,17 +45,20 @@ class EmployeeEvent(ModelMessage):
         """
         Create an employee event.
 
-        Parameters:
-            name: employee's name
-            firstname: employee's firstname
-            id: employee's id
-            clock_evt: related ClockEvent
+        Args:
+            name: `str` employee's name
+            firstname: `str` employee's firstname
+            id: `str` employee's id
+            clock_evt: `ClockEvent` related clock event
         """
         # Save event parameters
         self.name = name
         self.firstname = firstname
         self.id = id
         self.clock_evt = clock_evt
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}[name={self.name}, firstname={self.firstname}, id={self.id}, evt={self.clock_evt}]"
 
 class EmployeeData(ModelMessage):
     """
@@ -67,27 +68,35 @@ class EmployeeData(ModelMessage):
     def __init__(self, name: str, 
                  firstname: str, 
                  id: str, 
-                 worked_time: dt.timedelta, 
-                 scheduled_time: dt.timedelta, 
+                 daily_worked_time: dt.timedelta, 
+                 daily_balance: dt.timedelta,
+                 daily_scheduled_time: dt.timedelta, 
                  monthly_balance: dt.timedelta):
         """
         Create an employee's data container.
 
-        Parameters:
-            name: employee's name
-            firstname: employee's firstname
-            id: employee's id
-            worked_time: employee's worked time for current date
-            scheduled_time: employee's scheduled time
-            monthly_balance: employee's monthly balance
+        Args:
+            name: `str` employee's name
+            firstname: `str` employee's firstname
+            id: `str` employee's id
+            daily_worked_time: `timedelta` employee's daily worked time 
+            daily_balance: `timedelta` employee's daily balance
+            daily_scheduled_time: `timedelta` employee's daily scheduled time
+            monthly_balance: `timedelta` employee's monthly balance
         """
         # Save parameters
         self.name = name
         self.firstname = firstname
         self.id = id
-        self.worked_time = worked_time
-        self.scheduled_time = scheduled_time
+        self.daily_worked_time = daily_worked_time
+        self.daily_balance = daily_balance
+        self.daily_scheduled_time = daily_scheduled_time
         self.monthly_balance = monthly_balance
+
+    def __repr__(self):
+        return (f"{self.__class__.__name__}[name={self.name}, firstname={self.firstname}, id={self.id}, "
+        f"daily_worked_time={self.daily_worked_time}, daily_balance={self.daily_balance}, "
+        f"daily_scheduled_time={self.daily_scheduled_time}, monthly_balance={self.monthly_balance}]")
 
 class ModelError(ModelMessage):
     """
@@ -109,153 +118,129 @@ class ModelError(ModelMessage):
         """
         Create a model error container.
 
-        Parameters:
-            type: error type
-            msg: optional error message
+        Args:
+            type: `ErrorType` error type
+            msg: `str` optional error message
         """
         self.type = type
         self.message = msg
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}[type={self.type}, message={self.message}]"
+
 class TimeTrackerModel:
     """
-    This class is intended to hold the application backend logic: 
-    - Create and poll the QR scanner
-    - Acquire and use the time tracker interface to read/write the employees data
+    The model starts asynchronous tasks and sends responses through the message bus.
     """
 
-    def __init__(self, time_tracker_provider: Callable[[dt.date, str], ITodayTimeTracker], device_id=0, scan_rate=5, debug=False):
+    def __init__(self, time_tracker_provider: Callable[[dt.date, str], ITodayTimeTracker]):
         """
-        Build the application model.
+        Create a time tracker model able to handle asynchronous tasks.
 
-        Parameters:
-            time_tracker: generic access to employees data
-            device_id: webcam id used by the scanner, typically 0 if only one webcam is available
-            scan_rate: rate in [Hz] at which the scanner will analyze frames
-            debug: enable debug mode
+        Args:
+            time_tracker_provider: `Callable[[dt.date, str], ITodayTimeTracker]` the time tracker provider
+                as a callable object
         """
-        # Save the time tracker provider
-        self._time_tracker_provider = time_tracker_provider
-        # Create the QR scanner and open it
-        self._scanner = BarcodeScanner(debug_mode=debug)
-        self._scanner.open(cam_idx=device_id, scan_rate=scan_rate)
-        # Create the waiting dictionary 
-        self._waiting_codes = {}
-        # Create the messages bus
-        self._message_bus = LiveData[ModelMessage](None, bus_mode=True)
+        # Save the provider method and create a lock for concurrent access
+        self._provider = time_tracker_provider
+        self._lock = threading.Lock()
+        # Create the threads pool
+        self._pool = ThreadPoolExecutor(max_workers=MAX_TASK_WORKERS, thread_name_prefix="Task-")
+        # Create the list of future objects
+        self._pending_tasks: list[Future] = []
+        # Create the messages bus used to send responses
+        self._bus = LiveData[ModelMessage](None, bus_mode=True)
 
+    def start_clock_action_task(self, id: str, datetime: dt.datetime, action: ClockAction=None) -> None:
+        """
+        Start a clock action task for the employee with given identifier.
+        It will post an EmployeeEvent on success and a ModelError on failure.  
+        The action (clock in or out) can be specified or left None. In this case, 
+        the task automatically clocks in an employee who's clocked out and clocks
+        out an employee who's clocked in at given datetime.
 
+        Args:
+            id: `str` employee's identifier
+            datetime: `datetime` time and date for the clock action
+            action: `action` clock action to register or None to leave the task choose
+        """
+        # Submit the task to the executor and save the future object
+        self._pending_tasks.append(self._pool.submit(self.__clock_action_task, id, datetime, action))
+
+    def start_consultation_task(self, id: str, datetime: dt.datetime) -> None:
+        """
+        Start a consultation task for the employee with given identifier at given date.
+        It will post an EmployeeData on success and a ModelError on failure.
+
+        Args:
+            id: `str` employee's identifier
+            datetime: `datetime` consultation date
+        """
+        # Submit the task to the executor and save the future object
+        self._pending_tasks.append(self._pool.submit(self.__consultation_task, id, datetime))
 
     def run(self):
         """
-        Model loop. Read the scanner and perform associated actions.
+        The run method must be called regularly to poll the tasks list and post 
+        pending messages on the bus.
         """
+        # Iterate the future objects and check if a task is completed
+        for future in self._pending_tasks:
+            if future.done():
+                try:
+                    # Try to read the task result
+                    message = future.result()
+                    # The message cannot be None
+                    if message is None:
+                        raise RuntimeError("The task didn't return a message.")
+                    # Send the result on the messages bus
+                    self._bus.set_value(message)
+                except:
+                    LOGGER.error("An asynchronous task didn't finished properly.", exc_info=True)
+        # Flush finished tasks from the list
+        self._pending_tasks = [future for future in self._pending_tasks if not future.done()]
 
-        # Read pending codes if not already processing
-        while self._working.is_set() and self._scanner.available():
-            # Get the code as a string
-            code = self._scanner.read_next()
-            # Ensure that the code starts with the token
-            if not code.startswith(CODE_TOKEN):
-                # Ignore wrong code
-                LOGGER.debug(f"Ignored wrong scanned code '{code}'")
-                continue
-            # Check if the code is present in the waiting codes
-            if code in self._waiting_codes:
-                # Calculate delta time between first scan and now
-                delta = time.time() - self._waiting_codes[code]
-                # Check if the timeout is still pending
-                if delta < TIMEOUT:
-                    # Ignore the code
-                    continue
-                # Otherwise remove the code from the waiting list and process it
-                self._waiting_codes.pop(code)
-            # Process the code
-            self.__start_code_processing(code)
-
-        # Clear loading state when processing finishes
-        if not self._processing.is_set() and self._loading_sig.get_value():
-            self._loading_sig.set_value(False)
-
-        # Publish pending employee's events 
-        if not self._event_queue.empty():
-            try:
-                # Notify of the new event on the bus
-                self._employee_events_bus.set_value(self._event_queue.get_nowait())
-            except queue.Empty:
-                pass
-
-        # Publish pending employee's info 
-        if not self._info_queue.empty():
-            try:
-                # Notify of the new event on the bus
-                self._employee_info_bus.set_value(self._info_queue.get_nowait())
-            except queue.Empty:
-                pass
-
-        # Publish pending error events
-        if not self._error_queue.empty():
-            try:
-                # Notify of the error on the bus
-                self._error_bus.set_value(self._error_queue.get_nowait())
-            except queue.Empty:
-                pass
-
-    def __start_code_processing(self, code: str):
+    def get_message_bus(self) -> LiveData[ModelMessage]:
         """
-        Prepare and start the processing thread.
-
-        Parameters:
-            code: scanned code
+        Returns:
+            LiveData[ModelMessage]: the message bus on which tasks results are posted
         """
-        # Put the code in the waiting list to prevent it to be processed multiple times
-        self._waiting_codes[code] = time.time()
-        # Get the employee's id from scanned code
-        id = code.removeprefix(CODE_TOKEN)
-        # Log processing will start
-        LOGGER.info(f"Start processing code '{code}', employee's id is '{id}'.")
+        return self._bus
 
-        # Set processing status and disable working status
-        self._working.clear()
-        self._processing.set()
-        self._loading_sig.set_value(True)
-
-        # Start the processing thread
-        executor = threading.Thread(target=self.__process_id, args=(id,), name=f"ID{id}-Executor")
-        executor.start()
-    
-    def __process_id(self, id: str):
+    def close(self) -> None:
         """
-        Process the employee's action.
-
-        Parameters:
-            id: employee's id
+        Close the model. Can take some time if tasks are currently running.
         """
-        # Get today date and time from system info
-        today = dt.datetime.now().date()
-        now = dt.datetime.now().time()
-        
-        # Next operations might fail, surround with a try except block to capture errors
+        # Shutdown the thread pool executor, wait for the running tasks to finish and
+        # cancel pending ones.
+        self._pool.shutdown(wait=True, cancel_futures=True)
+
+    def __clock_action_task(self, id: str, datetime: dt.datetime, action: ClockAction) -> ModelMessage:
+        """
+        Clock in/out the employee at given datetime.
+        """
+        # Employee and result message are initially None
         employee = None
+        message = None
         try:
-            # Open the employee time tracker 
-            employee = self._time_tracker_provider(today, id)
+            # Open the employee time tracker, acquire the lock since other tasks might be 
+            # using the provider concurrently.
+            with self._lock:
+                employee = self._provider(datetime.date(), id)
 
             # Get employee name and firstname
             name = employee.get_name()
             firstname = employee.get_firstname()
 
             # Log that time tracker is open
-            LOGGER.info(f"Opened time tracker for employee '{firstname} {name}' with id '{id}'. Initially readable: {employee.is_readable()}.")
+            LOGGER.info(f"Opened time tracker for employee '{firstname} {name}' with id '{id}'.")
 
-            # Check if the employee is clocked in to define next action
-            if employee.is_clocked_in_today():
-                # The employee is clocking out
-                action = ClockAction.CLOCK_OUT
-            else:
-                # The employee is clocking in
-                action = ClockAction.CLOCK_IN
+            # If no action is specified, clock out if clocked in and clock in if clocked out.
+            if action is None:
+                action = ClockAction.CLOCK_OUT if employee.is_clocked_in_today() else ClockAction.CLOCK_IN
+
             # Create and register the clock event
-            clock_evt = ClockEvent(time=now, action=action)
+            clock_evt = ClockEvent(time=datetime.time(), action=action)
             employee.register_clock(clock_evt)
             # Commit changes
             employee.commit()
@@ -265,39 +250,15 @@ class TimeTrackerModel:
             # Nullify to prevent closing it again
             employee = None
 
-            LOGGER.info(f"Clock action saved for employee ['{firstname} {name}' with id '{id}'].")
+            LOGGER.info(f"{action} saved for employee ['{firstname} {name}' with id '{id}'].")
 
             # Everything went fine
             # Create the employee event
-            event = EmployeeEvent(name=name, firstname=firstname, id=id, clock_evt=clock_evt)
-            # Put the event in the queue
-            self._event_queue.put(event)
+            message = EmployeeEvent(name=name, firstname=firstname, id=id, clock_evt=clock_evt)
 
-            # Start the inquiry process
-            # Open again for read
-            employee = self._time_tracker_provider(today, id)
-            # Evaluate to allow reading
-            if not employee.is_readable():
-                employee.evaluate()
-            # Read and fill an employee info container
-            worked_time = employee.get_daily_worked_time()
-            scheduled = employee.get_daily_schedule()
-            balance = employee.get_monthly_balance()
-            event = EmployeeData(name=name, firstname=firstname, id=id, 
-                                 worked_time=worked_time, scheduled_time=scheduled, monthly_balance=balance)
-            # Publish
-            self._info_queue.put(event)
-            # Close again and nullify
-            employee.close()
-            employee = None
-
-            LOGGER.info(f"Operation finished for employee ['{firstname} {name}' with id '{id}'].")
-
-        # Catch the exceptions that may occur during the process
+        # Catch the exceptions that may occur during the process and create the ModelError message
         except Exception as e:
-            # Notify that an exception occurred on the errors bus
-            self._error_queue.put(str(e))
-            # Log error
+            message = ModelError(type=ModelError.ErrorType.GENERIC_ERROR, msg=str(e))
             LOGGER.error(f"Error occurred operating time tracker of employee '{id}'.", exc_info=True)
         finally:
             # Always close the time tracker once operations are finished
@@ -307,31 +268,57 @@ class TimeTrackerModel:
             except:
                 LOGGER.error(f"Error occurred closing time tracker of employee '{id}'.", exc_info=True)
             
-            # Processing finished
-            self._processing.clear()
+        # Return the resulting message
+        return message
 
-    def resume(self):
+    def __consultation_task(self, id: str, datetime: dt.datetime) -> ModelMessage:
         """
-        Resume scanning operation. Must be called after an employee has been processed to continue
-        scanning next ids.
-        """
-        # Cannot resume while processing
-        if self._processing.is_set():
-            return
-        # Flush pending QR values that may have been scanned during the processing time and set the working status
-        self._scanner.clear()
-        self._working.set()
+        Consultation of employee's data.
+        """        
+        # Employee and result message are initially None
+        employee = None
+        message = None
+        try:
+            # Open the employee time tracker, acquire the lock since other tasks might be 
+            # using the provider concurrently.
+            with self._lock:
+                employee = self._provider(datetime.date(), id)
 
-    def get_message_bus(self) -> LiveData[ModelMessage]:
-        """
-        Returns:
-            LiveData[ModelMessage]: observable bus on which messages are published
-        """
-        return self._message_bus
-    
-    def close(self):
-        """
-        Terminate the model, release resources.
-        """
-        # Release the scanner
-        self._scanner.close()
+            # Get employee name and firstname
+            name = employee.get_name()
+            firstname = employee.get_firstname()
+
+            # Log that time tracker is open
+            LOGGER.info(f"Opened time tracker for employee '{firstname} {name}' with id '{id}'.")
+
+            # If the time tracker is not readable, evaluate it
+            if not employee.is_readable():
+                employee.evaluate()
+            
+            # Read methods are available, build an EmployeeData container
+            message = EmployeeData(
+                name=name, firstname=firstname, id=id,
+                daily_worked_time=employee.get_daily_worked_time(),
+                daily_balance=employee.get_daily_balance(),
+                daily_scheduled_time=employee.get_daily_schedule(),
+                monthly_balance=employee.get_monthly_balance()
+            )
+
+            # Close and nullify the time tracker
+            employee.close()
+            employee = None
+
+        # Catch the exceptions that may occur during the process and create the ModelError message
+        except Exception as e:
+            message = ModelError(type=ModelError.ErrorType.GENERIC_ERROR, msg=str(e))
+            LOGGER.error(f"Error occurred operating time tracker of employee '{id}'.", exc_info=True)
+        finally:
+            # Always close the time tracker once operations are finished
+            try:
+                if employee:
+                    employee.close()
+            except:
+                LOGGER.error(f"Error occurred closing time tracker of employee '{id}'.", exc_info=True)
+            
+        # Return the resulting message
+        return message
