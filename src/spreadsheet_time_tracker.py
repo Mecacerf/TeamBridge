@@ -118,20 +118,23 @@ CELL_DATE = 'A8'
 CELL_HOUR = 'A9'
 
 ## Month sheets
+## Following cells of the init sheet contain the locations in the month's
+## sheets to find the information. That allows to dynamcally change these
+## locations by file and account for different spreadsheet versions.
 # Cell containing the monthly balance (total of daily balances)
-CELL_MONTHLY_BALANCE = 'D8'
+LOCATION_MONTHLY_BALANCE = 'A11'
 # Cell containing the first day of the month
-CELL_FIRST_MONTH_DATE = 'B9'
+LOCATION_FIRST_MONTH_DATE = 'A12'
 # Cell containing the daily schedule for the first day of the month
-CELL_DAILY_SCHEDULE = 'C9'
+LOCATION_DAILY_SCHEDULE = 'A13'
 # Cell containing the daily balance for the first day of the month
-CELL_DAILY_BALANCE = 'D9'
+LOCATION_DAILY_BALANCE = 'A14'
 # Cell containing the worked time for the first day of the month
-CELL_WORKED_TIME = 'E9'
+LOCATION_WORKED_TIME = 'A15'
 # Column containing the first clock in action of the day
-COL_FIRST_CLOCK_IN = 'G'
+LOCATION_COL_FIRST_CLOCK_IN = 'A16'
 # Column containing the last clock out action of the day
-COL_LAST_CLOCK_OUT = 'R'
+LOCATION_COL_LAST_CLOCK_OUT = 'A17'
 
 ################################################
 #              General constants               #
@@ -214,7 +217,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
             int: the row containing the information related to current date
         """
         # Get coordinates of the first day of the month
-        row, _ = openpyxl.utils.coordinate_to_tuple(CELL_FIRST_MONTH_DATE)
+        row, _ = openpyxl.utils.coordinate_to_tuple(self._cell_first_month_date)
         # Find the row corresponding to current date
         return (row + self._date.day - 1)
 
@@ -223,7 +226,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Check if the given cell contains a clock in or a clock out action, based on its column index.
         """
         # Get first clock in column
-        _, clock_in_col = openpyxl.utils.coordinate_to_tuple(f"{COL_FIRST_CLOCK_IN}1")
+        _, clock_in_col = openpyxl.utils.coordinate_to_tuple(f"{self._col_first_clock_in}1")
         # Get difference between first clock in column and given cell column
         delta_actions = cell.column - clock_in_col
         # Sanity check
@@ -252,7 +255,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Create current date events list
         clock_events = []
         # Get clock actions boundaries
-        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{COL_FIRST_CLOCK_IN}1:{COL_LAST_CLOCK_OUT}1")
+        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{self._col_first_clock_in}1:{self._col_last_clock_out}1")
         # Iterate in clock actions row for current date
         for column in month_sheet.iter_cols(min_row=date_row, max_row=date_row, min_col=min_col, max_col=max_col):
             # Get cell value
@@ -317,7 +320,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             timedelta: daily schedule
         """
-        return self.__get_daily_info(CELL_DAILY_SCHEDULE)
+        return self.__get_daily_info(self._cell_daily_schedule)
     
     def get_daily_balance(self) -> dt.timedelta:
         """
@@ -329,7 +332,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             timedelta: daily balance
         """
-        return self.__get_daily_info(CELL_DAILY_BALANCE)
+        return self.__get_daily_info(self._cell_daily_balance)
 
     def get_daily_worked_time(self) -> dt.timedelta:
         """
@@ -341,7 +344,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         Returns:
             timedelta: delta time object
         """
-        return self.__get_daily_info(CELL_WORKED_TIME)
+        return self.__get_daily_info(self._cell_worked_time)
     
     def get_monthly_balance(self) -> dt.timedelta:
         """
@@ -357,7 +360,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Get evaluated month's sheet 
         month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Get monthly balance value as a timedelta
-        timedelta = month_sheet[CELL_MONTHLY_BALANCE].value
+        timedelta = month_sheet[self._cell_monthly_balance].value
         # It might happen that the object is a dt.time
         if isinstance(timedelta, dt.time):
             timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
@@ -382,7 +385,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Set written flag
         written = False
         # Get clock actions boundaries
-        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{COL_FIRST_CLOCK_IN}1:{COL_LAST_CLOCK_OUT}1")
+        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{self._col_first_clock_in}1:{self._col_last_clock_out}1")
         # Previous clock action time, used to verify that clock event times are ascending
         prev_clock_time = None
         # Iterate in clock actions row for current date
@@ -491,6 +494,19 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # non formula cell values.
         self._workbook_raw = openpyxl.load_workbook(self._file_path, data_only=False)
 
+        # Get the init sheet
+        init_sheet = self._workbook_raw.worksheets[SHEET_INIT]
+        # The init sheet contains the locations of different data in the month's sheets, which
+        # allows to dynamically configure data locations and account for different sheets 
+        # versions. Read these locations.
+        self._cell_monthly_balance = init_sheet[LOCATION_MONTHLY_BALANCE].value
+        self._cell_first_month_date = init_sheet[LOCATION_FIRST_MONTH_DATE].value
+        self._cell_daily_schedule = init_sheet[LOCATION_DAILY_SCHEDULE].value
+        self._cell_daily_balance = init_sheet[LOCATION_DAILY_BALANCE].value
+        self._cell_worked_time = init_sheet[LOCATION_WORKED_TIME].value
+        self._col_first_clock_in = init_sheet[LOCATION_COL_FIRST_CLOCK_IN].value
+        self._col_last_clock_out = init_sheet[LOCATION_COL_LAST_CLOCK_OUT].value
+
         # Open the employee's workbook in data only mode to access evaluated values.
         # If the workbook hasn't been evaluated before, formula cells will contain the
         # value 'None', which will be used to update the reading flag.
@@ -499,10 +515,10 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         # Check if the workbook is evaluated by checking a formula cell value
         month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Check the first month's day cell arbitrarily
-        self._readable = month_sheet[CELL_FIRST_MONTH_DATE].value is not None
-        # If not reable, nullify the workbook to prevent unintended access
+        self._readable = month_sheet[self._cell_first_month_date].value is not None
+        # If not readable, nullify the workbook to prevent unintended access
         if not self._readable:
-            self._workbook_eval = None 
+            self._workbook_eval = None
         # Log activity
         LOGGER.debug(f"[Employee '{self._employee_id}'] (Re)loaded workbook '{self._file_path}', readable={self._readable}.")
 
