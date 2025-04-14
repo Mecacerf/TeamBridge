@@ -14,7 +14,7 @@ Contact: info@mecacerf.ch
 import sys
 import logging
 from logging.handlers import TimedRotatingFileHandler
-from time_tracker_model import TimeTrackerModel
+from time_tracker_model import TeamBridgeModel
 from time_tracker_viewmodel import TimeTrackerViewModel
 from spreadsheet_time_tracker import SpreadsheetTimeTracker
 from time_tracker_view import TimeTrackerView
@@ -66,7 +66,7 @@ def main() -> int:
     # Create the application model using a SpreadsheetTimeTracker
     repository = SpreadsheetsRepository(args.repository)
     time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date)
-    model = TimeTrackerModel(time_tracker_provider=time_tracker_provider, debug=args.debug, scan_rate=args.scan_rate, device_id=args.camera_id)
+    model = TeamBridgeModel(time_tracker_provider=time_tracker_provider, debug=args.debug, scan_rate=args.scan_rate, device_id=args.camera_id)
     viewmodel = TimeTrackerViewModel(model)
 
     # Log some state changes

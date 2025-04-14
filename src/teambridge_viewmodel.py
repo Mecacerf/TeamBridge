@@ -15,29 +15,35 @@ Contact: info@mecacerf.ch
     
 from enum import Enum
 from live_data import LiveData
-from time_tracker_model import TimeTrackerModel, EmployeeEvent, EmployeeData
+from time_tracker_model import TeamBridgeModel, EmployeeEvent, EmployeeData
 from time_tracker_interface import ClockAction
 import datetime as dt
 
-class ScannerViewModelState(Enum):
+class ViewModelState(Enum):
     """
-    Enumeration of the view model states.
+    Enumeration of main viewmodel states.
     """
-    # Waiting for a QR scan
+    # Waiting for a scan
     SCANNING = 0,
-    # Loading an employee's data
-    LOADING = 1,
-    # Successfully done the action
-    SUCCESS = 2,
-    # Failed to do the action
-    ERROR = 3
+    # Clocking in/out an employee 
+    LOADING_CLOCK_ACTION = 1,
+    # Loading employee's information
+    LOADING_EMPLOYEE_INFO = 2,
+    # Showing information
+    SHOWING_INFO = 3,
+    # Failed to do an action
+    FAILURE = 4
 
-class TimeTrackerViewModel:
+class TeamBridgeViewModel:
+    """
+    """
+
+class TimeTrackerViewModelOld:
     """
     Contains the business logic behind the view.
     """
 
-    def __init__(self, model: TimeTrackerModel):
+    def __init__(self, model: TeamBridgeModel):
         """
         Create the view model.
 

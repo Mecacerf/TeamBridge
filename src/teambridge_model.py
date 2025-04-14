@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-File: time_tracker_model.py
+File: teambridge_model.py
 Author: Bastian Cerf
 Date: 02/03/2025
 Description: 
@@ -13,7 +13,6 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-from barcode_scanner import BarcodeScanner
 from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction
 from typing import Callable
 import datetime as dt
@@ -128,7 +127,7 @@ class ModelError(ModelMessage):
     def __repr__(self):
         return f"{self.__class__.__name__}[type={self.type}, message={self.message}]"
 
-class TimeTrackerModel:
+class TeamBridgeModel:
     """
     The model starts asynchronous tasks and sends responses through the message bus.
     """
