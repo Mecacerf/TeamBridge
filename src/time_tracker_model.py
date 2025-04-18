@@ -92,8 +92,8 @@ class TimeTrackerModel:
         # Save the time tracker provider
         self._time_tracker_provider = time_tracker_provider
         # Create the QR scanner and open it
-        self._scanner = BarcodeScanner()
-        self._scanner.open(cam_idx=device_id, scan_rate=scan_rate, debug_window=debug)
+        self._scanner = BarcodeScanner(debug_mode=debug)
+        self._scanner.open(cam_idx=device_id, scan_rate=scan_rate)
         # Create the waiting dictionary 
         self._waiting_codes = {}
         # Create the employees events bus
