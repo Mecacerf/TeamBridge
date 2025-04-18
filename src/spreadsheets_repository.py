@@ -4,7 +4,7 @@ File: spreadsheets_repository.py
 Author: Bastian Cerf
 Date: 19/03/2025
 Description: 
-    Manage access to spreadsheet files storage.    
+    Manage access to spreadsheet files repository.    
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -49,6 +49,11 @@ class SpreadsheetsRepository:
 
     def __init__(self, repository_path: str, local_cache: str=None):
         """
+        Create a repository accesser.
+
+        Parameters:
+            repository_path: path to files folder
+            local_cache: local folder to cache opened files
         """
         # Create the lock object that will prevent multiple simultaneous file accesses
         self._lock = threading.Lock()

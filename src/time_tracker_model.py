@@ -12,7 +12,7 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-from qr_scanner import QRScanner
+from barcode_scanner import BarcodeScanner
 from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction
 from typing import Callable
 import time
@@ -92,8 +92,8 @@ class TimeTrackerModel:
         # Save the time tracker provider
         self._time_tracker_provider = time_tracker_provider
         # Create the QR scanner and open it
-        self._scanner = QRScanner()
-        self._scanner.open(cam_idx=device_id, scan_rate=scan_rate, debug_window=debug)
+        self._scanner = BarcodeScanner(debug_mode=debug)
+        self._scanner.open(cam_idx=device_id, scan_rate=scan_rate)
         # Create the waiting dictionary 
         self._waiting_codes = {}
         # Create the employees events bus
@@ -128,7 +128,7 @@ class TimeTrackerModel:
         # Read pending codes if not already processing
         while self._working.is_set() and self._scanner.available():
             # Get the code as a string
-            code = self._scanner.get_next()
+            code = self._scanner.read_next()
             # Ensure that the code starts with the token
             if not code.startswith(CODE_TOKEN):
                 # Ignore wrong code
@@ -294,7 +294,7 @@ class TimeTrackerModel:
         if self._processing.is_set():
             return
         # Flush pending QR values that may have been scanned during the processing time and set the working status
-        self._scanner.flush()
+        self._scanner.clear()
         self._working.set()
 
     def get_employee_events_bus(self) -> LiveData[EmployeeEvent]:
