@@ -21,6 +21,8 @@ import logging
 import threading
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor, Future
+from abc import ABC
+from dataclasses import dataclass
 
 # Get module logger
 LOGGER = logging.getLogger(__name__)
@@ -28,113 +30,82 @@ LOGGER = logging.getLogger(__name__)
 # Maximal number of asynchronous tasks that can be handled simultaneously
 MAX_TASK_WORKERS = 4
 
-class ModelMessage:
+@dataclass(frozen=True)
+class IModelMessage(ABC):
     """
     A generic asynchronous message sent by the model to upper layers.
     """
-    def __init__(self):
-        pass
+    pass
 
-class EmployeeEvent(ModelMessage):
+@dataclass(frozen=True)
+class IEmployeeMessage(IModelMessage, ABC):
     """
-    Describes an event related to an employee.
+    Base container for employee's message.
+
+    Attributes:
+        name: `str` employee's name
+        firstname: `str` employee's firstname
+        id: `str` employee's id
     """
+    name: str
+    firstname: str
+    id: str
 
-    def __init__(self, name: str, firstname: str, id: str, clock_evt: ClockEvent):
-        """
-        Create an employee event.
+@dataclass(frozen=True)
+class EmployeeEvent(IEmployeeMessage):
+    """
+    Describes a clock event for an employee.
 
-        Args:
-            name: `str` employee's name
-            firstname: `str` employee's firstname
-            id: `str` employee's id
-            clock_evt: `ClockEvent` related clock event
-        """
-        # Save event parameters
-        self.name = name
-        self.firstname = firstname
-        self.id = id
-        self.clock_evt = clock_evt
+    Attributes:
+        name: `str` employee's name
+        firstname: `str` employee's firstname
+        id: `str` employee's id
+        clock_evt: `ClockEvent` related clock event
+    """
+    clock_evt: ClockEvent
 
-    def __repr__(self):
-        return f"{self.__class__.__name__}[name={self.name}, firstname={self.firstname}, id={self.id}, evt={self.clock_evt}]"
-
-class EmployeeData(ModelMessage):
+@dataclass(frozen=True)
+class EmployeeData(IEmployeeMessage):
     """
     Container of different information about an employee.
+
+    Attributes:
+        name: `str` employee's name
+        firstname: `str` employee's firstname
+        id: `str` employee's id
+        daily_worked_time: `timedelta` employee's daily worked time 
+        daily_balance: `timedelta` employee's daily balance
+        daily_scheduled_time: `timedelta` employee's daily scheduled time
+        monthly_balance: `timedelta` employee's monthly balance
     """
+    daily_worked_time: dt.timedelta
+    daily_balance: dt.timedelta
+    daily_scheduled_time: dt.timedelta
+    monthly_balance: dt.timedelta
 
-    def __init__(self, name: str, 
-                 firstname: str, 
-                 id: str, 
-                 daily_worked_time: dt.timedelta, 
-                 daily_balance: dt.timedelta,
-                 daily_scheduled_time: dt.timedelta, 
-                 monthly_balance: dt.timedelta):
-        """
-        Create an employee's data container.
-
-        Args:
-            name: `str` employee's name
-            firstname: `str` employee's firstname
-            id: `str` employee's id
-            daily_worked_time: `timedelta` employee's daily worked time 
-            daily_balance: `timedelta` employee's daily balance
-            daily_scheduled_time: `timedelta` employee's daily scheduled time
-            monthly_balance: `timedelta` employee's monthly balance
-        """
-        # Save parameters
-        self.name = name
-        self.firstname = firstname
-        self.id = id
-        self.daily_worked_time = daily_worked_time
-        self.daily_balance = daily_balance
-        self.daily_scheduled_time = daily_scheduled_time
-        self.monthly_balance = monthly_balance
-
-    def __repr__(self):
-        return (f"{self.__class__.__name__}[name={self.name}, firstname={self.firstname}, id={self.id}, "
-        f"daily_worked_time={self.daily_worked_time}, daily_balance={self.daily_balance}, "
-        f"daily_scheduled_time={self.daily_scheduled_time}, monthly_balance={self.monthly_balance}]")
-
-class ModelError(ModelMessage):
+@dataclass(frozen=True)
+class ModelError(IModelMessage):
     """
     Error message container.
+
+    Attributes:
+        error_code: error code
+        message: error description message
     """
-
-    class ErrorType(Enum):
-        """
-        Error types enumeration.
-        """
-        # Generic error, refer to the message
-        GENERIC_ERROR = 0
-        # The scanning device (likely a webcam) ran into error
-        SCANNING_DEVICE_ERROR = 1
-        # The employee wasn't found in the database
-        EMPLOYEE_NOT_FOUND = 2
-
-    def __init__(self, type: ErrorType, msg: str=None):
-        """
-        Create a model error container.
-
-        Args:
-            type: `ErrorType` error type
-            msg: `str` optional error message
-        """
-        self.type = type
-        self.message = msg
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}[type={self.type}, message={self.message}]"
+    error_code: int
+    message: str
 
 class TeamBridgeModel:
     """
-    The model starts asynchronous tasks and sends responses through the message bus.
+    The model holds a thread pool executor and can be used to perform various I/O bound tasks, such as 
+    clocking in/out an employee, performing a balance query, and so on. The model can be polled to retrieve 
+    task results via the defined message containers.
+    Note that this class is not thread safe, meaning that a single thread shall post tasks and read results.
     """
 
     def __init__(self, time_tracker_provider: Callable[[dt.date, str], ITodayTimeTracker]):
         """
-        Create a time tracker model able to handle asynchronous tasks.
+        Create the model.
 
         Args:
             time_tracker_provider: `Callable[[dt.date, str], ITodayTimeTracker]` the time tracker provider
@@ -145,12 +116,12 @@ class TeamBridgeModel:
         self._lock = threading.Lock()
         # Create the threads pool
         self._pool = ThreadPoolExecutor(max_workers=MAX_TASK_WORKERS, thread_name_prefix="Task-")
-        # Create the list of future objects
-        self._pending_tasks: list[Future] = []
-        # Create the messages bus used to send responses
-        self._bus = LiveData[ModelMessage](None, bus_mode=True)
+        # Create the tasks dictionary
+        self._pending_tasks: dict[int, Future] = {}
+        # Task handle counter
+        self._task_handle = -1
 
-    def start_clock_action_task(self, id: str, datetime: dt.datetime, action: ClockAction=None) -> None:
+    def start_clock_action_task(self, id: str, datetime: dt.datetime, action: ClockAction=None) -> int:
         """
         Start a clock action task for the employee with given identifier.
         It will post an EmployeeEvent on success and a ModelError on failure.  
@@ -162,11 +133,17 @@ class TeamBridgeModel:
             id: `str` employee's identifier
             datetime: `datetime` time and date for the clock action
             action: `action` clock action to register or None to leave the task choose
+        Returns:
+            int: task handle
         """
+        # Increment tasks counter
+        self._task_handle += 1
         # Submit the task to the executor and save the future object
-        self._pending_tasks.append(self._pool.submit(self.__clock_action_task, id, datetime, action))
+        self._pending_tasks[self._task_handle] = self._pool.submit(self.__clock_action_task, id, datetime, action)
+        # Return the task handle
+        return self._task_handle
 
-    def start_consultation_task(self, id: str, datetime: dt.datetime) -> None:
+    def start_consultation_task(self, id: str, datetime: dt.datetime) -> int:
         """
         Start a consultation task for the employee with given identifier at given date.
         It will post an EmployeeData on success and a ModelError on failure.
@@ -174,37 +151,53 @@ class TeamBridgeModel:
         Args:
             id: `str` employee's identifier
             datetime: `datetime` consultation date
-        """
-        # Submit the task to the executor and save the future object
-        self._pending_tasks.append(self._pool.submit(self.__consultation_task, id, datetime))
-
-    def run(self):
-        """
-        The run method must be called regularly to poll the tasks list and post 
-        pending messages on the bus.
-        """
-        # Iterate the future objects and check if a task is completed
-        for future in self._pending_tasks:
-            if future.done():
-                try:
-                    # Try to read the task result
-                    message = future.result()
-                    # The message cannot be None
-                    if message is None:
-                        raise RuntimeError("The task didn't return a message.")
-                    # Send the result on the messages bus
-                    self._bus.set_value(message)
-                except:
-                    LOGGER.error("An asynchronous task didn't finished properly.", exc_info=True)
-        # Flush finished tasks from the list
-        self._pending_tasks = [future for future in self._pending_tasks if not future.done()]
-
-    def get_message_bus(self) -> LiveData[ModelMessage]:
-        """
         Returns:
-            LiveData[ModelMessage]: the message bus on which tasks results are posted
+            int: task handle
         """
-        return self._bus
+        # Increment tasks counter
+        self._task_handle += 1
+        # Submit the task to the executor and save the future object
+        self._pending_tasks[self._task_handle] = self._pool.submit(self.__consultation_task, id, datetime)
+        # Return the task handle
+        return self._task_handle
+
+    def available(self, handle: int) -> bool:
+        """
+        Check if the task identified by given handle has finished.
+
+        Returns:
+            bool: True if the task result is available 
+        """
+        return (handle in self._pending_tasks and self._pending_tasks[handle].done())
+
+    def get_result(self, handle: int) -> IModelMessage:
+        """
+        Get task result. 
+
+        Args:
+            handle: `int` task handle
+        Returns:
+            IModelMessage: task result or None if unavailable
+        """
+        # Check that the task is available
+        if not self.available(handle):
+            return None
+        
+        # Pop the future object from the dictionary
+        future = self._pending_tasks.pop(handle)
+        
+        try:
+            # Try to read the task result
+            message = future.result()
+            # A task must return a valid message
+            if message is None:
+                raise RuntimeError("The task didn't return a message.")
+            # Return the task message
+            return message
+        except:
+            # Log the error and return None 
+            LOGGER.error("An asynchronous task didn't finished properly.", exc_info=True)
+            return None
 
     def close(self) -> None:
         """
@@ -214,7 +207,9 @@ class TeamBridgeModel:
         # cancel pending ones.
         self._pool.shutdown(wait=True, cancel_futures=True)
 
-    def __clock_action_task(self, id: str, datetime: dt.datetime, action: ClockAction) -> ModelMessage:
+    def __clock_action_task(self, id: str, 
+                            datetime: dt.datetime, 
+                            action: ClockAction) -> IModelMessage:
         """
         Clock in/out the employee at given datetime.
         """
@@ -253,11 +248,14 @@ class TeamBridgeModel:
 
             # Everything went fine
             # Create the employee event
-            message = EmployeeEvent(name=name, firstname=firstname, id=id, clock_evt=clock_evt)
+            message = EmployeeEvent(name=name, 
+                                    firstname=firstname, 
+                                    id=id, 
+                                    clock_evt=clock_evt)
 
         # Catch the exceptions that may occur during the process and create the ModelError message
         except Exception as e:
-            message = ModelError(type=ModelError.ErrorType.GENERIC_ERROR, msg=str(e))
+            message = ModelError(error_code=0, message=str(e))
             LOGGER.error(f"Error occurred operating time tracker of employee '{id}'.", exc_info=True)
         finally:
             # Always close the time tracker once operations are finished
@@ -270,9 +268,9 @@ class TeamBridgeModel:
         # Return the resulting message
         return message
 
-    def __consultation_task(self, id: str, datetime: dt.datetime) -> ModelMessage:
+    def __consultation_task(self, id: str, datetime: dt.datetime) -> IModelMessage:
         """
-        Consultation of employee's data.
+        Consultation of employee's information.
         """        
         # Employee and result message are initially None
         employee = None
@@ -309,7 +307,7 @@ class TeamBridgeModel:
 
         # Catch the exceptions that may occur during the process and create the ModelError message
         except Exception as e:
-            message = ModelError(type=ModelError.ErrorType.GENERIC_ERROR, msg=str(e))
+            message = ModelError(error_code=0, message=str(e))
             LOGGER.error(f"Error occurred operating time tracker of employee '{id}'.", exc_info=True)
         finally:
             # Always close the time tracker once operations are finished

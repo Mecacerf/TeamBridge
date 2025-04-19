@@ -14,11 +14,7 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-import pytest
 from teambridge_model import *
-from spreadsheets_repository import SpreadsheetsRepository
-from spreadsheet_time_tracker import SpreadsheetTimeTracker
-from typing import Generator
 import time
 import logging
 
@@ -42,26 +38,24 @@ TEST_DATE = dt.date(year=2025, month=3, day=10) # 10 March 2025 is a monday
 def test_clock_action(teambridge_model):
     """
     """
-    # Subscribe to the message bus and put the messages in a queue
-    messages: list[ModelMessage] = []
-    teambridge_model.get_message_bus().observe(lambda msg: messages.append(msg))
-    teambridge_model.get_message_bus().observe(lambda msg: LOGGER.info(f"Received message from model: {msg}"))
     # Wait for the task to finish
-    def wait_result() -> ModelMessage:
-        # Run the model until a message is posted or timed out
+    def wait_result(handle: int) -> IModelMessage:
+        # Poll the model until a message is posted or timed out
         timeout = time.time() + 10.0
-        while len(messages) == 0:
-            teambridge_model.run()
+        while not teambridge_model.available(handle):
+            assert teambridge_model.get_result(handle) is None
             assert time.time() < timeout
             time.sleep(0.1)
-        # Return the posted message
-        return messages.pop()
+        # Return the task message
+        message = teambridge_model.get_result(handle)
+        LOGGER.info(f"Got model message: {message}")
+        return message
     
     # Register a clock in at 8h12
-    teambridge_model.start_clock_action_task(TEST_EMPLOYEE_ID, 
-                                               dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=8, minute=12)))
+    handle = teambridge_model.start_clock_action_task(TEST_EMPLOYEE_ID, 
+                                                       dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=8, minute=12)))
     # Wait until the task finishes
-    msg = wait_result()
+    msg = wait_result(handle)
     # Assert expected message
     assert isinstance(msg, EmployeeEvent)
     assert msg.id == TEST_EMPLOYEE_ID
@@ -69,10 +63,10 @@ def test_clock_action(teambridge_model):
     assert msg.clock_evt.action == ClockAction.CLOCK_IN
 
     # Register a clock out at 10h12
-    teambridge_model.start_clock_action_task(TEST_EMPLOYEE_ID, 
-                                               dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=10, minute=12)))
+    handle = teambridge_model.start_clock_action_task(TEST_EMPLOYEE_ID, 
+                                                       dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=10, minute=12)))
     # Wait until the task finishes
-    msg = wait_result()
+    msg = wait_result(handle)
     # Assert expected message
     assert isinstance(msg, EmployeeEvent)
     assert msg.id == TEST_EMPLOYEE_ID
@@ -80,10 +74,10 @@ def test_clock_action(teambridge_model):
     assert msg.clock_evt.action == ClockAction.CLOCK_OUT
 
     # Consultation of employee's data
-    teambridge_model.start_consultation_task(TEST_EMPLOYEE_ID, 
-                                               dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=10, minute=12)))
+    handle = teambridge_model.start_consultation_task(TEST_EMPLOYEE_ID, 
+                                                       dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=10, minute=12)))
     # Wait until the task finishes
-    msg = wait_result()
+    msg = wait_result(handle)
     # Assert expected message
     assert isinstance(msg, EmployeeData)
     assert msg.id == TEST_EMPLOYEE_ID

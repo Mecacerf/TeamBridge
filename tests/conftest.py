@@ -85,7 +85,7 @@ def arrange_spreadsheet_time_tracker():
 @pytest.fixture
 def teambridge_model(arrange_spreadsheet_time_tracker) -> Generator[TeamBridgeModel, None, None]:
     """
-    Create a configured time tracker model instance.
+    Create a configured teambridge model instance.
     """
     # Create the model using a SpreadsheetTimeTracker
     repository = SpreadsheetsRepository(SPREADSHEET_SAMPLES_TEST_FOLDER)
