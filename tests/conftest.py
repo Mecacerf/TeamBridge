@@ -24,6 +24,8 @@ from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, I
 from spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR, SHEET_INIT
 from spreadsheets_repository import SpreadsheetsRepository
 from teambridge_model import TeamBridgeModel
+from teambridge_viewmodel import TeamBridgeViewModel
+from barcode_scanner import BarcodeScanner
 
 ################################################
 #               Tests constants                #
@@ -94,3 +96,21 @@ def teambridge_model(arrange_spreadsheet_time_tracker) -> Generator[TeamBridgeMo
     # Yield and close automatically
     yield model
     model.close()
+
+@pytest.fixture
+def teambridge_viewmodel(teambridge_model)-> Generator[TeamBridgeViewModel, None, None]:
+    """
+    Create a configured teambridge viewmodel instance.
+    """
+    # Create a barcode scanner
+    scanner = BarcodeScanner()
+    # Create a viewmodel
+    viewmodel = TeamBridgeViewModel(teambridge_model, 
+                                    scanner=scanner, 
+                                    cam_idx=0,
+                                    scan_rate=10,
+                                    debug_mode=True)
+    # Yield and close automatically
+    # The scanner is also given in order to use monkeypatch to mock its functionalities
+    yield (viewmodel, scanner)
+    viewmodel.close()

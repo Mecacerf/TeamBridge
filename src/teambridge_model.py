@@ -198,6 +198,16 @@ class TeamBridgeModel:
             # Log the error and return None 
             LOGGER.error("An asynchronous task didn't finished properly.", exc_info=True)
             return None
+        
+    def drop(self, handle: int):
+        """
+        Drop a task. This can be used when the task owner is finally not interested in getting 
+        its result. The task is removed, and will never get available.
+        It is safe to call this method with a non available handle.
+        """
+        # Just remove from the dictionary
+        if handle in self._pending_tasks:
+            self._pending_tasks.pop(handle)
 
     def close(self) -> None:
         """
