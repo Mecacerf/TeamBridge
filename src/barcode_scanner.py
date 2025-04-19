@@ -33,9 +33,30 @@ class BarcodeScanner:
     specified rate. This process can be paused and resumed using provided methods. 
     """
 
-    def __init__(self, regex: str=None, extract_group=None, timeout: float=0.0, debug_mode: bool=False):
+    def __init__(self):
         """
-        Create a barcode scanner using provided configuration.
+        Create a barcode scanner.
+        """
+        # Define a unique session ID to identify different scanners
+        self._session_name = f"Session-{str(uuid.uuid1()).split('-')[0]}"
+
+        # Flag to control the scanning thread lifecycle
+        self._running = threading.Event()
+        # Flag to pause/resume (not finishing) the scanning thread
+        self._resume = threading.Event()
+        # Flag set by the scanning thread to know if it is running
+        self._scanning = threading.Event()
+        # Pending codes set. These codes are waiting to be read
+        self._pending_codes = set()
+        # Dictionary of codes that have been read and cannot be read again before a timeout has expired
+        self._cooldown_codes: dict[str, float] = {}
+        # Create a lock for concurrent access to above collections
+        self._lock = threading.Lock()
+
+
+    def configure(self, regex: str=None, extract_group=None, timeout: float=0.0, debug_mode: bool=False):
+        """
+        Configure the barcode scanner.
 
         The debug mode can be enabled to open a window that shows the camera stream, which is helpful
         to understand the camera environment.
@@ -53,24 +74,8 @@ class BarcodeScanner:
         self._timeout = timeout
         self._debug_mode = debug_mode
 
-        # Define a unique session ID to identify different scanners
-        self._session_name = f"Session-{str(uuid.uuid1()).split('-')[0]}"
-
-        # Flag to control the scanning thread lifecycle
-        self._running = threading.Event()
-        # Flag to pause/resume (not finishing) the scanning thread
-        self._resume = threading.Event()
-        # Flag set by the scanning thread to know if it is running
-        self._scanning = threading.Event()
-        # Pending codes set. These codes are waiting to be read
-        self._pending_codes = set()
-        # Dictionary of codes that have been read and cannot be read again before a timeout has expired
-        self._cooldown_codes: dict[str, float] = {}
-        # Create a lock for concurrent access to above collections
-        self._lock = threading.Lock()
-
         # Log activity
-        LOGGER.info(f"Created barcode scanner '{self._session_name}'.")
+        LOGGER.info(f"Configured barcode scanner '{self._session_name}'.")
 
     def open(self, cam_idx: int=0, scan_rate: float=1.0, symbols=None) -> None:
         """
