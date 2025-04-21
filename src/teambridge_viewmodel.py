@@ -69,7 +69,7 @@ class TeamBridgeViewModel(IStateMachine):
         self._scan_rate = scan_rate
         self._debug_mode = debug_mode
         # Create viewmodel live data
-        self._next_action = LiveData[ViewModelAction](ViewModelAction.CLOCK_ACTION)
+        self._next_action = LiveData[ViewModelAction](ViewModelAction.NO_ACTION)
         self._instruction_txt = LiveData[str]("")
         self._information_txt = LiveData[str]("")
         self._attendance_txt = LiveData[str]("")
@@ -136,6 +136,7 @@ class TeamBridgeViewModel(IStateMachine):
     def close(self):
         """
         """
+        self._scanner.close()
         self._model.close()
 
 class _IViewModelState(IStateBehavior[TeamBridgeViewModel], ABC):

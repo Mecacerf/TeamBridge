@@ -1,0 +1,23 @@
+#:kivy 1.0.9
+
+<TeamBridgeView>:
+    orientation: 'vertical'  # only needed for BoxLayout
+    GridLayout:
+        cols: 3
+        rows: 1
+        spacing: 10
+        padding: 10
+        size_hint: 1, 1  # fill parent
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+
+        Button:
+            text: 'clock action'
+            on_press: root.clock_action()
+
+        Button:
+            text: 'consultation action'
+            on_press: root.consultation_action()
+
+        Button:
+            text: 'Reset action'
+            on_press: root.scan_action()
