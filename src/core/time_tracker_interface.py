@@ -14,6 +14,19 @@ Contact: info@mecacerf.ch
 import datetime as dt
 from enum import Enum
 
+# TODO
+# - Mettre à jour dernière version de l'excel
+# L'interface est définie comme suit
+# def get_daily_schedule(self) -> OK Heure à travailler dans la journéee
+# def get_daily_balance(self) -> OK reste la balance actuel, càd du jour courant
+# def get_daily_worked_time(self) -> OK reste le temps travaillé du jour
+# def get_monthly_balance(self) -> OK balance du mois par rapport à l'heure du jour courant
+# Ajout: def get_current_balance(self) -> Balance totale (tous les mois) par rapport à l'heure du jour courant
+# Ajout: def get_previous_day_balance(self) -> Balance totale fin du jour précédent (calcul dynamique: get_current_balance - get_daily_balance, validé avec JC --=+)
+# Ajout: def get_remaining_vacation(self) -> vacances restantes à la fin du mois
+# Ajout: def get_monthly_vacation(self) -> vacances planifiées pour le mois courant
+# ITodayTimeTracker -> enlever le today, la restriction à un jour défini ne fait pas spécialement de sens, ajouter méthode set_day() ?
+
 ###############################################
 # Employee Time Tracker Interface Declaration #
 ###############################################
