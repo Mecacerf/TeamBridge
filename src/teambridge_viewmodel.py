@@ -12,7 +12,6 @@ Contact: info@mecacerf.ch
 """
     
 from enum import Enum
-from typing import Callable
 from state_machine import IStateMachine, IStateBehavior
 from live_data import LiveData
 from teambridge_model import *
@@ -20,7 +19,7 @@ from time_tracker_interface import ClockAction
 from barcode_scanner import BarcodeScanner
 import datetime as dt
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC
 import time
 
 # Reduce visibility to public classes
@@ -88,9 +87,9 @@ class TeamBridgeViewModel(IStateMachine):
         # The state machine must work with known state types
         assert isinstance(self._state, _IViewModelState)
         # Update texts
-        self._instruction_txt.set_value(self._state.instruction_text)
-        self._information_txt.set_value(self._state.information_text)
-        self._attendance_txt.set_value(self._state.attendance_text)
+        self._instruction_txt.value = self._state.instruction_text
+        self._information_txt.value = self._state.information_text
+        self._attendance_txt.value = self._state.attendance_text
 
     @property
     def next_action(self) -> LiveData[ViewModelAction]:
@@ -108,7 +107,7 @@ class TeamBridgeViewModel(IStateMachine):
         Args:
             action: `ViewModelAction` next action
         """
-        self._next_action.set_value(action)
+        self._next_action.value = action
 
     @property
     def current_state(self) -> str:
@@ -205,12 +204,12 @@ class _ScanningState(_IViewModelState):
             return _InitialState()
             
         # Check if an employee ID is available and the next action is available for a state transition
-        action = self._fsm._next_action.get_value()
+        action = self._fsm._next_action.value
         if self._fsm._scanner.available() and action in self.TRANSITION_STATES:
             # Read scanned ID
             id = self._fsm._scanner.read_next()
             # Choose the next action
-            action = self._fsm._next_action.get_value()
+            action = self._fsm._next_action.value
             if action == ViewModelAction.CLOCK_ACTION:
                 # Go to clock action state
                 return _ClockActionState(id)
@@ -304,7 +303,7 @@ class _ClockSuccessState(_IViewModelState):
         # Drop the task handle, it has no effect if the task is finished
         self._fsm._model.drop(self._handle)
         # Reset the next action (self-clearing)
-        self._fsm._next_action.set_value(ViewModelAction.NO_ACTION)
+        self._fsm._next_action.value = ViewModelAction.NO_ACTION
 
     @property
     def instruction_text(self):
@@ -393,7 +392,7 @@ class _ConsultationSuccessState(_IViewModelState):
         if self._fsm._scanner.available():
             return _ScanningState()
         # Leave the state on scanning signal
-        if self._fsm._next_action.get_value() == ViewModelAction.SCANNING:
+        if self._fsm._next_action.value == ViewModelAction.SCANNING:
             return _ScanningState()
         # Leave the state when the timeout is elapsed
         if self._timeout and time.time() > self._leave:
@@ -403,7 +402,7 @@ class _ConsultationSuccessState(_IViewModelState):
 
     def exit(self):
         # Reset the next action (self-clearing)
-        self._fsm._next_action.set_value(ViewModelAction.NO_ACTION)
+        self._fsm._next_action.value = ViewModelAction.NO_ACTION
 
     @property
     def information_text(self):
@@ -422,16 +421,16 @@ class _ErrorState(_IViewModelState):
 
     def entry(self):
         # Reset next action to prevent wrong acknowledgment 
-        self._fsm._next_action.set_value(ViewModelAction.NO_ACTION)
+        self._fsm._next_action.value = ViewModelAction.NO_ACTION
 
     def do(self) -> IStateBehavior:
         # Check if acknowledged
-        if self._fsm._next_action.get_value() == ViewModelAction.SCANNING:
+        if self._fsm._next_action.value == ViewModelAction.SCANNING:
             return _ScanningState()
         
     def exit(self):
         # Reset next action 
-        self._fsm._next_action.set_value(ViewModelAction.NO_ACTION)
+        self._fsm._next_action.value = ViewModelAction.NO_ACTION
 
     @property
     def instruction_text(self):

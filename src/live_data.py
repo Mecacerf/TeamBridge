@@ -62,8 +62,19 @@ class LiveData(Generic[T]):
         # Check observer exists in the list and remove
         if observer in self._observers:
             self._observers.remove(observer)
+    
+    @property
+    def value(self) -> T:
+        """
+        Get the value.
 
-    def set_value(self, value: T):
+        Returns:
+            T: value
+        """
+        return self._value
+    
+    @value.setter
+    def value(self, value: T):
         """
         Change the value and notify observers.
 
@@ -78,13 +89,3 @@ class LiveData(Generic[T]):
         # Notify observers
         for observer in self._observers:
             observer(self._value)
-
-    def get_value(self) -> T:
-        """
-        Get the value.
-
-        Returns:
-            T: value
-        """
-        return self._value
-    

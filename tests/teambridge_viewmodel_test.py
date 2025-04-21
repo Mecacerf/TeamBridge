@@ -146,7 +146,7 @@ def test_clock_action(teambridge_viewmodel, monkeypatch):
     wait_state(viewmodel, "ScanningState", 11.0)
 
     # The next action has been reset 
-    assert viewmodel.next_action.get_value() == ViewModelAction.NO_ACTION
+    assert viewmodel.next_action.value == ViewModelAction.NO_ACTION
 
 def test_consultation(teambridge_viewmodel, monkeypatch):
     """
@@ -175,7 +175,7 @@ def test_consultation(teambridge_viewmodel, monkeypatch):
     wait_state(viewmodel, "ScanningState")
 
     # The next action has been reset 
-    assert viewmodel.next_action.get_value() == ViewModelAction.NO_ACTION
+    assert viewmodel.next_action.value == ViewModelAction.NO_ACTION
 
 def test_error(teambridge_viewmodel, monkeypatch):
     """
@@ -200,9 +200,9 @@ def test_error(teambridge_viewmodel, monkeypatch):
     # Shall fail and move to error state
     wait_state(viewmodel, "ErrorState")
     # The next action has been reset 
-    assert viewmodel.next_action.get_value() == ViewModelAction.NO_ACTION
+    assert viewmodel.next_action.value == ViewModelAction.NO_ACTION
     # Reset to scanning state, acknowledge the error
     viewmodel.next_action = ViewModelAction.SCANNING
     wait_state(viewmodel, "ScanningState")
     # The next action has been reset 
-    assert viewmodel.next_action.get_value() == ViewModelAction.NO_ACTION
+    assert viewmodel.next_action.value == ViewModelAction.NO_ACTION

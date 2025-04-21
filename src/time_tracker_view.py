@@ -125,10 +125,10 @@ class TimeTrackerView:
 
     def update_view(self, *_):
         """Update UI based on ViewModel state."""
-        scanning = self.viewmodel.get_scanning_state().get_value()
-        state = self.viewmodel.get_current_state().get_value()
-        info_text = self.viewmodel.get_info_text().get_value()
-        data_text = self.viewmodel.get_employee_info_text().get_value()
+        scanning = self.viewmodel.get_scanning_state().value
+        state = self.viewmodel.get_current_state().value
+        info_text = self.viewmodel.get_info_text().value
+        data_text = self.viewmodel.get_employee_info_text().value
 
         # Scanning status
         self.scanning_label.config(text=f"Scan en fonction" if scanning else "Scan hors service")
