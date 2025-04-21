@@ -119,16 +119,17 @@ def open_virtual_device(request) -> Generator[str, None, None]:
     time.sleep(0.1)
 
 @pytest.fixture
-def prepare_qr_scanner(open_virtual_device) -> Generator[tuple, None, None]:
+def prepare_scanner(open_virtual_device) -> Generator[tuple, None, None]:
     """
-    Open a virtual camera device then create, open and yields a QRScanner.
+    Open a virtual camera device then create, open and yields a barcode scanner.
 
     Yields:
-        QRSCanner: the opened QRScanner
+        BarcodeScanner: the opened scanner
         str: expected ID in the video
     """
     # Create and open the scanner
-    scanner = BarcodeScanner(debug_mode=True, regex=EMPLOYEE_REGEX, extract_group=EMPLOYEE_REGEX_GROUP)
+    scanner = BarcodeScanner()
+    scanner.configure(debug_mode=True, regex=EMPLOYEE_REGEX, extract_group=EMPLOYEE_REGEX_GROUP)
     scanner.open(cam_idx=VIRTUAL_CAM_IDX, scan_rate=5)
     # Run the test
     yield scanner, open_virtual_device
@@ -139,22 +140,22 @@ def prepare_qr_scanner(open_virtual_device) -> Generator[tuple, None, None]:
 #                    Tests                     #
 ################################################
 
-def test_multiple_open(prepare_qr_scanner):
+def test_multiple_open(prepare_scanner):
     """
     Try to reopen an already opened scanner and verify it throws an exception.
     """
     # Retrieve scanner and expected ID
-    scanner, _ = prepare_qr_scanner
+    scanner, _ = prepare_scanner
     # Reopen
     with pytest.raises(RuntimeError):
         # An exception is raised because the scanner is already running
         scanner.open()
 
-def test_clear_scanner(prepare_qr_scanner):
+def test_clear_scanner(prepare_scanner):
     """
     Wait for an id to be scanned and clear the scanner.
     """
-    scanner, _ = prepare_qr_scanner
+    scanner, _ = prepare_scanner
     # Wait for an id to be scanned
     timeout = time.time() + 10.0
     while not scanner.available() and timeout > time.time():
@@ -168,14 +169,14 @@ def test_clear_scanner(prepare_qr_scanner):
         with pytest.raises(KeyError):
             scanner.read_next()
 
-def test_scan_id(prepare_qr_scanner):
+def test_scan_id(prepare_scanner):
     """
     The test will open a virtual camera (OBS studio required) and plays a test video
     containing a QR code. It is then checked if the QR code is correctly scanned
     and added to the output list.
     """
     # Retrieve scanner and expected ID
-    scanner, expected_id = prepare_qr_scanner
+    scanner, expected_id = prepare_scanner
     # Wait for an id to be scanned
     timeout = time.time() + 10.0
     while not scanner.available() and timeout > time.time():
