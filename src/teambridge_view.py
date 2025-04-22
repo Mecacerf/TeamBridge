@@ -92,5 +92,5 @@ class TeamBridgeView(BoxLayout):
         LOGGER.info(f"Set {self._viewmodel.next_action.value}.")
 
     def scan_action(self):
-        self._viewmodel.next_action = ViewModelAction.SCANNING
+        self._viewmodel.next_action = ViewModelAction.RESET_ACTION
         LOGGER.info(f"Set {self._viewmodel.next_action.value}.")

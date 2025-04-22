@@ -38,15 +38,17 @@ class ViewModelAction(Enum):
     """
     Possible actions the viewmodel can perform.
     This enum is used to interact with the viewmodel.
+    All actions are auto-clearing, meaning they are automatically reset
+    once the action is done. The default action is always the clock action.
     """
-    # No action planned
-    NO_ACTION = -1,
     # Clock in/out action
-    CLOCK_ACTION = 0,
+    CLOCK_ACTION = 0
     # Consultation action
-    CONSULTATION = 1,
-    # Move to scanning action, self-clearing
-    SCANNING = 2
+    CONSULTATION = 1
+    # Leave the current state and move to scanning action
+    RESET_ACTION = 2
+    # Define the default action to fall back to when one of the actions is finished
+    DEFAULT_ACTION = CLOCK_ACTION
 
 class TeamBridgeViewModel(IStateMachine):
     """
@@ -69,7 +71,8 @@ class TeamBridgeViewModel(IStateMachine):
         self._scan_rate = scan_rate
         self._debug_mode = debug_mode
         # Create viewmodel live data
-        self._next_action = LiveData[ViewModelAction](ViewModelAction.NO_ACTION)
+        self._state_data = LiveData[str](str(self._state))
+        self._next_action = LiveData[ViewModelAction](ViewModelAction.DEFAULT_ACTION)
         self._instruction_txt = LiveData[str]("")
         self._information_txt = LiveData[str]("")
         self._attendance_txt = LiveData[str]("")
@@ -86,18 +89,20 @@ class TeamBridgeViewModel(IStateMachine):
         LOGGER.info(f"State changed from {old_state} to {self._state}.")
         # The state machine must work with known state types
         assert isinstance(self._state, _IViewModelState)
+        # Update the state machine data
+        self._state_data.value = str(self._state)
         # Update texts
         self._instruction_txt.value = self._state.instruction_text
         self._information_txt.value = self._state.information_text
         self._attendance_txt.value = self._state.attendance_text
 
     @property
-    def next_action(self) -> LiveData[ViewModelAction]:
+    def next_action(self) -> ViewModelAction:
         """
         Returns:
-            LiveData[ViewModelAction]: an observable on the next action the viewmodel is going to perform
+            ViewModelAction: the next action the viewmodel is going to perform
         """
-        return self._next_action
+        return self._next_action.value
 
     @next_action.setter
     def next_action(self, action: ViewModelAction):
@@ -109,11 +114,18 @@ class TeamBridgeViewModel(IStateMachine):
         """
         self._next_action.value = action
 
+    def get_next_action(self):
+        """
+        Returns:
+            LiveData[ViewModelAction]: an observable on the next action the viewmodel is going to perform
+        """
+        return self._next_action
+
     @property
-    def current_state(self) -> str:
+    def current_state(self) -> LiveData[str]:
         """
         """
-        return str(self._state)
+        return self._state_data
 
     @property
     def instruction_text(self) -> LiveData[str]:
@@ -136,7 +148,7 @@ class TeamBridgeViewModel(IStateMachine):
     def close(self):
         """
         """
-        self._scanner.close()
+        self._scanner.close(join=True)
         self._model.close()
 
 class _IViewModelState(IStateBehavior[TeamBridgeViewModel], ABC):
@@ -192,10 +204,10 @@ class _ScanningState(_IViewModelState):
     Poll the scanner until an employee's ID is found.
     """
 
-    TRANSITION_STATES = [ViewModelAction.CLOCK_ACTION, ViewModelAction.CONSULTATION]
-
     def entry(self):
         # Make sure the barcode scanner is scanning
+        # Do not clear the scanner, we may be in this state because
+        # a new value is available from the previous state.
         self._fsm._scanner.resume()
 
     def do(self) -> IStateBehavior:
@@ -204,19 +216,21 @@ class _ScanningState(_IViewModelState):
             # Return to initial state, an error may have occurred
             return _InitialState()
             
-        # Check if an employee ID is available and the next action is available for a state transition
-        action = self._fsm._next_action.value
-        if self._fsm._scanner.available() and action in self.TRANSITION_STATES:
+        # Check if an employee ID is available
+        if self._fsm._scanner.available():
             # Read scanned ID
             id = self._fsm._scanner.read_next()
             # Choose the next action
-            action = self._fsm._next_action.value
+            action = self._fsm.next_action
             if action == ViewModelAction.CLOCK_ACTION:
                 # Go to clock action state
                 return _ClockActionState(id)
             elif action == ViewModelAction.CONSULTATION:
                 # Go to consultation state
                 return _ConsultationActionState(id)
+            else:
+                # This is a forbidden state 
+                raise RuntimeError(f"Cannot perform {action} action in {self}.")
         
         return None
     
@@ -243,6 +257,8 @@ class _ClockActionState(_IViewModelState):
         self._id = id
 
     def entry(self):
+        # Reset next action
+        self._fsm.next_action = ViewModelAction.DEFAULT_ACTION
         # Start a clock action task and save the task handle
         self._handle = self._fsm._model.start_clock_action_task(id=self._id, datetime=dt.datetime.now())
 
@@ -278,7 +294,8 @@ class _ClockSuccessState(_IViewModelState):
         self._evt = event
 
     def entry(self):
-        # Resume scanner operation
+        # Resume scanner operation at this point. The consultation is optional and may
+        # be aborted in case a new scan is available.
         self._fsm._scanner.clear()
         self._fsm._scanner.resume()
         # Start a consultation task
@@ -292,7 +309,7 @@ class _ClockSuccessState(_IViewModelState):
         msg = self._fsm._model.get_result(self._handle)
         if msg:
             if isinstance(msg, EmployeeData):
-                return _ConsultationSuccessState(msg, timeout=True)
+                return _ConsultationSuccessState(msg, timeout=10.0)
             elif isinstance(msg, ModelError):
                 return _ErrorState(msg)
             else:
@@ -303,8 +320,6 @@ class _ClockSuccessState(_IViewModelState):
     def exit(self):
         # Drop the task handle, it has no effect if the task is finished
         self._fsm._model.drop(self._handle)
-        # Reset the next action (self-clearing)
-        self._fsm._next_action.value = ViewModelAction.NO_ACTION
 
     @property
     def instruction_text(self):
@@ -345,6 +360,8 @@ class _ConsultationActionState(_IViewModelState):
         self._id = id
 
     def entry(self):
+        # Reset next action
+        self._fsm.next_action = ViewModelAction.DEFAULT_ACTION
         # Start a consultation task
         self._handle = self._fsm._model.start_consultation_task(id=self._id, datetime=dt.datetime.now())
 
@@ -354,11 +371,12 @@ class _ConsultationActionState(_IViewModelState):
         if msg:
             # The consultation task has completed
             if isinstance(msg, EmployeeData):
-                return _ConsultationSuccessState(msg, timeout=False)
+                return _ConsultationSuccessState(msg, timeout=30.0)
             elif isinstance(msg, ModelError):
                 return _ErrorState(msg)
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
+            
         return None
 
     def exit(self):
@@ -372,10 +390,7 @@ class _ConsultationSuccessState(_IViewModelState):
     It will always end when a new employee's ID is available.
     """
 
-    # State duration in seconds
-    DURATION = 10.0
-
-    def __init__(self, data: EmployeeData, timeout: bool=True):
+    def __init__(self, data: EmployeeData, timeout=10.0):
         super().__init__()
         # Save data and quit option
         self._data = data
@@ -383,7 +398,7 @@ class _ConsultationSuccessState(_IViewModelState):
 
     def entry(self):
         # Set leave time
-        self._leave = time.time() + self.DURATION
+        self._leave = time.time() + self._timeout
         # Resume scanner operation
         self._fsm._scanner.clear()
         self._fsm._scanner.resume()
@@ -392,18 +407,18 @@ class _ConsultationSuccessState(_IViewModelState):
         # Leave the state if an employee ID is available
         if self._fsm._scanner.available():
             return _ScanningState()
-        # Leave the state on scanning signal
-        if self._fsm._next_action.value == ViewModelAction.SCANNING:
+        # Leave the state on reset signal
+        if self._fsm.next_action == ViewModelAction.RESET_ACTION:
             return _ScanningState()
         # Leave the state when the timeout is elapsed
-        if self._timeout and time.time() > self._leave:
+        if time.time() > self._leave:
             return _ScanningState()
         
         return None
 
     def exit(self):
         # Reset the next action (self-clearing)
-        self._fsm._next_action.value = ViewModelAction.NO_ACTION
+        self._fsm.next_action = ViewModelAction.DEFAULT_ACTION
 
     @property
     def information_text(self):
@@ -422,16 +437,16 @@ class _ErrorState(_IViewModelState):
 
     def entry(self):
         # Reset next action to prevent wrong acknowledgment 
-        self._fsm._next_action.value = ViewModelAction.NO_ACTION
+        self._fsm.next_action = ViewModelAction.DEFAULT_ACTION
 
     def do(self) -> IStateBehavior:
         # Check if acknowledged
-        if self._fsm._next_action.value == ViewModelAction.SCANNING:
+        if self._fsm.next_action == ViewModelAction.RESET_ACTION:
             return _ScanningState()
         
     def exit(self):
         # Reset next action 
-        self._fsm._next_action.value = ViewModelAction.NO_ACTION
+        self._fsm.next_action = ViewModelAction.DEFAULT_ACTION
 
     @property
     def instruction_text(self):

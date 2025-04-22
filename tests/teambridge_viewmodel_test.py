@@ -84,7 +84,7 @@ def wait_state(viewmodel: TeamBridgeViewModel, state: str, timeout=10):
     Assert false after the timeout is elapsed.
     """
     timeout = time.time() + timeout
-    while viewmodel.current_state != state:
+    while viewmodel.current_state.value != state:
         # Check that the timeout is not reached and run the viewmodel
         assert time.time() < timeout
         viewmodel.run()
@@ -146,7 +146,7 @@ def test_clock_action(teambridge_viewmodel, monkeypatch):
     wait_state(viewmodel, "ScanningState", 11.0)
 
     # The next action has been reset 
-    assert viewmodel.next_action.value == ViewModelAction.NO_ACTION
+    assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
 
 def test_consultation(teambridge_viewmodel, monkeypatch):
     """
@@ -170,12 +170,12 @@ def test_consultation(teambridge_viewmodel, monkeypatch):
     # Shall automatically move to consultation success state
     wait_state(viewmodel, "ConsultationSuccessState")
 
-    # Shall return in scanning state on scanning signal
-    viewmodel.next_action = ViewModelAction.SCANNING
+    # Shall return in default state on reset signal
+    viewmodel.next_action = ViewModelAction.RESET_ACTION
     wait_state(viewmodel, "ScanningState")
 
     # The next action has been reset 
-    assert viewmodel.next_action.value == ViewModelAction.NO_ACTION
+    assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
 
 def test_error(teambridge_viewmodel, monkeypatch):
     """
@@ -200,9 +200,9 @@ def test_error(teambridge_viewmodel, monkeypatch):
     # Shall fail and move to error state
     wait_state(viewmodel, "ErrorState")
     # The next action has been reset 
-    assert viewmodel.next_action.value == ViewModelAction.NO_ACTION
+    assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
     # Reset to scanning state, acknowledge the error
-    viewmodel.next_action = ViewModelAction.SCANNING
+    viewmodel.next_action = ViewModelAction.RESET_ACTION
     wait_state(viewmodel, "ScanningState")
     # The next action has been reset 
-    assert viewmodel.next_action.value == ViewModelAction.NO_ACTION
+    assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
