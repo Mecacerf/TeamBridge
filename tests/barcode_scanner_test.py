@@ -183,6 +183,7 @@ def test_scan_id(prepare_scanner):
         time.sleep(0.1)
     # Assert the expected id has been scanned
     if expected_id:
+        assert scanner.available()
         scanned_id = scanner.read_next()
     else:
         assert not scanner.available()

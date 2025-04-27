@@ -106,9 +106,9 @@ def test_open_scanner(teambridge_viewmodel, monkeypatch):
     # Run the viewmodel and assert it is in initial state
     wait_state(viewmodel, "InitialState")
 
-    # After the scanner has been opened, the state is scanning
+    # After the scanner has been opened, the state is waiting for a clock action
     scanner.set_scanning(True)
-    wait_state(viewmodel, "ScanningState")
+    wait_state(viewmodel, "WaitClockActionState")
 
     # On scanner failure, return to initial state and try to reopen
     scanner.set_scanning(False)
@@ -116,7 +116,7 @@ def test_open_scanner(teambridge_viewmodel, monkeypatch):
 
     # If the scanner recovers, return to initial state
     scanner.set_scanning(True)
-    wait_state(viewmodel, "ScanningState")
+    wait_state(viewmodel, "WaitClockActionState")
 
 def test_clock_action(teambridge_viewmodel, monkeypatch):
     """
@@ -129,7 +129,7 @@ def test_clock_action(teambridge_viewmodel, monkeypatch):
 
     # Move to scanning state
     scanner.set_scanning(True)
-    wait_state(viewmodel, "ScanningState")
+    wait_state(viewmodel, "WaitClockActionState")
 
     # Set next action to clock action
     viewmodel.next_action = ViewModelAction.CLOCK_ACTION
@@ -143,7 +143,7 @@ def test_clock_action(teambridge_viewmodel, monkeypatch):
     # Shall automatically move to consultation state
     wait_state(viewmodel, "ConsultationSuccessState")
     # And finally back to scanning state after the presentation duration 
-    wait_state(viewmodel, "ScanningState", 11.0)
+    wait_state(viewmodel, "WaitClockActionState", 16.0)
 
     # The next action has been reset 
     assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
@@ -159,23 +159,26 @@ def test_consultation(teambridge_viewmodel, monkeypatch):
 
     # Move to scanning state
     scanner.set_scanning(True)
-    wait_state(viewmodel, "ScanningState")
+    wait_state(viewmodel, "WaitClockActionState")
 
     # Set next action to consultation
     viewmodel.next_action = ViewModelAction.CONSULTATION
+    # Shall move to waiting for consultation action
+    wait_state(viewmodel, "WaitConsultationActionState")
 
-    # Post an employee ID, shall move to consultation state
+    # Post an employee ID, shall move to consultation action state
     scanner.add_result(TEST_EMPLOYEE_ID)
     wait_state(viewmodel, "ConsultationActionState")
     # Shall automatically move to consultation success state
     wait_state(viewmodel, "ConsultationSuccessState")
 
-    # Shall return in default state on reset signal
-    viewmodel.next_action = ViewModelAction.RESET_ACTION
-    wait_state(viewmodel, "ScanningState")
+    # Shall return in consultation state on reset to consultation signal
+    viewmodel.next_action = ViewModelAction.RESET_TO_CONSULTATION
+    wait_state(viewmodel, "WaitConsultationActionState")
 
-    # The next action has been reset 
-    assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
+    # Shall be able to move back to wait for clock action state
+    viewmodel.next_action = ViewModelAction.CLOCK_ACTION
+    wait_state(viewmodel, "WaitClockActionState")
 
 def test_error(teambridge_viewmodel, monkeypatch):
     """
@@ -188,7 +191,7 @@ def test_error(teambridge_viewmodel, monkeypatch):
 
     # Move to scanning state
     scanner.set_scanning(True)
-    wait_state(viewmodel, "ScanningState")
+    wait_state(viewmodel, "WaitClockActionState")
 
     # Set next action to clock action
     viewmodel.next_action = ViewModelAction.CLOCK_ACTION
@@ -202,7 +205,7 @@ def test_error(teambridge_viewmodel, monkeypatch):
     # The next action has been reset 
     assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
     # Reset to scanning state, acknowledge the error
-    viewmodel.next_action = ViewModelAction.RESET_ACTION
-    wait_state(viewmodel, "ScanningState")
-    # The next action has been reset 
-    assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
+    viewmodel.next_action = ViewModelAction.RESET_TO_CLOCK_ACTION
+    wait_state(viewmodel, "WaitClockActionState")
+    # The next action has been reset to clock action
+    assert viewmodel.next_action == ViewModelAction.CLOCK_ACTION
