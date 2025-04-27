@@ -65,8 +65,8 @@ LIGHT_THEME = ViewTheme(
     text_primary_color=get_color_from_hex("1C6EAC"),
     text_secondary_color=get_color_from_hex("000000"), 
     border_color=get_color_from_hex("4F4F4F"),      
-    error_color=(1, 0, 0, 1),               
-    success_color=(0.4, 0.8, 0.4, 1),            
+    error_color=get_color_from_hex("ED1C24"),               
+    success_color=get_color_from_hex("1CAC3B"),            
     disabled_color=(0.55, 0.55, 0.55, 1),       
     hint_color=(0.5, 0.5, 0.5, 1),           
 )

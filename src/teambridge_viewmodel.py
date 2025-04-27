@@ -45,8 +45,12 @@ class ViewModelAction(Enum):
     CLOCK_ACTION = 0
     # Consultation action
     CONSULTATION = 1
-    # Leave the current state and move to scanning action
+    # Leave the current state, move to scanning state and use the default action
     RESET_ACTION = 2
+    # Leave the current state, move to scanning state and use the clock action
+    RESET_TO_CLOCK_ACTION = 3
+    # Leave the current state, move to scanning state and use the consultation action
+    RESET_TO_CONSULTATION_ACTION = 4
     # Define the default action to fall back to when one of the actions is finished
     DEFAULT_ACTION = CLOCK_ACTION
 
@@ -247,7 +251,7 @@ class _ScanningState(_IViewModelState):
     
     @property
     def instruction_text(self):
-        return "Passer le badge."
+        return "passer le badge"
     
     @property
     def information_text(self):
@@ -288,7 +292,7 @@ class _ClockActionState(_IViewModelState):
     
     @property
     def instruction_text(self):
-        return "Chargement..."
+        return ""
 
 class _ClockSuccessState(_IViewModelState):
     """
@@ -332,29 +336,32 @@ class _ClockSuccessState(_IViewModelState):
     def instruction_text(self):
         # Format text according to event
         text = ""
-        action = ""
         # Greetings
         if self._evt.clock_evt.action == ClockAction.CLOCK_IN:
-            action = "Entrée "
-            if self._evt.clock_evt.time.hour < 16:
-                text += "Bonjour"
-            else:
-                text += "Bonsoir"
+            text = "Entrée "
         else:
-            action = "Sortie "
-            text += "Au revoir"
-        # Employee's firstname
-        text += f" {self._evt.firstname}.\n"
+            text = "Sortie "
         # Clock action
-        time_h = self._evt.clock_evt.time.hour
-        time_m = self._evt.clock_evt.time.minute
-        text += f"{action} enregistrée à {time_h}h{time_m}."
+        text += "enregistrée"
         # Return formatted text
         return text
     
     @property
     def information_text(self):
-        return "Chargement des informations..."
+        # Format text according to event
+        text = ""
+        # Greetings
+        if self._evt.clock_evt.action == ClockAction.CLOCK_IN:
+            if self._evt.clock_evt.time.hour < 16:
+                text += "Bonjour"
+            else:
+                text += "Bonsoir"
+        else:
+            text += "Au revoir"
+        # Employee's firstname
+        text += f" {self._evt.firstname}."
+        # Return formatted text
+        return text
 
 class _ConsultationActionState(_IViewModelState):
     """
@@ -390,6 +397,10 @@ class _ConsultationActionState(_IViewModelState):
         # Drop the task handle, it has no effect if the task is finished
         self._fsm._model.drop(self._handle)
 
+    @property
+    def instruction_text(self):
+        return ""
+
 class _ConsultationSuccessState(_IViewModelState):
     """
     Show the result of the consultation.
@@ -415,7 +426,10 @@ class _ConsultationSuccessState(_IViewModelState):
         if self._fsm._scanner.available():
             return _ScanningState()
         # Leave the state on reset signal
-        if self._fsm.next_action == ViewModelAction.RESET_ACTION:
+        resets = [ViewModelAction.RESET_ACTION, 
+                  ViewModelAction.RESET_TO_CLOCK_ACTION, 
+                  ViewModelAction.RESET_TO_CONSULTATION_ACTION]
+        if self._fsm.next_action in resets:
             return _ScanningState()
         # Leave the state when the timeout is elapsed
         if time.time() > self._leave:
@@ -425,7 +439,13 @@ class _ConsultationSuccessState(_IViewModelState):
 
     def exit(self):
         # Reset the next action (self-clearing)
-        self._fsm.next_action = ViewModelAction.DEFAULT_ACTION
+        action = self._fsm.next_action
+        if action == ViewModelAction.RESET_ACTION:
+            self._fsm.next_action = ViewModelAction.DEFAULT_ACTION
+        elif action == ViewModelAction.RESET_TO_CLOCK_ACTION:
+            self._fsm.next_action = ViewModelAction.CLOCK_ACTION
+        elif action == ViewModelAction.RESET_TO_CONSULTATION_ACTION:
+            self._fsm.next_action = ViewModelAction.CONSULTATION
 
     @property
     def information_text(self):

@@ -75,7 +75,7 @@
                 size_hint: 1, 1
 
                 Widget:
-                    size_hint: 1, 0.1
+                    size_hint: 1, 0.2
 
                 Label:
                     text: root.clock_time
@@ -134,8 +134,8 @@
 
                 IconButton:
                     source: 'assets/group.png'
-                    #on_press: if self.enabled: root.on_reset_press()
-                    on_press: root.on_reset_press()
+                    #on_press: if self.enabled: root.on_attendance_press()
+                    on_press: root.on_attendance_press()
 
             Widget:
                 size_hint: 0.1, 1
@@ -144,7 +144,7 @@
             size_hint: 1, 0.3
             text: f"[b]{root.instruction_text}[/b]"
             markup: True
-            color: app.theme.text_primary_color
+            color: root.instruction_text_color
             halign: 'center'
             valign: 'center'
             text_size: self.size

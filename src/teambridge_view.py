@@ -132,8 +132,9 @@ class MainScreen(BoxLayout):
     clock_date = StringProperty("")
     # Viewmodel texts
     instruction_text = StringProperty("")
+    instruction_text_color = ObjectProperty((1, 1, 1, 1))
     information_text = StringProperty("")
-    # State buttons
+    # Toggle buttons
     consultation_button = ObjectProperty(None)
     clock_button = ObjectProperty(None)
     # Progress bar
@@ -143,6 +144,8 @@ class MainScreen(BoxLayout):
         super().__init__()
         # Save viewmodel
         self._viewmodel = viewmodel
+        # Save running application
+        self._app = App.get_running_app()
 
         # Schedule the clock time update
         Clock.schedule_interval(self._update_clock_time, 1.0) 
@@ -178,10 +181,33 @@ class MainScreen(BoxLayout):
         self.clock_button.toggle_state = (action == ViewModelAction.CLOCK_ACTION)
 
     def _update_state(self, state):
-        # Set buttons state
-        self.clock_button.enabled = (state == 'ScanningState')
-        self.consultation_button.enabled = (state == 'ScanningState')
-        self.progress_bar.loading = (state != 'ScanningState')
+        """
+        Update the state of UI elements depending on viewmodel state.
+        """
+        # Set the states the buttons are enabled
+        enabled_states = ['ScanningState', 'ConsultationSuccessState']
+        self.consultation_button.enabled = (state in enabled_states)
+        # Clock button is enabled in error state for acknowledgment
+        enabled_states.append('ErrorState')
+        self.clock_button.enabled = (state in enabled_states)
+        
+        # Set instruction text color
+        instruction_colors = {
+            'InitialState': self._app.theme.error_color,
+            'ClockSuccessState': self._app.theme.success_color,
+            'ConsultationSuccessState': self._app.theme.success_color,
+            'ErrorState': self._app.theme.error_color
+        }
+        # If the color is defined in the dict, use it. Otherwise use the default primary one.
+        if state in instruction_colors:
+            self.instruction_text_color = instruction_colors[state]
+        else:
+            self.instruction_text_color = self._app.theme.text_primary_color
+
+        # Set the progress bar loading state
+        loading_states = ['ClockActionState', 'ClockSuccessState', 'ConsultationActionState']
+        self.progress_bar.loading = (state in loading_states)
+
         # Also update action
         self._update_action()
 
@@ -189,22 +215,41 @@ class MainScreen(BoxLayout):
         """
         Called when the clock action button is pressed.
         """
-        self._viewmodel.next_action = ViewModelAction.CLOCK_ACTION
+        state = self._viewmodel.current_state.value
+        # Choose action based on viewmodel state
+        if state == 'ScanningState':
+            # Set the next action to clock action
+            self._viewmodel.next_action = ViewModelAction.CLOCK_ACTION
+        elif state == 'ConsultationSuccessState':
+            # Reset the viewmodel to go back in scanning state clock action
+            self._viewmodel.next_action = ViewModelAction.RESET_TO_CLOCK_ACTION
+        elif state == 'ErrorState':
+            # Acknowledge the error
+            self._viewmodel.next_action = ViewModelAction.RESET_ACTION
+        else:
+            raise RuntimeError("The clock button shouldn't be enabled.")
 
     def on_consultation_press(self):
         """
         Called when the consultation button is pressed.
         """
-        self._viewmodel.next_action = ViewModelAction.CONSULTATION
+        state = self._viewmodel.current_state.value
+        # Choose action based on viewmodel state
+        if state == 'ScanningState':
+            # Set the next action to consultation action
+            self._viewmodel.next_action = ViewModelAction.CONSULTATION
+        elif state == 'ConsultationSuccessState':
+            # Reset the viewmodel to go back in scanning state consultation action
+            self._viewmodel.next_action = ViewModelAction.RESET_TO_CONSULTATION_ACTION
+        else:
+            raise RuntimeError("The consultation button shouldn't be enabled.")
 
-    def on_reset_press(self):
+    def on_attendance_press(self):
         """
         Called when the reset button is pressed.
         """
-        #self._viewmodel.next_action = ViewModelAction.RESET_ACTION
-
-        app = App.get_running_app()
-        app.set_theme(DARK_THEME if app.get_theme() == LIGHT_THEME else LIGHT_THEME)
+        # TODO: test
+        self._app.set_theme(DARK_THEME if self._app.get_theme() == LIGHT_THEME else LIGHT_THEME)
 
 class IconButton(ButtonBehavior, RelativeLayout):
     """
