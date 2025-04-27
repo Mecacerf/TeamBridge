@@ -35,8 +35,9 @@ from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.relativelayout import RelativeLayout
+from kivy.uix.progressbar import ProgressBar
 from kivy.animation import Animation
-from kivy.properties import StringProperty, ObjectProperty, BooleanProperty, NumericProperty
+from kivy.properties import StringProperty, ObjectProperty, NumericProperty
 from kivy.clock import Clock
 
 from kivy.core.window import Window
@@ -126,10 +127,11 @@ class MainScreen(BoxLayout):
     # Viewmodel texts
     instruction_text = StringProperty("")
     information_text = StringProperty("")
-
     # State buttons
     consultation_button = ObjectProperty(None)
     clock_button = ObjectProperty(None)
+    # Progress bar
+    progress_bar = ObjectProperty(None)
     
     def __init__(self, viewmodel: TeamBridgeViewModel):
         super().__init__()
@@ -173,6 +175,7 @@ class MainScreen(BoxLayout):
         # Set buttons state
         self.clock_button.enabled = (state == 'ScanningState')
         self.consultation_button.enabled = (state == 'ScanningState')
+        self.progress_bar.loading = (state != 'ScanningState')
         # Also update action
         self._update_action()
 
@@ -381,3 +384,53 @@ class ToggleIconButton(IconButton):
     def on_release(self):
         # Delete default behavior
         pass
+
+class LinearProgressBar(ProgressBar):
+    """
+    Linear progress bar (does not define a progress, just show whether it
+    is loading or not).
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Set max value
+        self.max = 1000
+        # Set loading flag
+        self._loading = False
+        # Declare animation
+        self._anim = None
+
+    @property
+    def loading(self) -> bool:
+        """
+        Returns:
+            bool: loading flag
+        """
+        return self._loading
+    
+    @loading.setter
+    def loading(self, value: bool):
+        """
+        Args:
+            value: `bool` loading flag
+        """
+        # Do not start animation if already started
+        if value and self.loading:
+            return
+        # Update flag
+        self._loading = value
+        # Start animation if loading is set
+        if self._loading:
+            self._start_anim()
+
+    def _start_anim(self, *kargs):
+        """
+        Start loading animation. Called continuously while loading flag is set.
+        """
+        # Reset value
+        self.value = 0
+        # Reschedule animation if still loading
+        if self._loading:
+            self._anim = Animation(value=self.max, duration=2.0, transition='linear')
+            self._anim.bind(on_complete=self._start_anim)
+            self._anim.start(self)

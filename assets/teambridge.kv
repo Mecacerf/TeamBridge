@@ -1,4 +1,5 @@
 #:kivy 1.0.9
+#:import math math
 
 <IconButton>:
     size_hint: None, None
@@ -25,9 +26,30 @@
         source: root.source
         fit_mode: 'contain'
 
+
+<LinearProgressBar>:
+    # Use canvas.after to cover legacy bar
+    canvas.after:
+        Color:
+            rgba: app.theme.border_color
+        Rectangle:
+            pos: self.pos
+            size: self.size
+        Color:
+            rgba: app.theme.primary_color
+        Rectangle:
+            pos: (self.x, self.y)
+            size: (self.width * (self.value / self.max) + self.width / 3.0 * math.sin(self.value / self.max * math.pi), self.height)
+        Color:
+            rgba: app.theme.border_color
+        Rectangle:
+            pos: (self.x, self.y)
+            size: (self.width * (self.value / self.max) - self.width / 2.0 * math.sin(self.value / self.max * math.pi), self.height)
+                
 <MainScreen>:
     consultation_button: consultation_button_id
     clock_button: clock_button_id
+    progress_bar: progress_bar_id
 
     orientation: 'vertical'
 
@@ -110,7 +132,8 @@
 
                 IconButton:
                     source: 'assets/group.png'
-                    on_press: if self.enabled: root.on_reset_press()
+                    #on_press: if self.enabled: root.on_reset_press()
+                    on_press: root.on_reset_press()
 
             Widget:
                 size_hint: 0.1, 1
@@ -124,6 +147,11 @@
             valign: 'center'
             text_size: self.size
             font_size: self.height * 0.3
+
+        LinearProgressBar:
+            id: progress_bar_id
+            size_hint: 1, None
+            height: self.parent.size[1] * 0.015
 
         BoxLayout:
             orientation: 'horizontal'

@@ -64,20 +64,20 @@ LIGHT_THEME = ViewTheme(
     secondary_color=get_color_from_hex("B9D2E5"),  
     text_primary_color=get_color_from_hex("1C6EAC"),
     text_secondary_color=get_color_from_hex("000000"), 
-    border_color=get_color_from_hex("D9D9D9"),      
+    border_color=get_color_from_hex("4F4F4F"),      
     error_color=(1, 0, 0, 1),               
-    success_color=(0, 0.8, 0, 1),            
+    success_color=(0.4, 0.8, 0.4, 1),            
     disabled_color=(0.55, 0.55, 0.55, 1),       
     hint_color=(0.5, 0.5, 0.5, 1),           
 )
 
 # Dark theme
 DARK_THEME = ViewTheme(
-    bg_color=get_color_from_hex("1F1F1F"),           
+    bg_color = get_color_from_hex("1F1F1F"),           
     surface_color=get_color_from_hex("3F3F3F"),      
     primary_color=get_color_from_hex("B9D2E5"),      
     secondary_color=get_color_from_hex("165687"),   
-    text_primary_color=get_color_from_hex("FFFFFF"), 
+    text_primary_color=get_color_from_hex("B9D2E5"), 
     text_secondary_color=get_color_from_hex("B0BEC5"), 
     border_color=get_color_from_hex("2C2C2C"),      
     error_color=(1, 0.4, 0.4, 1),                   
