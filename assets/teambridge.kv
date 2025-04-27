@@ -154,12 +154,11 @@
         LinearProgressBar:
             id: progress_bar_id
             size_hint: 1, None
-            height: self.parent.size[1] * 0.015
+            height: self.parent.size[1] * 0.014
 
         BoxLayout:
             orientation: 'horizontal'
             size_hint: 1, 0.17
-            padding: 10
 
             canvas.before:
                 Color:
@@ -168,12 +167,26 @@
                     pos: self.pos
                     size: self.size
 
-            Label:
-                text: root.information_text
-                color: app.theme.text_secondary_color
-                halign: 'left'
-                valign: 'middle'
-                text_size: self.size
-                font_size: self.parent.height * 0.2
-                font_name: 'InterRegular'
+            Widget:
+                size_hint_x: 0.02
 
+            BoxLayout:
+                orientation: 'vertical'
+
+                Label:
+                    text: root.greetings_text
+                    color: app.theme.text_secondary_color
+                    halign: 'left'
+                    valign: 'bottom'
+                    text_size: self.size
+                    font_size: self.height * 0.6
+                    font_name: 'InterRegular'
+
+                Label:
+                    text: root.information_text
+                    color: app.theme.text_secondary_color
+                    halign: 'left'
+                    valign: 'top'
+                    text_size: self.size
+                    font_size: self.height * 0.6
+                    font_name: 'InterRegular'

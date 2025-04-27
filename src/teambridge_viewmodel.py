@@ -78,6 +78,7 @@ class TeamBridgeViewModel(IStateMachine):
         self._state_data = LiveData[str](str(self._state))
         self._next_action = LiveData[ViewModelAction](ViewModelAction.DEFAULT_ACTION)
         self._instruction_txt = LiveData[str]("")
+        self._greetings_txt = LiveData[str]("")
         self._information_txt = LiveData[str]("")
         self._attendance_txt = LiveData[str]("")
 
@@ -100,6 +101,7 @@ class TeamBridgeViewModel(IStateMachine):
         self._state_data.value = str(self._state)
         # Update texts
         self._instruction_txt.value = self._state.instruction_text
+        self._greetings_txt.value = self._state.greetings_text
         self._information_txt.value = self._state.information_text
         self._attendance_txt.value = self._state.attendance_text
 
@@ -141,6 +143,12 @@ class TeamBridgeViewModel(IStateMachine):
         return self._instruction_txt
 
     @property
+    def greetings_text(self) -> LiveData[str]:
+        """
+        """
+        return self._greetings_txt
+
+    @property
     def information_text(self) -> LiveData[str]:
         """
         """
@@ -165,15 +173,19 @@ class _IViewModelState(IStateBehavior[TeamBridgeViewModel], ABC):
     """
 
     @property
-    def instruction_text(self):
+    def instruction_text(self) -> str:
         return None
     
     @property
-    def information_text(self):
+    def greetings_text(self) -> str:
+        return None
+
+    @property
+    def information_text(self) -> str:
         return None
     
     @property
-    def attendance_text(self):
+    def attendance_text(self) -> str:
         return None
 
     def __repr__(self):
@@ -185,20 +197,35 @@ class _InitialState(_IViewModelState):
     Initialize the barcode scanner.
     """
 
+    # Delay in seconds between scanner opening retry
+    RETRY_DELAY = 10.0
+
     def entry(self):
         # Configure the barcode scanner
         self._fsm._scanner.configure(regex=EMPLOYEE_REGEX, 
                                      extract_group=EMPLOYEE_REGEX_GROUP,
                                      timeout=SCAN_ID_TIMEOUT,
                                      debug_mode=self._fsm._debug_mode)
+        # Try to open on entry
+        self.__open_scanner()
+        
+    def __open_scanner(self):
         # Open the scanner
-        self._fsm._scanner.open(cam_idx=self._fsm._cam_idx, scan_rate=self._fsm._scan_rate)
+        try:
+            self._fsm._scanner.open(cam_idx=self._fsm._cam_idx, scan_rate=self._fsm._scan_rate)
+        except RuntimeError as e:
+            LOGGER.warning(f"Failed to call scanner open method.", exc_info=True)
+        # Set next retry time
+        self._next_retry = time.time() + self.RETRY_DELAY
 
     def do(self) -> IStateBehavior:
         # Check if the scanner is open
         if self._fsm._scanner.is_scanning():
             # Go to scanning state
             return _ScanningState()
+        # Check if a retry should be done
+        if time.time() > self._next_retry:
+            self.__open_scanner()
         # Stay in this state as long as the scanner is closed
         return None
     
@@ -255,6 +282,10 @@ class _ScanningState(_IViewModelState):
     
     @property
     def information_text(self):
+        return ""
+
+    @property
+    def greetings_text(self):
         return ""
 
 class _ClockActionState(_IViewModelState):
@@ -320,7 +351,7 @@ class _ClockSuccessState(_IViewModelState):
         msg = self._fsm._model.get_result(self._handle)
         if msg:
             if isinstance(msg, EmployeeData):
-                return _ConsultationSuccessState(msg, timeout=10.0)
+                return _ConsultationSuccessState(msg, timeout=15.0)
             elif isinstance(msg, ModelError):
                 return _ErrorState(msg)
             else:
@@ -347,7 +378,7 @@ class _ClockSuccessState(_IViewModelState):
         return text
     
     @property
-    def information_text(self):
+    def greetings_text(self):
         # Format text according to event
         text = ""
         # Greetings
@@ -408,7 +439,7 @@ class _ConsultationSuccessState(_IViewModelState):
     It will always end when a new employee's ID is available.
     """
 
-    def __init__(self, data: EmployeeData, timeout=10.0):
+    def __init__(self, data: EmployeeData, timeout=15.0):
         super().__init__()
         # Save data and quit option
         self._data = data
@@ -448,8 +479,26 @@ class _ConsultationSuccessState(_IViewModelState):
             self._fsm.next_action = ViewModelAction.CONSULTATION
 
     @property
+    def greetings_text(self):
+        return f"{self._data.firstname} {self._data.name}"
+
+    @property
     def information_text(self):
-        return str(self._data)
+        return (f"Solde journalier : {self.format_dt(self._data.daily_worked_time)}"
+                f" / {self.format_dt(self._data.daily_scheduled_time)}"
+                f"    Balance : {self.format_dt(self._data.daily_balance)}"
+                f"    Solde mensuel : {self.format_dt(self._data.monthly_balance)}")
+
+    def format_dt(self, td: dt.timedelta):
+        # Ensure the information is available
+        if not isinstance(td, dt.timedelta):
+            return "indisponible"
+        # Available, format time
+        total_minutes = int(td.total_seconds() // 60)
+        sign = "-" if total_minutes < 0 else ""
+        abs_minutes = abs(total_minutes)
+        hours, minutes = divmod(abs_minutes, 60)
+        return f"{sign}{hours:02}:{minutes:02}"
 
 class _ErrorState(_IViewModelState):
     """

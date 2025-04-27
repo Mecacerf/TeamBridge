@@ -133,6 +133,7 @@ class MainScreen(BoxLayout):
     # Viewmodel texts
     instruction_text = StringProperty("")
     instruction_text_color = ObjectProperty((1, 1, 1, 1))
+    greetings_text = StringProperty("")
     information_text = StringProperty("")
     # Toggle buttons
     consultation_button = ObjectProperty(None)
@@ -152,6 +153,7 @@ class MainScreen(BoxLayout):
 
         # Observe the viewmodel texts
         self._viewmodel.instruction_text.observe(self._update_instruction_text)
+        self._viewmodel.greetings_text.observe(self._update_greetings_text)
         self._viewmodel.information_text.observe(self._update_information_text)
         # Observe the viewmodel next action
         self._viewmodel.get_next_action().observe(self._update_action)
@@ -168,6 +170,10 @@ class MainScreen(BoxLayout):
     def _update_instruction_text(self, txt: str):
         if txt is not None:
             self.instruction_text = txt
+
+    def _update_greetings_text(self, txt: str):
+        if txt is not None:
+            self.greetings_text = txt
 
     def _update_information_text(self, txt: str):
         if txt is not None:
