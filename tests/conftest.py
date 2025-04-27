@@ -98,12 +98,14 @@ def teambridge_model(arrange_spreadsheet_time_tracker) -> Generator[TeamBridgeMo
     model.close()
 
 @pytest.fixture
-def teambridge_viewmodel(teambridge_model)-> Generator[TeamBridgeViewModel, None, None]:
+def teambridge_viewmodel(teambridge_model, monkeypatch) -> Generator[TeamBridgeViewModel, None, None]:
     """
     Create a configured teambridge viewmodel instance.
     """
     # Create a barcode scanner
     scanner = BarcodeScanner()
+    def void(**kwargs): pass
+    monkeypatch.setattr(scanner, "close", void)
     # Create a viewmodel
     viewmodel = TeamBridgeViewModel(teambridge_model, 
                                     scanner=scanner, 
