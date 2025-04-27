@@ -200,6 +200,10 @@ class _InitialState(_IViewModelState):
     
     @property
     def instruction_text(self):
+        return "Hors service"
+    
+    @property
+    def information_text(self):
         return "Ouverture du scanner..."
 
 class _ScanningState(_IViewModelState):

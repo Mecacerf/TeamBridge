@@ -40,8 +40,14 @@ from kivy.animation import Animation
 from kivy.properties import StringProperty, ObjectProperty, NumericProperty
 from kivy.clock import Clock
 
+# Default window size
 from kivy.core.window import Window
 Window.size = (1280/1.4, 720/1.4)
+
+# Register text fonts
+from kivy.core.text import LabelBase
+LabelBase.register(name="InterRegular", fn_regular="assets/Inter_28pt-Regular.ttf")
+LabelBase.register(name="InterMedium", fn_regular="assets/Inter_28pt-Medium.ttf")
 
 # Other imports
 import time
