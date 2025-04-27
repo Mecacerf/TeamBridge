@@ -77,6 +77,9 @@ class TeamBridgeViewModel(IStateMachine):
         self._information_txt = LiveData[str]("")
         self._attendance_txt = LiveData[str]("")
 
+        # Subscribe an observer to log next action changes
+        self._next_action.observe(lambda action: LOGGER.info(f"Programed next action to {action.name}."))
+
     def run(self):
         """
         """
@@ -240,7 +243,7 @@ class _ScanningState(_IViewModelState):
     
     @property
     def instruction_text(self):
-        return "En attente de badge."
+        return "Passer le badge."
     
     @property
     def information_text(self):

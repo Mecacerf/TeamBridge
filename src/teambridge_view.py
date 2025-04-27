@@ -30,14 +30,25 @@ if os.getenv("KIVY_FORCE_ANGLE_BACKEND") == "1":
     # support OpenGL directly.
     os.environ["KIVY_GL_BACKEND"] = 'angle_sdl2'
 
-# Import kivy libraries
+# Import Kivy libraries
 from kivy.app import App
-from kivy.uix.widget import *
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.relativelayout import RelativeLayout
+from kivy.animation import Animation
+from kivy.properties import StringProperty, ObjectProperty, BooleanProperty, NumericProperty
 from kivy.clock import Clock
 
+from kivy.core.window import Window
+Window.size = (1280/1.4, 720/1.4)
+
+# Other imports
+import time
+from enum import Enum
+from view_theme import *
+
 # Run method call interval in seconds
-RUN_INTERVAL = float(1.0 / 60.0)
+RUN_INTERVAL = float(1.0 / 30.0)
 
 class TeamBridgeApp(App):
     """
@@ -46,23 +57,55 @@ class TeamBridgeApp(App):
 
     # The kv file is located in the assets/ folder
     kv_directory = "assets/"
+    
+    # Set application theme to light by default
+    # Set the rebind flag to trigger the observers when the theme changes 
+    theme = ObjectProperty(LIGHT_THEME, rebind=True)
 
-    def __init__(self, viewmodel: TeamBridgeViewModel):
+    def __init__(self, viewmodel: TeamBridgeViewModel, theme: ViewTheme=None):
         """
         Initialize the application.
 
         Args:
             viewmodel: `TeamBridgeViewModel` viewmodel instance
+            theme: `ViewTheme` optional theme to customize the UI
         """
         super().__init__()
         # Save viewmodel
         self._viewmodel = viewmodel
+        # Set theme if provided
+        if theme:
+            self.theme = theme
+
+    def get_theme(self) -> ViewTheme:
+        """
+        Get current application theme.
+
+        Returns:
+            ViewTheme: theme in use
+        """
+        return self.theme
+    
+    def set_theme(self, theme: ViewTheme):
+        """
+        Change application theme.
+
+        Args:
+            theme: `ViewTheme` new theme to use
+        """
+        self.theme = theme
+
+    def _run_viewmodel(self, _):
+        """
+        Run the viewmodel.
+        """
+        self._viewmodel.run()
 
     def build(self):
-        # Create the view and schedule the run method calls
-        view = TeamBridgeView(self._viewmodel)
-        Clock.schedule_interval(view.run, RUN_INTERVAL)
-        return view
+        # Schedule the view model run method calls
+        Clock.schedule_interval(self._run_viewmodel, RUN_INTERVAL)
+        # Create the main screen
+        return MainScreen(self._viewmodel)
 
     def on_stop(self):
         # Close the viewmodel
@@ -72,25 +115,269 @@ class TeamBridgeApp(App):
     def __repr__(self):
         return self.__class__.__name__
 
-class TeamBridgeView(BoxLayout):
+class MainScreen(BoxLayout):
+    """
+    Application main screen root object.
+    """
+
+    # Clock date and time
+    clock_time = StringProperty("")
+    clock_date = StringProperty("")
+    # Viewmodel texts
+    instruction_text = StringProperty("")
+    information_text = StringProperty("")
+
+    # State buttons
+    consultation_button = ObjectProperty(None)
+    clock_button = ObjectProperty(None)
     
     def __init__(self, viewmodel: TeamBridgeViewModel):
         super().__init__()
         # Save viewmodel
         self._viewmodel = viewmodel
 
-    def run(self, dt):
-        # Run the viewmodel
-        self._viewmodel.run()
+        # Schedule the clock time update
+        Clock.schedule_interval(self._update_clock_time, 1.0) 
 
-    def clock_action(self):
+        # Observe the viewmodel texts
+        self._viewmodel.instruction_text.observe(self._update_instruction_text)
+        self._viewmodel.information_text.observe(self._update_information_text)
+        # Observe the viewmodel next action
+        self._viewmodel.get_next_action().observe(self._update_action)
+        # Observe the viewmodel state
+        self._viewmodel.current_state.observe(self._update_state)
+
+    def _update_clock_time(self, _):
+        """
+        Update the clock time and date.
+        """
+        self.clock_time = time.strftime("%H:%M")
+        self.clock_date = time.strftime("%d %B %Y")
+
+    def _update_instruction_text(self, txt: str):
+        if txt is not None:
+            self.instruction_text = txt
+
+    def _update_information_text(self, txt: str):
+        if txt is not None:
+            self.information_text = txt
+
+    def _update_action(self, *kargs):
+        # Get next action
+        action = self._viewmodel.next_action
+        # Set button states
+        self.consultation_button.toggle_state = (action == ViewModelAction.CONSULTATION)
+        self.clock_button.toggle_state = (action == ViewModelAction.CLOCK_ACTION)
+
+    def _update_state(self, state):
+        # Set buttons state
+        self.clock_button.enabled = (state == 'ScanningState')
+        self.consultation_button.enabled = (state == 'ScanningState')
+        # Also update action
+        self._update_action()
+
+    def on_clock_action_press(self):
+        """
+        Called when the clock action button is pressed.
+        """
         self._viewmodel.next_action = ViewModelAction.CLOCK_ACTION
-        LOGGER.info(f"Set {self._viewmodel.next_action.value}.")
 
-    def consultation_action(self):
+    def on_consultation_press(self):
+        """
+        Called when the consultation button is pressed.
+        """
         self._viewmodel.next_action = ViewModelAction.CONSULTATION
-        LOGGER.info(f"Set {self._viewmodel.next_action.value}.")
 
-    def scan_action(self):
-        self._viewmodel.next_action = ViewModelAction.RESET_ACTION
-        LOGGER.info(f"Set {self._viewmodel.next_action.value}.")
+    def on_reset_press(self):
+        """
+        Called when the reset button is pressed.
+        """
+        #self._viewmodel.next_action = ViewModelAction.RESET_ACTION
+
+        app = App.get_running_app()
+        app.set_theme(DARK_THEME if app.get_theme() == LIGHT_THEME else LIGHT_THEME)
+
+class IconButton(ButtonBehavior, RelativeLayout):
+    """
+    Simple material design like icon button.
+    """
+
+    # Button properties
+    source = StringProperty(None)
+    background_color = ObjectProperty((1, 1, 1, 1))
+    actual_side = NumericProperty(0)
+    current_side = NumericProperty(0)
+
+    # Button states enumeration
+    class ButtonState(Enum):
+        # The button is disabled
+        DISABLED = 0
+        # The button is released
+        RELEASED = 1
+        # The button is pressed
+        PRESSED = 2
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # Store application instance
+        self._app = App.get_running_app()
+
+        # Define private parameters
+        self._anim = None
+        self._state = IconButton.ButtonState.DISABLED
+
+        # Update the button style on theme change
+        self._app.bind(theme=self.on_style_update)
+        # Initial style update
+        self.on_style_update()
+    
+    def on_style_update(self, *kargs):
+        """
+        Update the button style after a state change.
+        """
+        # Stop current animation (if still running)
+        if self._anim:
+            self._anim.stop(self)
+        # Define the target color and size depending on current state
+        if self._state == IconButton.ButtonState.DISABLED:
+            color = self._app.theme.disabled_color
+            side = self.actual_side * 0.98
+            duration = 0.1
+        elif self._state == IconButton.ButtonState.PRESSED:
+            color = self._app.theme.primary_color
+            side = self.actual_side * 0.98
+            duration = 0.1
+        elif self._state == IconButton.ButtonState.RELEASED:
+            color = self._app.theme.secondary_color
+            side = self.actual_side
+            duration = 0.2
+        # Start animation
+        self._anim = Animation(background_color=color, duration=duration)
+        self._anim &= Animation(current_side=side, duration=duration)
+        self._anim.start(self)
+
+    def on_parent(self, _, parent):
+        """
+        Called when the parent is defined.
+        """
+        # Sanity check
+        if parent:
+            # Bind the update size method to react when available place changes
+            parent.bind(size=self._update_side)
+            # Initial update of the size
+            self._update_side()
+
+    def _update_side(self, *args):
+        """
+        Called when the widget size must be evaluated.
+        """
+        # Sanity check the parent widget
+        if self.parent:
+            # Set the square side to the minimal available size in width and height
+            self.actual_side = min(self.parent.size)
+            # Update the style to automatically adapt the widget size
+            self.on_style_update()
+
+    @property
+    def pressed(self) -> bool:
+        """
+        Returns:
+            bool: True if button pressed, False otherwise
+        """
+        return (self._state == IconButton.ButtonState.PRESSED)
+
+    @pressed.setter
+    def pressed(self, value: bool):
+        """
+        Args:
+            pressed: `bool` True for button press, False for button released
+        """
+        # The state cannot change if button is disabled
+        if self._state == IconButton.ButtonState.DISABLED:
+            return
+        
+        # Set state accordingly
+        self._state = IconButton.ButtonState.PRESSED if value else IconButton.ButtonState.RELEASED
+        # Update button style
+        self.on_style_update()
+
+    @property
+    def enabled(self) -> bool:
+        """
+        Returns:
+            bool: True if enabled, False if disabled
+        """
+        return (self._state != IconButton.ButtonState.DISABLED)
+    
+    @enabled.setter
+    def enabled(self, value: bool):
+        """
+        Args:
+            value: `bool` enabled state
+        """
+        # Set state accordingly
+        if not value:
+            # Set disabled
+            self._state = IconButton.ButtonState.DISABLED
+        elif self._state == IconButton.ButtonState.DISABLED:
+            # Set enabled, initially released
+            self._state = IconButton.ButtonState.RELEASED
+        # Update button style
+        self.on_style_update()
+
+    def on_press(self):
+        # Set in pressed state
+        self.pressed = True
+
+    def on_release(self):
+        # Set in released state
+        self.pressed = False
+
+class ToggleIconButton(IconButton):
+    """
+    Icon button that overrides the default pressed/released behavior
+    to show a boolean state.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Define toggle attribute
+        self._toggle_state = False
+
+    @property
+    def toggle_state(self) -> bool:
+        """
+        Returns:
+            bool: current button state
+        """
+        return self._toggle_state
+    
+    @toggle_state.setter
+    def toggle_state(self, value: bool):
+        """
+        Args:
+            value: `bool` new button state
+        """
+        self._toggle_state = value
+        # Toggled button is pressed
+        self.pressed = value
+
+    @IconButton.enabled.setter
+    def enabled(self, value: bool):
+        """
+        Override default enabled setter to automatically apply the 
+        toggled state when enabled.
+        """
+        # Call the super setter
+        super(ToggleIconButton, self.__class__).enabled.fset(self, value)
+        # Toggled button is pressed
+        self.pressed = value
+
+    def on_press(self):
+        # Delete default behavior
+        pass
+
+    def on_release(self):
+        # Delete default behavior
+        pass

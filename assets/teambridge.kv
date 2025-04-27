@@ -1,23 +1,147 @@
 #:kivy 1.0.9
 
-<TeamBridgeView>:
-    orientation: 'vertical'  # only needed for BoxLayout
-    GridLayout:
-        cols: 3
-        rows: 1
-        spacing: 10
-        padding: 10
-        size_hint: 1, 1  # fill parent
+<IconButton>:
+    size_hint: None, None
+    pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+    size: self.current_side, self.current_side
+
+    canvas.before:
+        Color:
+            rgba: 0, 0, 0, 0.2
+        RoundedRectangle:
+            pos: self.size[0]*0.03, -self.size[0]*0.03
+            size: self.size
+            radius: [self.size[0]*0.22]
+        Color:
+            rgba: self.background_color
+        RoundedRectangle:
+            pos: 0, 0
+            size: self.size
+            radius: [self.size[0]*0.2]
+
+    Image:
+        size_hint: 0.6, 0.6
         pos_hint: {"center_x": 0.5, "center_y": 0.5}
+        source: root.source
+        fit_mode: 'contain'
 
-        Button:
-            text: 'clock action'
-            on_press: root.clock_action()
+<MainScreen>:
+    consultation_button: consultation_button_id
+    clock_button: clock_button_id
 
-        Button:
-            text: 'consultation action'
-            on_press: root.consultation_action()
+    orientation: 'vertical'
 
-        Button:
-            text: 'Reset action'
-            on_press: root.scan_action()
+    canvas.before:
+        Color:
+            rgba: app.theme.bg_color
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    BoxLayout:
+        orientation: 'vertical'
+
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: 1, 0.2
+
+            Widget:
+                size_hint_x: 0.04
+
+            BoxLayout:
+                orientation: 'vertical'
+                size_hint: 1, 1
+
+                Widget:
+                    size_hint: 1, 0.05
+
+                Label:
+                    text: root.clock_time
+                    halign: 'left'
+                    valign: 'bottom'
+                    text_size: self.size
+                    font_size: self.parent.height * 0.4
+                    color: app.theme.text_secondary_color
+
+                Label:
+                    text: root.clock_date
+                    halign: 'left'
+                    valign: 'top'
+                    text_size: self.size
+                    font_size: self.parent.height * 0.2
+                    color: app.theme.text_secondary_color
+
+            Widget:
+
+            Image:
+                source: 'assets/logo_name.png'
+                fit_mode: 'contain'
+                size_hint_x: None
+                width: self.texture_size[0] * (self.parent.height / self.texture_size[1]) 
+                    
+        Widget:
+            size_hint: 1, 0.18
+
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: 1, 0.4
+
+            Widget:
+                size_hint: 0.1, 1
+
+            AnchorLayout:
+                size_hint: 0.26, 1
+                
+                ToggleIconButton:
+                    id: consultation_button_id
+                    source: 'assets/time.png'
+                    on_press: if self.enabled: root.on_consultation_press()
+           
+            AnchorLayout:
+                size_hint: 0.26, 1
+                
+                ToggleIconButton:
+                    id: clock_button_id
+                    source: 'assets/start_pause.png'
+                    on_press: if self.enabled: root.on_clock_action_press()
+
+            AnchorLayout:
+                size_hint: 0.26, 1
+
+                IconButton:
+                    source: 'assets/group.png'
+                    on_press: if self.enabled: root.on_reset_press()
+
+            Widget:
+                size_hint: 0.1, 1
+
+        Label:
+            size_hint: 1, 0.3
+            text: f"[b]{root.instruction_text}[/b]"
+            markup: True
+            color: app.theme.text_primary_color
+            halign: 'center'
+            valign: 'center'
+            text_size: self.size
+            font_size: self.height * 0.3
+
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: 1, 0.17
+            padding: 10
+
+            canvas.before:
+                Color:
+                    rgba: app.theme.surface_color
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+
+            Label:
+                text: root.information_text
+                color: app.theme.text_secondary_color
+                halign: 'left'
+                valign: 'middle'
+                text_size: self.size
+                font_size: self.parent.height * 0.2
+
