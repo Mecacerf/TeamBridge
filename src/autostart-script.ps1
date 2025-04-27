@@ -36,7 +36,7 @@ if(Test-Path $venvActivate)
     pip install -r requirements.txt
 
     # Run teambridge
-    python src\main.py --fullscreen --auto-wakeup --repository samples/
+    python src\main.py --fullscreen --repository assets/
 
     # Pause to allow the user to consult the logs
     pause

@@ -13,5 +13,5 @@
 Set-Location -Path (Get-Item $PSScriptRoot)
 
 # Run TeamBridge
-.\TeamBridge.exe --repository samples/ --auto-wakeup --fullscreen
+.\TeamBridge.exe --repository assets/ --fullscreen
 pause
