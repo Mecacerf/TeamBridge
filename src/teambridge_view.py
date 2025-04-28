@@ -32,6 +32,7 @@ if os.getenv("KIVY_FORCE_ANGLE_BACKEND") == "1":
 
 # Import Kivy libraries
 from kivy.app import App
+from kivy.core.window import Window
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.relativelayout import RelativeLayout
@@ -39,10 +40,6 @@ from kivy.uix.progressbar import ProgressBar
 from kivy.animation import Animation
 from kivy.properties import StringProperty, ObjectProperty, NumericProperty
 from kivy.clock import Clock
-
-# Default window size
-from kivy.core.window import Window
-Window.size = (1280/1.4, 720/1.4)
 
 # Register text fonts
 from kivy.core.text import LabelBase
@@ -69,17 +66,24 @@ class TeamBridgeApp(App):
     # Set the rebind flag to trigger the observers when the theme changes 
     theme = ObjectProperty(LIGHT_THEME, rebind=True)
 
-    def __init__(self, viewmodel: TeamBridgeViewModel, theme: ViewTheme=None):
+    def __init__(self, viewmodel: TeamBridgeViewModel, fullscreen=False, theme: ViewTheme=None):
         """
         Initialize the application.
 
         Args:
             viewmodel: `TeamBridgeViewModel` viewmodel instance
+            fullscreen: `bool` enable fullscreen mode
             theme: `ViewTheme` optional theme to customize the UI
         """
         super().__init__()
         # Save viewmodel
         self._viewmodel = viewmodel
+
+        # Set fullscreen mode
+        Window.fullscreen = 'auto' if fullscreen else False
+        if not fullscreen:
+            Window.size = (1137, 640)
+
         # Set theme if provided
         if theme:
             self.theme = theme
