@@ -1,0 +1,7 @@
+Kivy==2.3.1
+Kivy_examples==2.3.1
+numpy==2.2.5
+opencv_python==4.11.0.86
+openpyxl==3.1.5
+pyzbar==0.1.9
+pyinstaller
