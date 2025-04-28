@@ -46,6 +46,12 @@ from kivy.core.text import LabelBase
 LabelBase.register(name="InterRegular", fn_regular="assets/Inter_28pt-Regular.ttf")
 LabelBase.register(name="InterMedium", fn_regular="assets/Inter_28pt-Medium.ttf")
 
+# Import audio files
+from kivy.core.audio import SoundLoader
+SOUND_CLOCKED = SoundLoader.load("assets/clocked.wav")
+SOUND_SCANNED = SoundLoader.load("assets/scanned.wav")
+SOUND_ERROR   = SoundLoader.load("assets/error.mp3")
+
 # Other imports
 import time
 from enum import Enum
@@ -151,6 +157,8 @@ class MainScreen(BoxLayout):
         self._viewmodel = viewmodel
         # Save running application
         self._app = App.get_running_app()
+        # Save playing/finished sound
+        self._sound = SOUND_CLOCKED
 
         # Schedule the clock time update
         Clock.schedule_interval(self._update_clock_time, 1.0) 
@@ -212,6 +220,23 @@ class MainScreen(BoxLayout):
         # Set the progress bar loading state
         loading_states = ['ClockActionState', 'ClockSuccessState', 'ConsultationActionState']
         self.progress_bar.loading = (state in loading_states)
+
+        # Play sound depending on current state
+        state_sounds = {
+            'ClockActionState': SOUND_SCANNED,
+            'ConsultationActionState': SOUND_SCANNED,
+            'ClockSuccessState': SOUND_CLOCKED,
+            'ConsultationSuccessState': SOUND_CLOCKED,
+            'ErrorState': SOUND_ERROR
+        }
+        # Check if state has an available sound
+        if state in state_sounds and state_sounds[state]:
+            # Stop previous sound if still playing
+            self._sound.stop()
+            # Play new sound
+            self._sound = state_sounds[state]
+            self._sound.volume = 1.0
+            self._sound.play()
 
     def on_clock_action_press(self):
         """
