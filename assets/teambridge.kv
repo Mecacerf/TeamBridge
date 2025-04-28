@@ -36,7 +36,7 @@
             pos: self.pos
             size: self.size
         Color:
-            rgba: app.theme.primary_color
+            rgba: (app.theme.primary_color[0], app.theme.primary_color[1], app.theme.primary_color[2], self.bar_alpha)
         Rectangle:
             pos: (self.x, self.y)
             size: (self.width * (self.value / self.max) + self.width / 3.0 * math.sin(self.value / self.max * math.pi), self.height)

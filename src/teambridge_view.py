@@ -440,6 +440,9 @@ class LinearProgressBar(ProgressBar):
     is loading or not).
     """
 
+    # Progress bar opactity
+    bar_alpha = NumericProperty(1.0)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Set max value
@@ -463,14 +466,16 @@ class LinearProgressBar(ProgressBar):
         Args:
             value: `bool` loading flag
         """
-        # Do not start animation if already started
-        if value and self.loading:
-            return
-        # Update flag
+        # Update loading flag
+        last_loading = self._loading
         self._loading = value
-        # Start animation if loading is set
-        if self._loading:
+
+        # Start animation on loading rising edge
+        if not last_loading and self._loading:
             self._start_anim()
+        # Stop animation on loading falling edge
+        elif last_loading and not self._loading:
+            self._stop_anim()
 
     def _start_anim(self, *kargs):
         """
@@ -480,6 +485,18 @@ class LinearProgressBar(ProgressBar):
         self.value = 0
         # Reschedule animation if still loading
         if self._loading:
+            # Animate value for sliding effect
             self._anim = Animation(value=self.max, duration=2.0, transition='linear')
+            # Fade in the progress bar
+            self._anim &= Animation(bar_alpha=1.0, duration=0.4, transition='linear')
+            # Recall this function on completion and start animation
             self._anim.bind(on_complete=self._start_anim)
             self._anim.start(self)
+
+    def _stop_anim(self):
+        """
+        Stop the loading animation smoothly.
+        """
+        # Fade out the progress bar
+        fadeout = Animation(bar_alpha=0.0, duration=0.4, transition='linear')
+        fadeout.start(self)
