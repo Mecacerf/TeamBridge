@@ -46,6 +46,12 @@ from kivy.core.text import LabelBase
 LabelBase.register(name="InterRegular", fn_regular="assets/Inter_28pt-Regular.ttf")
 LabelBase.register(name="InterMedium", fn_regular="assets/Inter_28pt-Medium.ttf")
 
+# Import audio files
+from kivy.core.audio import SoundLoader
+SOUND_CLOCKED = SoundLoader.load("assets/clocked.wav")
+SOUND_SCANNED = SoundLoader.load("assets/scanned.wav")
+SOUND_ERROR   = SoundLoader.load("assets/error.mp3")
+
 # Other imports
 import time
 from enum import Enum
@@ -151,6 +157,8 @@ class MainScreen(BoxLayout):
         self._viewmodel = viewmodel
         # Save running application
         self._app = App.get_running_app()
+        # Save playing/finished sound
+        self._sound = SOUND_CLOCKED
 
         # Schedule the clock time update
         Clock.schedule_interval(self._update_clock_time, 1.0) 
@@ -212,6 +220,23 @@ class MainScreen(BoxLayout):
         # Set the progress bar loading state
         loading_states = ['ClockActionState', 'ClockSuccessState', 'ConsultationActionState']
         self.progress_bar.loading = (state in loading_states)
+
+        # Play sound depending on current state
+        state_sounds = {
+            'ClockActionState': SOUND_SCANNED,
+            'ConsultationActionState': SOUND_SCANNED,
+            'ClockSuccessState': SOUND_CLOCKED,
+            'ConsultationSuccessState': SOUND_CLOCKED,
+            'ErrorState': SOUND_ERROR
+        }
+        # Check if state has an available sound
+        if state in state_sounds and state_sounds[state]:
+            # Stop previous sound if still playing
+            self._sound.stop()
+            # Play new sound
+            self._sound = state_sounds[state]
+            self._sound.volume = 1.0
+            self._sound.play()
 
     def on_clock_action_press(self):
         """
@@ -440,6 +465,9 @@ class LinearProgressBar(ProgressBar):
     is loading or not).
     """
 
+    # Progress bar opactity
+    bar_alpha = NumericProperty(1.0)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Set max value
@@ -463,14 +491,16 @@ class LinearProgressBar(ProgressBar):
         Args:
             value: `bool` loading flag
         """
-        # Do not start animation if already started
-        if value and self.loading:
-            return
-        # Update flag
+        # Update loading flag
+        last_loading = self._loading
         self._loading = value
-        # Start animation if loading is set
-        if self._loading:
+
+        # Start animation on loading rising edge
+        if not last_loading and self._loading:
             self._start_anim()
+        # Stop animation on loading falling edge
+        elif last_loading and not self._loading:
+            self._stop_anim()
 
     def _start_anim(self, *kargs):
         """
@@ -480,6 +510,18 @@ class LinearProgressBar(ProgressBar):
         self.value = 0
         # Reschedule animation if still loading
         if self._loading:
+            # Animate value for sliding effect
             self._anim = Animation(value=self.max, duration=2.0, transition='linear')
+            # Fade in the progress bar
+            self._anim &= Animation(bar_alpha=1.0, duration=0.4, transition='linear')
+            # Recall this function on completion and start animation
             self._anim.bind(on_complete=self._start_anim)
             self._anim.start(self)
+
+    def _stop_anim(self):
+        """
+        Stop the loading animation smoothly.
+        """
+        # Fade out the progress bar
+        fadeout = Animation(bar_alpha=0.0, duration=0.4, transition='linear')
+        fadeout.start(self)
