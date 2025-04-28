@@ -37,7 +37,7 @@ def main() -> int:
     parser.add_argument("--scan-rate", type=int, default=6, help="Set scanning refresh rate [Hz]")
     parser.add_argument("--camera-id", type=int, default=0, help="Select the camera that will be used for scanning")
     parser.add_argument("--fullscreen", action="store_true", help="Enable fullscreen mode")
-    parser.add_argument("--auto-wakeup", action="store_true", help="Enable auto screen wakeup on scanning event")
+    parser.add_argument("--auto-wakeup", action="store_true", help="Enable auto screen wakeup on scanning event [NOT IMPLEMENTED]")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     # Parse the arguments
     args = parser.parse_args()
@@ -57,7 +57,7 @@ def main() -> int:
     # Create the application viewmodel
     viewmodel = TeamBridgeViewModel(model=model, scanner=scanner, debug_mode=args.debug, scan_rate=args.scan_rate, cam_idx=args.camera_id)
     # Create the teambridge application
-    app = TeamBridgeApp(viewmodel)
+    app = TeamBridgeApp(viewmodel, fullscreen=args.fullscreen)
 
     logger.info(f"Starting application '{app}'.")
     app.run()
