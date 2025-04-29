@@ -48,8 +48,8 @@ LabelBase.register(name="InterMedium", fn_regular="assets/Inter_28pt-Medium.ttf"
 
 # Import audio files
 from kivy.core.audio import SoundLoader
-SOUND_CLOCKED = SoundLoader.load("assets/clocked.wav")
-SOUND_SCANNED = SoundLoader.load("assets/scanned.wav")
+SOUND_CLOCKED = SoundLoader.load("assets/clocked.mp3")
+SOUND_SCANNED = SoundLoader.load("assets/scanned.mp3")
 SOUND_ERROR   = SoundLoader.load("assets/error.mp3")
 
 # Other imports
@@ -226,7 +226,6 @@ class MainScreen(BoxLayout):
             'ClockActionState': SOUND_SCANNED,
             'ConsultationActionState': SOUND_SCANNED,
             'ClockSuccessState': SOUND_CLOCKED,
-            'ConsultationSuccessState': SOUND_CLOCKED,
             'ErrorState': SOUND_ERROR
         }
         # Check if state has an available sound
