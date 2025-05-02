@@ -33,12 +33,13 @@ if os.getenv("KIVY_FORCE_ANGLE_BACKEND") == "1":
 # Import Kivy libraries
 from kivy.app import App
 from kivy.core.window import Window
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.progressbar import ProgressBar
 from kivy.animation import Animation
-from kivy.properties import StringProperty, ObjectProperty, NumericProperty
+from kivy.properties import StringProperty, ObjectProperty, NumericProperty, DictProperty
 from kivy.clock import Clock
 
 # Register text fonts
@@ -132,7 +133,7 @@ class TeamBridgeApp(App):
     def __repr__(self):
         return self.__class__.__name__
 
-class MainScreen(BoxLayout):
+class MainScreen(FloatLayout):
     """
     Application main screen root object.
     """
@@ -150,6 +151,8 @@ class MainScreen(BoxLayout):
     clock_button = ObjectProperty(None)
     # Progress bar
     progress_bar = ObjectProperty(None)
+    # Sliding box layout for information panel
+    sliding_box_layout = ObjectProperty(None)
     
     def __init__(self, viewmodel: TeamBridgeViewModel):
         super().__init__()
@@ -221,6 +224,9 @@ class MainScreen(BoxLayout):
         loading_states = ['ClockActionState', 'ClockSuccessState', 'ConsultationActionState']
         self.progress_bar.loading = (state in loading_states)
 
+        # Set the bottom panel expanded when in consultation success state
+        self.sliding_box_layout.expanded = (state == 'ConsultationSuccessState')
+
         # Play sound depending on current state
         state_sounds = {
             'ClockActionState': SOUND_SCANNED,
@@ -270,8 +276,7 @@ class MainScreen(BoxLayout):
         """
         Called when the reset button is pressed.
         """
-        # TODO: test
-        # self._app.set_theme(DARK_THEME if self._app.get_theme() == LIGHT_THEME else LIGHT_THEME)
+        self._app.set_theme(DARK_THEME if self._app.get_theme() == LIGHT_THEME else LIGHT_THEME)
 
 class IconButton(ButtonBehavior, RelativeLayout):
     """
@@ -524,3 +529,73 @@ class LinearProgressBar(ProgressBar):
         # Fade out the progress bar
         fadeout = Animation(bar_alpha=0.0, duration=0.4, transition='linear')
         fadeout.start(self)
+
+class SlidingBoxLayout(BoxLayout):
+    """
+    A BoxLayout that can be expanded and collapsed. Typically added inside a
+    FloatLayout.
+    """
+
+    # Collapsed position
+    collapsed_pos = DictProperty({'x': 0, 'y': -1})
+    # Expanded position
+    expanded_pos = DictProperty({'x': 0, 'y': 0})
+    # Animation duration
+    duration = NumericProperty(1.0)
+    # Current layout position
+    current_pos = DictProperty({'x': 0, 'y': 0})
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Create animation
+        self._anim = None
+        # Save current state
+        self._is_expanded = False
+
+    def on_kv_post(self, base_widget):
+        super().on_kv_post(base_widget)
+        # Set position to initially collapsed
+        self.current_pos = self.collapsed_pos
+
+    @property
+    def expanded(self) -> bool:
+        """
+        Returns:
+            bool: expanded state
+        """
+        return self._is_expanded
+    
+    @expanded.setter
+    def expanded(self, value: bool):
+        """
+        Set expanded state.
+
+        Args:
+            value: `bool` expanded state
+        """
+        # Check if state must change
+        if self._is_expanded == value:
+            # Nothing to do
+            return
+        
+        # Change the state
+        self._is_expanded = value
+        # Cancel running animation
+        if self._anim:
+            self._anim.cancel(self)
+        # Create and start next animation
+        self._anim = Animation(
+            current_pos=self.expanded_pos if self._is_expanded else self.collapsed_pos, 
+            duration=self.duration, transition='out_quad')
+        self._anim.start(self)
+
+    def on_touch_down(self, touch):
+        """
+        Eat the touch event to prevent pressing a button behind the panel.
+        """
+        # Check the panel is touched
+        if self.collide_point(*touch.pos):
+            # Eat the event
+            return True
+        # Normal behavior
+        return super().on_touch_down(touch)

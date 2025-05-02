@@ -1,5 +1,13 @@
-#:kivy 1.0.9
+#:kivy 2.3.0
 #:import math math
+
+#:set header_height_hint 0.15
+#:set buttons_height_hint 0.35
+#:set instruction_text_height_hint 0.25
+#:set footer_height_hint 0.15
+#:set top_space_height_hint 0.1
+
+#:set progress_bar_y_hint 0.015
 
 <IconButton>:
     size_hint: None, None
@@ -26,7 +34,6 @@
         source: root.source
         fit_mode: 'contain'
 
-
 <LinearProgressBar>:
     # Use canvas.after to cover legacy bar
     canvas.after:
@@ -45,28 +52,37 @@
         Rectangle:
             pos: (self.x, self.y)
             size: (self.width * (self.value / self.max) - self.width / 2.0 * math.sin(self.value / self.max * math.pi), self.height)
-                
+
+<SlidingBoxLayout>:
+    size_hint: 1, 1
+    pos_hint: self.current_pos
+
 <MainScreen>:
     consultation_button: consultation_button_id
     clock_button: clock_button_id
     progress_bar: progress_bar_id
+    sliding_box_layout: sliding_box_layout_id
 
-    orientation: 'vertical'
-
-    canvas.before:
-        Color:
-            rgba: app.theme.bg_color
-        Rectangle:
-            pos: self.pos
-            size: self.size
-
+    # Main screen vertical box layout
     BoxLayout:
+        size_hint: 1, 1
+        pos_hint: {'x': 0, 'y': 0}
         orientation: 'vertical'
 
+        # Set the background color for the main screen
+        canvas.before:
+            Color:
+                rgba: app.theme.bg_color
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        # Main screen header
         BoxLayout:
             orientation: 'horizontal'
-            size_hint: 1, 0.2
+            size_hint: 1, header_height_hint
 
+            # Left border
             Widget:
                 size_hint_x: 0.05
 
@@ -74,6 +90,7 @@
                 orientation: 'vertical'
                 size_hint: 1, 1
 
+                # Top border
                 Widget:
                     size_hint: 1, 0.2
 
@@ -97,22 +114,27 @@
 
             Widget:
 
+            # Right justified logo
             Image:
                 source: 'assets/logo_name.png'
                 fit_mode: 'contain'
                 size_hint_x: None
                 width: self.texture_size[0] * (self.parent.height / self.texture_size[1]) 
-                    
-        Widget:
-            size_hint: 1, 0.18
 
+        # Leave some space at the top to center the buttons     
+        Widget:
+            size_hint: 1, top_space_height_hint
+
+        # Horizontal box layout for buttons
         BoxLayout:
             orientation: 'horizontal'
-            size_hint: 1, 0.4
+            size_hint: 1, buttons_height_hint
 
+            # Left border
             Widget:
                 size_hint: 0.1, 1
 
+            # Use 3 anchor layouts to center the square buttons
             AnchorLayout:
                 size_hint: 0.26, 1
                 
@@ -120,7 +142,7 @@
                     id: consultation_button_id
                     source: 'assets/time.png'
                     on_press: if self.enabled: root.on_consultation_press()
-           
+        
             AnchorLayout:
                 size_hint: 0.26, 1
                 
@@ -134,14 +156,14 @@
 
                 IconButton:
                     source: 'assets/group.png'
-                    #on_press: if self.enabled: root.on_attendance_press()
-                    on_press: root.on_attendance_press()
+                    on_press: if self.enabled: root.on_attendance_press()
 
+            # Right border
             Widget:
                 size_hint: 0.1, 1
 
         Label:
-            size_hint: 1, 0.3
+            size_hint: 1, instruction_text_height_hint
             text: f"[b]{root.instruction_text}[/b]"
             markup: True
             color: root.instruction_text_color
@@ -151,21 +173,36 @@
             font_size: self.height * 0.3
             font_name: 'InterMedium'
 
+        Widget:
+            size_hint: 1, footer_height_hint
+
+    # The sliding box layout used to display pieces of information
+    # is drawn above the main screen.
+    SlidingBoxLayout:
+        id: sliding_box_layout_id
+        orientation: 'vertical'
+        collapsed_pos: {'x': 0, 'y': -1.0 + footer_height_hint}
+        expanded_pos: {'x': 0, 'y': -header_height_hint}
+        duration: 0.6
+
+        canvas.before:
+            Color:
+                rgba: app.theme.surface_color
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        # Draw the progress bar 
         LinearProgressBar:
             id: progress_bar_id
             size_hint: 1, None
-            height: self.parent.size[1] * 0.014
+            height: self.parent.height * progress_bar_y_hint
 
+        # This horizontal box layout holds the information panel title
+        # that is always visible even when collapsed.
         BoxLayout:
             orientation: 'horizontal'
-            size_hint: 1, 0.17
-
-            canvas.before:
-                Color:
-                    rgba: app.theme.surface_color
-                Rectangle:
-                    pos: self.pos
-                    size: self.size
+            size_hint: 1, footer_height_hint - progress_bar_y_hint
 
             Widget:
                 size_hint_x: 0.02
@@ -190,3 +227,14 @@
                     text_size: self.size
                     font_size: self.height * 0.6
                     font_name: 'InterRegular'
+
+        # Hold the current information panel
+        Widget:
+            size_hint: 1, 1 - footer_height_hint - progress_bar_y_hint
+
+            canvas.before:
+                Color:
+                    rgba: app.theme.border_color
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
