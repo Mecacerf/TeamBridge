@@ -57,11 +57,20 @@
     size_hint: 1, 1
     pos_hint: self.current_pos
 
+<IconLabel>:
+    font_name: 'md-icons'
+    color: app.theme.primary_color
+    halign: 'center'
+    valign: 'center'
+    text_size: self.size
+    font_size: self.height * 0.6
+
 <MainScreen>:
     consultation_button: consultation_button_id
     clock_button: clock_button_id
     progress_bar: progress_bar_id
     sliding_box_layout: sliding_box_layout_id
+    collapse_panel: collapse_panel_id
 
     # Main screen vertical box layout
     BoxLayout:
@@ -184,6 +193,7 @@
         collapsed_pos: {'x': 0, 'y': -1.0 + footer_height_hint}
         expanded_pos: {'x': 0, 'y': -header_height_hint}
         duration: 0.6
+        on_panel_press: root.on_info_panel_press()
 
         canvas.before:
             Color:
@@ -208,6 +218,7 @@
                 size_hint_x: 0.02
 
             BoxLayout:
+                size_hint_x: 0.48
                 orientation: 'vertical'
 
                 Label:
@@ -228,13 +239,17 @@
                     font_size: self.height * 0.6
                     font_name: 'InterRegular'
 
+            Widget:
+                size_hint_x: 0.4
+
+            IconLabel:
+                id: collapse_panel_id
+                size_hint_x: 0.1
+                icon_code: 'F0792'
+
         # Hold the current information panel
-        Widget:
+        BoxLayout:
+            orientation: 'vertical'
             size_hint: 1, 1 - footer_height_hint - progress_bar_y_hint
 
-            canvas.before:
-                Color:
-                    rgba: app.theme.border_color
-                Rectangle:
-                    pos: self.pos
-                    size: self.size
+

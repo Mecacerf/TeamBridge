@@ -33,6 +33,7 @@ if os.getenv("KIVY_FORCE_ANGLE_BACKEND") == "1":
 # Import Kivy libraries
 from kivy.app import App
 from kivy.core.window import Window
+from kivy.uix.label import Label
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import ButtonBehavior
@@ -46,6 +47,8 @@ from kivy.clock import Clock
 from kivy.core.text import LabelBase
 LabelBase.register(name="InterRegular", fn_regular="assets/Inter_28pt-Regular.ttf")
 LabelBase.register(name="InterMedium", fn_regular="assets/Inter_28pt-Medium.ttf")
+# Register material design icons font
+LabelBase.register(name="md-icons", fn_regular="assets/md-icons/MaterialDesignIconsDesktop.ttf")
 
 # Import audio files
 from kivy.core.audio import SoundLoader
@@ -153,6 +156,8 @@ class MainScreen(FloatLayout):
     progress_bar = ObjectProperty(None)
     # Sliding box layout for information panel
     sliding_box_layout = ObjectProperty(None)
+    # Collapse panel information icon
+    collapse_panel = ObjectProperty(None)
     
     def __init__(self, viewmodel: TeamBridgeViewModel):
         super().__init__()
@@ -172,6 +177,9 @@ class MainScreen(FloatLayout):
         self._viewmodel.information_text.observe(self._update_information_text)
         # Observe the viewmodel state
         self._viewmodel.current_state.observe(self._update_state)
+
+        # Initialize default states
+        self.collapse_panel.opacity = 0.0
 
     def _update_clock_time(self, _):
         """
@@ -225,7 +233,10 @@ class MainScreen(FloatLayout):
         self.progress_bar.loading = (state in loading_states)
 
         # Set the bottom panel expanded when in consultation success state
-        self.sliding_box_layout.expanded = (state == 'ConsultationSuccessState')
+        show_panel = (state == 'ConsultationSuccessState')
+        self.sliding_box_layout.expanded = show_panel
+        # Show the collapse panel icon when the panel is expanded
+        Animation(opacity=1.0 if show_panel else 0.0, duration=0.5).start(self.collapse_panel)
 
         # Play sound depending on current state
         state_sounds = {
@@ -277,6 +288,15 @@ class MainScreen(FloatLayout):
         Called when the reset button is pressed.
         """
         self._app.set_theme(DARK_THEME if self._app.get_theme() == LIGHT_THEME else LIGHT_THEME)
+
+    def on_info_panel_press(self):
+        """
+        Called when the information panel is pressed to collapse it.
+        """
+        # Reset to waiting state if in consultation success state.
+        if self._viewmodel.current_state.value == 'ConsultationSuccessState':
+            # Send reset signal
+            self._viewmodel.next_action = ViewModelAction.RESET_TO_CLOCK_ACTION
 
 class IconButton(ButtonBehavior, RelativeLayout):
     """
@@ -551,11 +571,16 @@ class SlidingBoxLayout(BoxLayout):
         self._anim = None
         # Save current state
         self._is_expanded = False
+        # Register the panel press event
+        self.register_event_type('on_panel_press')
 
     def on_kv_post(self, base_widget):
         super().on_kv_post(base_widget)
         # Set position to initially collapsed
         self.current_pos = self.collapsed_pos
+
+    def on_panel_press(self):
+        pass
 
     @property
     def expanded(self) -> bool:
@@ -595,7 +620,23 @@ class SlidingBoxLayout(BoxLayout):
         """
         # Check the panel is touched
         if self.collide_point(*touch.pos):
-            # Eat the event
+            # Dispatch the event and eat it
+            self.dispatch('on_panel_press')
             return True
         # Normal behavior
         return super().on_touch_down(touch)
+
+class IconLabel(Label):
+    """
+    Simple label containing an icon from the material design icons font.
+    """
+
+    # Icon hexadecimal code
+    icon_code = StringProperty("blank")
+
+    def on_icon_code(self, *args):
+        try:
+            self.text = chr(int(self.icon_code, 16))
+        except ValueError:
+            self.text = ""
+            LOGGER.warning("Cannot convert icon code to unicode.", exc_info=True)
