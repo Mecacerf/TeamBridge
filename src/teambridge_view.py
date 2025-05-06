@@ -4,7 +4,10 @@ File: time_tracker_view.py
 Author: Bastian Cerf
 Date: 02/03/2025
 Description: 
-    The view is responsible of displaying the view model state in an elegant manner.
+    This Kivy-based view displays dynamic text content provided by the ViewModel and
+    interacts with it through the next action signal. It serves as the presentation
+    layer, updating its interface based on ViewModel data and sending user-triggered 
+    events back to the ViewModel to drive application logic.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -66,7 +69,8 @@ RUN_INTERVAL = float(1.0 / 30.0)
 
 class TeamBridgeApp(App):
     """
-    Teambridge application class. The application starts the graphic library and create the view.
+    Teambridge application class. The application starts the graphic library and 
+    create the main screen.
     """
 
     # The kv file is located in the assets/ folder
@@ -138,26 +142,32 @@ class TeamBridgeApp(App):
 
 class MainScreen(FloatLayout):
     """
-    Application main screen root object.
+    Application main screen.
     """
 
+    ## Properties used by the kv file
     # Clock date and time
     clock_time = StringProperty("")
     clock_date = StringProperty("")
-    # Viewmodel texts
-    instruction_text = StringProperty("")
-    instruction_text_color = ObjectProperty((1, 1, 1, 1))
-    greetings_text = StringProperty("")
-    information_text = StringProperty("")
+    # Main title and subtitle texts
+    main_title_text = StringProperty("")
+    main_title_color = ObjectProperty((1, 1, 1, 1))
+    main_subtitle_text = StringProperty("")
+    # Panel title, subtitle and content texts
+    panel_title_text = StringProperty("")
+    panel_subtitle_text = StringProperty("")
+    panel_content_text = StringProperty("")
+
+    ## Properties provided by the kv file
     # Toggle buttons
     consultation_button = ObjectProperty(None)
     clock_button = ObjectProperty(None)
-    # Progress bar
+    # Linear progress bar
     progress_bar = ObjectProperty(None)
     # Sliding box layout for information panel
     sliding_box_layout = ObjectProperty(None)
     # Collapse panel information icon
-    collapse_panel = ObjectProperty(None)
+    collapse_panel_icon = ObjectProperty(None)
     
     def __init__(self, viewmodel: TeamBridgeViewModel):
         super().__init__()
@@ -172,14 +182,16 @@ class MainScreen(FloatLayout):
         Clock.schedule_interval(self._update_clock_time, 1.0) 
 
         # Observe the viewmodel texts
-        self._viewmodel.instruction_text.observe(self._update_instruction_text)
-        self._viewmodel.greetings_text.observe(self._update_greetings_text)
-        self._viewmodel.information_text.observe(self._update_information_text)
+        self._viewmodel.main_title_text.observe(self._upd_main_title)
+        self._viewmodel.main_subtitle_text.observe(self._upd_main_subtitle)
+        self._viewmodel.panel_title_text.observe(self.upd_panel_title)
+        self._viewmodel.panel_subtitle_text.observe(self._upd_panel_subtitle)
+        self._viewmodel.panel_content_text.observe(self._upd_panel_content)
         # Observe the viewmodel state
         self._viewmodel.current_state.observe(self._update_state)
 
         # Initialize default states
-        self.collapse_panel.opacity = 0.0
+        self.collapse_panel_icon.opacity = 0.0
 
     def _update_clock_time(self, _):
         """
@@ -188,17 +200,25 @@ class MainScreen(FloatLayout):
         self.clock_time = time.strftime("%H:%M")
         self.clock_date = time.strftime("%d %B %Y")
 
-    def _update_instruction_text(self, txt: str):
+    def _upd_main_title(self, txt: str):
         if txt is not None:
-            self.instruction_text = txt
+            self.main_title_text = txt
 
-    def _update_greetings_text(self, txt: str):
+    def _upd_main_subtitle(self, txt: str):
         if txt is not None:
-            self.greetings_text = txt
+            self.main_subtitle_text = txt
 
-    def _update_information_text(self, txt: str):
+    def upd_panel_title(self, txt: str):
         if txt is not None:
-            self.information_text = txt
+            self.panel_title_text = txt
+
+    def _upd_panel_subtitle(self, txt: str):
+        if txt is not None:
+            self.panel_subtitle_text = txt
+
+    def _upd_panel_content(self, txt: str):
+        if txt is not None:
+            self.panel_content_text = txt
 
     def _update_state(self, state):
         """
@@ -215,18 +235,18 @@ class MainScreen(FloatLayout):
         self.clock_button.toggle_state = (state == 'WaitClockActionState' or state == 'ErrorState')
         self.consultation_button.toggle_state = (state == 'WaitConsultationActionState')
         
-        # Set instruction text color
-        instruction_colors = {
+        # Set main title text color
+        main_title_colors = {
             'InitialState': self._app.theme.error_color,
             'ClockSuccessState': self._app.theme.success_color,
             'ConsultationSuccessState': self._app.theme.success_color,
             'ErrorState': self._app.theme.error_color
         }
         # If the color is defined in the dict, use it. Otherwise use the default primary one.
-        if state in instruction_colors:
-            self.instruction_text_color = instruction_colors[state]
+        if state in main_title_colors:
+            self.main_title_color = main_title_colors[state]
         else:
-            self.instruction_text_color = self._app.theme.text_primary_color
+            self.main_title_color = self._app.theme.text_primary_color
 
         # Set the progress bar loading state
         loading_states = ['ClockActionState', 'ClockSuccessState', 'ConsultationActionState']
@@ -236,7 +256,7 @@ class MainScreen(FloatLayout):
         show_panel = (state == 'ConsultationSuccessState')
         self.sliding_box_layout.expanded = show_panel
         # Show the collapse panel icon when the panel is expanded
-        Animation(opacity=1.0 if show_panel else 0.0, duration=0.5).start(self.collapse_panel)
+        Animation(opacity=1.0 if show_panel else 0.0, duration=0.5).start(self.collapse_panel_icon)
 
         # Play sound depending on current state
         state_sounds = {

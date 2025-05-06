@@ -4,7 +4,10 @@ File: teambridge_viewmodel.py
 Author: Bastian Cerf
 Date: 02/03/2025
 Description: 
-
+    The ViewModel serves as the intermediary between the view and the model, 
+    encapsulating the business logic of the application. It manages a state 
+    machine to handle user interactions from the view and coordinates with 
+    the model to schedule and execute the necessary tasks.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -22,7 +25,7 @@ import logging
 from abc import ABC
 import time
 
-# Reduce visibility to public classes
+# Reduce visibility to public classes only
 __all__ = ["TeamBridgeViewModel", "ViewModelAction"]
 
 LOGGER = logging.getLogger(__name__)
@@ -41,9 +44,9 @@ class ViewModelAction(Enum):
     All actions are auto-clearing, meaning they are automatically reset
     once the action is done. The default action is always the clock action.
     """
-    # Clock in/out action
+    # Move to clock in/out waiting state
     CLOCK_ACTION = 0
-    # Consultation action
+    # Move to consultation waiting state
     CONSULTATION = 1
     # Leave the current state, move to waiting for clock action state
     RESET_TO_CLOCK_ACTION = 2
@@ -54,6 +57,7 @@ class ViewModelAction(Enum):
 
 class TeamBridgeViewModel(IStateMachine):
     """
+    Application state machine.
     """
 
     def __init__(self, model: TeamBridgeModel, 
@@ -62,6 +66,14 @@ class TeamBridgeViewModel(IStateMachine):
                  scan_rate: float, 
                  debug_mode: bool=False):
         """
+        Create the viewmodel state machine.
+
+        Args:
+            model: `TeamBridgeModel` reference on the model to use to perform tasks
+            scanner: `BarcodeScanner` reference on the barcode scanner to use to identify ids
+            cam_idx: `int` barcode scanner camera id
+            scan_rate: `float` barcode scanner rate in Hz
+            debug_mode: `bool` True to show a live window of the scanner view
         """
         # Enter the initial state
         # The entry() method is called at first run
@@ -72,36 +84,40 @@ class TeamBridgeViewModel(IStateMachine):
         self._cam_idx = cam_idx
         self._scan_rate = scan_rate
         self._debug_mode = debug_mode
+        # Set default view model next action
+        self._next_action = ViewModelAction.DEFAULT_ACTION
         # Create viewmodel live data
-        self._state_data = LiveData[str](str(self._state))
-        self._next_action = LiveData[ViewModelAction](ViewModelAction.DEFAULT_ACTION)
-        self._instruction_txt = LiveData[str]("")
-        self._greetings_txt = LiveData[str]("")
-        self._information_txt = LiveData[str]("")
-        self._attendance_txt = LiveData[str]("")
-
-        # Subscribe an observer to log next action changes
-        self._next_action.observe(lambda action: LOGGER.info(f"Programed next action to {action.name}."))
+        self._current_state = LiveData[str](str(self._state))
+        self._main_title_text = LiveData[str]("")
+        self._main_subtitle_text = LiveData[str]("")
+        self._panel_title_text = LiveData[str]("")
+        self._panel_subtitle_text = LiveData[str]("")
+        self._panel_content_text = LiveData[str]("")
 
     def run(self):
         """
+        Run the state machine. Must be called at fixed interval.
         """
         # Run the state machine
         super().run()
 
     def on_state_changed(self, old_state):
         """
+        Called by the state machine on state change.
         """
         LOGGER.info(f"State changed from {old_state} to {self._state}.")
         # The state machine must work with known state types
         assert isinstance(self._state, _IViewModelState)
         # Update the state machine data
-        self._state_data.value = str(self._state)
-        # Update texts
-        self._instruction_txt.value = self._state.instruction_text
-        self._greetings_txt.value = self._state.greetings_text
-        self._information_txt.value = self._state.information_text
-        self._attendance_txt.value = self._state.attendance_text
+        self._current_state.value = str(self._state)
+        # The texts for the view are updated on state change, as it is for a Moore
+        # state machine. This can be limiting in some cases where extra states must
+        # be added. This design might be re-evaluated in the future.
+        self._main_title_text.value     = self._state.main_title_text
+        self._main_subtitle_text.value  = self._state.main_subtitle_text
+        self._panel_title_text.value    = self._state.panel_title_text    
+        self._panel_subtitle_text.value = self._state.panel_subtitle_text
+        self._panel_content_text.value  = self._state.panel_content_text
 
     @property
     def next_action(self) -> ViewModelAction:
@@ -109,60 +125,89 @@ class TeamBridgeViewModel(IStateMachine):
         Returns:
             ViewModelAction: the next action the viewmodel is going to perform
         """
-        return self._next_action.value
+        return self._next_action
 
     @next_action.setter
     def next_action(self, action: ViewModelAction):
         """
-        Set the next action the viewmodel will have to perform when an employee's ID will be available.
+        Program the next viewmodel action.
 
         Args:
             action: `ViewModelAction` next action
         """
-        self._next_action.value = action
-
-    def get_next_action(self):
-        """
-        Returns:
-            LiveData[ViewModelAction]: an observable on the next action the viewmodel is going to perform
-        """
-        return self._next_action
+        self._next_action = action
 
     @property
     def current_state(self) -> LiveData[str]:
         """
-        """
-        return self._state_data
+        Machine states are expressed as strings. 
 
-    @property
-    def instruction_text(self) -> LiveData[str]:
+        Returns:
+            LiveData[str]: observable on the current machine state as a string
         """
-        """
-        return self._instruction_txt
+        return self._current_state
 
-    @property
-    def greetings_text(self) -> LiveData[str]:
-        """
-        """
-        return self._greetings_txt
-
-    @property
-    def information_text(self) -> LiveData[str]:
-        """
-        """
-        return self._information_txt
-
-    @property
-    def attendance_text(self) -> LiveData[str]:
-        """
-        """
-        return self._attendance_txt
-    
     def close(self):
         """
+        Close the viewmodel. It will automatically close the barcode scanner and the
+        model in use.
         """
-        self._scanner.close(join=True)
+        self._scanner.close(join=True) # Close synchronously
         self._model.close()
+
+    ### Get UI information as observables ###
+
+    @property
+    def main_title_text(self) -> LiveData[str]:
+        """
+        The main title is used to give an instruction to the user or inform of
+        an important information.
+
+        Returns:
+            LiveData[str]: text as an observable
+        """
+        return self._main_title_text
+
+    @property
+    def main_subtitle_text(self) -> LiveData[str]:
+        """
+        The subtitle is used as an additional piece of information to the main title.
+
+        Returns:
+            LiveData[str]: text as an observable
+        """
+        return self._main_subtitle_text
+
+    @property
+    def panel_title_text(self) -> LiveData[str]:
+        """
+        The title of the information panel. Typically always visible.
+
+        Returns:
+            LiveData[str]: text as an observable
+        """
+        return self._panel_title_text
+
+    @property
+    def panel_subtitle_text(self) -> LiveData[str]:
+        """
+        The subtitle of the information panel.
+
+        Returns:
+            LiveData[str]: text as an observable
+        """
+        return self._panel_subtitle_text
+
+    @property
+    def panel_content_text(self) -> LiveData[str]:
+        """
+        The content of the information panel. The panel is typically hidden in
+        most states and shows up for states that must display more information.
+
+        Returns:
+            LiveData[str]: text as an observable
+        """
+        return self._panel_content_text
 
 class _IViewModelState(IStateBehavior[TeamBridgeViewModel], ABC):
     """
@@ -170,32 +215,41 @@ class _IViewModelState(IStateBehavior[TeamBridgeViewModel], ABC):
     getters for the different UI information in the state.
     """
 
-    @property
-    def instruction_text(self) -> str:
-        return None
-    
-    @property
-    def greetings_text(self) -> str:
-        return None
-
-    @property
-    def information_text(self) -> str:
-        return None
-    
-    @property
-    def attendance_text(self) -> str:
-        return None
-
     def __repr__(self):
         # Return the class name and remove leading underscore
         return self.__class__.__name__[1:]
 
+    @property
+    def main_title_text(self) -> str:
+        return "" # Erase last text
+
+    @property
+    def main_subtitle_text(self) -> str:
+        return "" # Erase last text
+
+    @property
+    def panel_title_text(self) -> str:
+        return "" # Erase last text
+
+    @property
+    def panel_subtitle_text(self) -> str:
+        return "" # Erase last text
+
+    @property
+    def panel_content_text(self) -> str:
+        return "" # Erase last text
+
 class _InitialState(_IViewModelState):
     """
-    Initialize the barcode scanner.
+    Role:
+        Initialize and open the barcode scanner.
+    Entry:
+        - At machine state initialization
+    Exit:
+        - Once the barcode scanner is opened and scanning
     """
 
-    # Delay in seconds between scanner opening retry
+    # Delay in seconds between scanner opening retries
     RETRY_DELAY = 10.0
 
     def entry(self):
@@ -212,7 +266,7 @@ class _InitialState(_IViewModelState):
         try:
             self._fsm._scanner.open(cam_idx=self._fsm._cam_idx, scan_rate=self._fsm._scan_rate)
         except RuntimeError as e:
-            LOGGER.warning(f"Failed to call scanner open method.", exc_info=True)
+            LOGGER.warning(f"Failed to open the barcode scanner. It appears to be running but is not actively scanning.")
         # Set next retry time
         self._next_retry = time.time() + self.RETRY_DELAY
 
@@ -228,16 +282,24 @@ class _InitialState(_IViewModelState):
         return None
     
     @property
-    def instruction_text(self):
+    def main_title_text(self):
         return "Hors service"
     
     @property
-    def information_text(self):
+    def panel_title_text(self):
         return "Ouverture du scanner..."
 
 class _WaitClockActionState(_IViewModelState):
     """
-    Poll the scanner until an employee's ID is found and start a clock action.
+    Role:
+        Poll the barcode scanner until an employee's ID is found and start 
+        a clock action.
+    Entry:
+        - Once the barcode scanner is initialized
+        - After a consultation success
+        - When changing the next action
+    Exit:
+        - Once an id has been scanned
     """
 
     def entry(self):
@@ -272,20 +334,22 @@ class _WaitClockActionState(_IViewModelState):
         self._fsm._scanner.pause()
     
     @property
-    def instruction_text(self):
-        return "passer le badge\ntimbrage"
-    
-    @property
-    def information_text(self):
-        return ""
+    def main_title_text(self):
+        return "Veuillez présenter votre badge"
 
     @property
-    def greetings_text(self):
+    def main_subtitle_text(self):
         return "Mode de timbrage"
 
 class _WaitConsultationActionState(_IViewModelState):
     """
-    Poll the scanner until an employee's ID is found and start a consultation action.
+    Role:
+        Poll the scanner until an employee's ID is found and start a
+        consultation action.
+    Entry:
+        - When changing the next action
+    Exit:
+        - Once an id has been scanned
     """
 
     def entry(self):
@@ -320,20 +384,21 @@ class _WaitConsultationActionState(_IViewModelState):
         self._fsm._scanner.pause()
     
     @property
-    def instruction_text(self):
-        return "passer le badge\nconsultation"
+    def main_title_text(self):
+        return "Veuillez présenter votre badge"
     
     @property
-    def information_text(self):
-        return ""
-
-    @property
-    def greetings_text(self):
+    def main_subtitle_text(self):
         return "Mode de consultation"
 
 class _ClockActionState(_IViewModelState):
     """
-    Clock in/out an employee.
+    Role:
+        Clock in an employee who's clocked out and out an employee who's clocked in.
+    Entry:
+        - Once an id has been scanned 
+    Exit:
+        - Once the clock in/out task is performed
     """
 
     def __init__(self, id: str):
@@ -363,18 +428,16 @@ class _ClockActionState(_IViewModelState):
     def exit(self):
         # Drop the task handle, it has no effect if the task is finished
         self._fsm._model.drop(self._handle)
-    
-    @property
-    def instruction_text(self):
-        return ""
-    
-    @property
-    def greetings_text(self):
-        return ""
 
 class _ClockSuccessState(_IViewModelState):
     """
-    The clock action succeeded. Perform a consultation.
+    Role:
+        After the clock in/out task succeeded, display the welcome message and choose the
+        next action. Currently it performs an automatic consultation.
+    Entry:
+        - After the clock in/out task succeeded
+    Exit:
+        - When consultation data are available
     """
 
     def __init__(self, event: EmployeeEvent):
@@ -407,7 +470,7 @@ class _ClockSuccessState(_IViewModelState):
         self._fsm._model.drop(self._handle)
 
     @property
-    def instruction_text(self):
+    def main_title_text(self):
         # Format text according to event
         text = ""
         # Greetings
@@ -421,7 +484,7 @@ class _ClockSuccessState(_IViewModelState):
         return text
     
     @property
-    def greetings_text(self):
+    def main_subtitle_text(self):
         # Format text according to event
         text = ""
         # Greetings
@@ -439,7 +502,12 @@ class _ClockSuccessState(_IViewModelState):
 
 class _ConsultationActionState(_IViewModelState):
     """
-    Make a consultation of employee's information.
+    Role:
+        Make a consultation of employee's information.
+    Entry:
+        - Once an id has been scanned
+    Exit:
+        - When the consultation task is done
     """
 
     def __init__(self, id: str):
@@ -471,19 +539,15 @@ class _ConsultationActionState(_IViewModelState):
         # Drop the task handle, it has no effect if the task is finished
         self._fsm._model.drop(self._handle)
 
-    @property
-    def instruction_text(self):
-        return ""
-
-    @property
-    def greetings_text(self):
-        return ""
-
 class _ConsultationSuccessState(_IViewModelState):
     """
-    Show the result of the consultation.
-    This state can be configured to automatically end after a timeout is finished or on the scanning signal.
-    It will always end when a new employee's ID is available.
+    Role:
+        Show the result of the consultation.
+    Entry:
+        - When the consultation task is done
+    Exit:
+        - When the exit signal is received
+        - When the timeout is elapsed
     """
 
     def __init__(self, data: EmployeeData, timeout=15.0):
@@ -514,15 +578,15 @@ class _ConsultationSuccessState(_IViewModelState):
         return None
 
     @property
-    def greetings_text(self):
+    def panel_title_text(self):
         return f"{self._data.firstname} {self._data.name}"
 
     @property
-    def information_text(self):
+    def panel_content_text(self):
         return (f"Solde journalier : {self.format_dt(self._data.daily_worked_time)}"
-                f" / {self.format_dt(self._data.daily_scheduled_time)}"
-                f"    Balance : {self.format_dt(self._data.daily_balance)}"
-                f"    Solde mensuel : {self.format_dt(self._data.monthly_balance)}")
+                f" / {self.format_dt(self._data.daily_scheduled_time)}\n"
+                f"Balance : {self.format_dt(self._data.daily_balance)}\n"
+                f"Solde mensuel : {self.format_dt(self._data.monthly_balance)}\n")
 
     def format_dt(self, td: dt.timedelta):
         # Ensure the information is available
@@ -537,8 +601,12 @@ class _ConsultationSuccessState(_IViewModelState):
 
 class _ErrorState(_IViewModelState):
     """
-    An error has occurred. It must be acknowledged by setting the next action to the
-    scanning state.
+    Role:
+        Block the state machine and show an error until acknowledgment.
+    Entry:
+        - Form anywhere, on error
+    Exit:
+        - Upon acknowledgment by sengind the reset to clock action signal
     """
 
     def __init__(self, error: ModelError=None):
@@ -556,10 +624,13 @@ class _ErrorState(_IViewModelState):
             return _WaitClockActionState()
 
     @property
-    def instruction_text(self):
+    def main_title_text(self):
         return "Une erreur est survenue"
     
     @property
-    def information_text(self):
+    def main_subtitle_text(self):
         return "Veuillez vous addresser à la direction"
     
+    @property
+    def panel_subtitle_text(self):
+        return self._error.message

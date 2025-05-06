@@ -3,7 +3,7 @@
 
 #:set header_height_hint 0.15
 #:set buttons_height_hint 0.35
-#:set instruction_text_height_hint 0.25
+#:set main_title_text_height_hint 0.25
 #:set footer_height_hint 0.15
 #:set top_space_height_hint 0.1
 
@@ -70,7 +70,7 @@
     clock_button: clock_button_id
     progress_bar: progress_bar_id
     sliding_box_layout: sliding_box_layout_id
-    collapse_panel: collapse_panel_id
+    collapse_panel_icon: collapse_panel_icon_id
 
     # Main screen vertical box layout
     BoxLayout:
@@ -171,21 +171,34 @@
             Widget:
                 size_hint: 0.1, 1
 
-        Label:
-            size_hint: 1, instruction_text_height_hint
-            text: f"[b]{root.instruction_text}[/b]"
-            markup: True
-            color: root.instruction_text_color
-            halign: 'center'
-            valign: 'center'
-            text_size: self.size
-            font_size: self.height * 0.3
-            font_name: 'InterMedium'
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, main_title_text_height_hint
+
+            Label:
+                size_hint_y: 0.4
+                text: root.main_subtitle_text
+                color: app.theme.text_secondary_color
+                halign: 'center'
+                valign: 'bottom'
+                text_size: self.size
+                font_size: self.height * 0.35
+                font_name: 'InterRegular'
+
+            Label:
+                size_hint_y: 0.6
+                text: root.main_title_text
+                color: root.main_title_color
+                halign: 'center'
+                valign: 'top'
+                text_size: self.size
+                font_size: self.height * 0.4
+                font_name: 'InterMedium'
 
         Widget:
             size_hint: 1, footer_height_hint
 
-    # The sliding box layout used to display pieces of information
+    # The sliding box layout used to display information
     # is drawn above the main screen.
     SlidingBoxLayout:
         id: sliding_box_layout_id
@@ -222,7 +235,7 @@
                 orientation: 'vertical'
 
                 Label:
-                    text: root.greetings_text
+                    text: root.panel_title_text
                     color: app.theme.text_secondary_color
                     halign: 'left'
                     valign: 'bottom'
@@ -231,7 +244,7 @@
                     font_name: 'InterRegular'
 
                 Label:
-                    text: root.information_text
+                    text: root.panel_subtitle_text
                     color: app.theme.text_secondary_color
                     halign: 'left'
                     valign: 'top'
@@ -243,13 +256,28 @@
                 size_hint_x: 0.4
 
             IconLabel:
-                id: collapse_panel_id
+                id: collapse_panel_icon_id
                 size_hint_x: 0.1
-                icon_code: 'F0792'
+                icon_code: 'F015A'
 
         # Hold the current information panel
         BoxLayout:
             orientation: 'vertical'
             size_hint: 1, 1 - footer_height_hint - progress_bar_y_hint
+
+            BoxLayout:
+                orientation: 'horizontal'
+                
+                Widget:
+                    size_hint_x: 0.02
+
+                Label:
+                    text: root.panel_content_text
+                    color: app.theme.text_secondary_color
+                    halign: 'left'
+                    valign: 'top'
+                    text_size: self.size
+                    font_size: self.height * 0.05
+                    font_name: 'InterRegular'
 
 
