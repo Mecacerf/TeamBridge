@@ -188,7 +188,9 @@ class MainScreen(FloatLayout):
         self._viewmodel.panel_subtitle_text.observe(self._upd_panel_subtitle)
         self._viewmodel.panel_content_text.observe(self._upd_panel_content)
         # Observe the viewmodel state
-        self._viewmodel.current_state.observe(self._update_state)
+        self._viewmodel.current_state.observe(self._on_state_change)
+        # Update the UI style on theme change
+        self._app.bind(theme=self._update_style)
 
         # Initialize default states
         self.collapse_panel_icon.opacity = 0.0
@@ -220,9 +222,9 @@ class MainScreen(FloatLayout):
         if txt is not None:
             self.panel_content_text = txt
 
-    def _update_state(self, state):
+    def _on_state_change(self, state):
         """
-        Update the state of UI elements depending on viewmodel state.
+        Update the state of view elements when the viewmodel state changes.
         """
         # Set the states for which the buttons are enabled
         enabled_states = ['WaitClockActionState', 'WaitConsultationActionState', 'ConsultationSuccessState']
@@ -234,19 +236,6 @@ class MainScreen(FloatLayout):
         # Set the buttons toggle state
         self.clock_button.toggle_state = (state == 'WaitClockActionState' or state == 'ErrorState')
         self.consultation_button.toggle_state = (state == 'WaitConsultationActionState')
-        
-        # Set main title text color
-        main_title_colors = {
-            'InitialState': self._app.theme.error_color,
-            'ClockSuccessState': self._app.theme.success_color,
-            'ConsultationSuccessState': self._app.theme.success_color,
-            'ErrorState': self._app.theme.error_color
-        }
-        # If the color is defined in the dict, use it. Otherwise use the default primary one.
-        if state in main_title_colors:
-            self.main_title_color = main_title_colors[state]
-        else:
-            self.main_title_color = self._app.theme.text_primary_color
 
         # Set the progress bar loading state
         loading_states = ['ClockActionState', 'ClockSuccessState', 'ConsultationActionState']
@@ -273,6 +262,29 @@ class MainScreen(FloatLayout):
             self._sound = state_sounds[state]
             self._sound.volume = 1.0
             self._sound.play()
+
+        # Update UI elements style
+        self._update_style()
+
+    def _update_style(self, *args):
+        """
+        Update the style of UI elements.
+        """
+        # Get current viewmodel state
+        state = self._viewmodel.current_state.value
+
+        # Set main title text color
+        main_title_colors = {
+            'InitialState': self._app.theme.error_color,
+            'ClockSuccessState': self._app.theme.success_color,
+            'ConsultationSuccessState': self._app.theme.success_color,
+            'ErrorState': self._app.theme.error_color
+        }
+        # If the color is defined in the dict, use it. Otherwise use the default primary one.
+        if state in main_title_colors:
+            self.main_title_color = main_title_colors[state]
+        else:
+            self.main_title_color = self._app.theme.text_primary_color
 
     def on_clock_action_press(self):
         """
