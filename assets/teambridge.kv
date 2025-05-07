@@ -167,8 +167,7 @@
 
                 IconButton:
                     source: 'assets/group.png'
-                    #on_press: if self.enabled: root.on_attendance_press()
-                    on_press: root.on_attendance_press()
+                    on_press: if self.enabled: root.on_attendance_press()
 
             # Right border
             Widget:

@@ -38,6 +38,7 @@ def main() -> int:
     parser.add_argument("--camera-id", type=int, default=0, help="Select the camera that will be used for scanning")
     parser.add_argument("--fullscreen", action="store_true", help="Enable fullscreen mode")
     parser.add_argument("--auto-wakeup", action="store_true", help="Enable auto screen wakeup on scanning event [NOT IMPLEMENTED]")
+    parser.add_argument("--dark", action="store_true", help="Enable the UI dark mode")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     # Parse the arguments
     args = parser.parse_args()
@@ -56,8 +57,11 @@ def main() -> int:
     scanner = BarcodeScanner()
     # Create the application viewmodel
     viewmodel = TeamBridgeViewModel(model=model, scanner=scanner, debug_mode=args.debug, scan_rate=args.scan_rate, cam_idx=args.camera_id)
+    # Set UI theme
+    from view_theme import DARK_THEME
+    theme = DARK_THEME if args.dark else None
     # Create the teambridge application
-    app = TeamBridgeApp(viewmodel, fullscreen=args.fullscreen)
+    app = TeamBridgeApp(viewmodel, fullscreen=args.fullscreen, theme=theme)
 
     logger.info(f"Starting application '{app}'.")
     app.run()
