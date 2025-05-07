@@ -64,6 +64,11 @@ import time
 from enum import Enum
 from view_theme import *
 
+# Try to set the locale to french
+# TODO: texts and configurations in a specific file
+import locale
+SET_LOCALE = 'fr_FR.UTF-8'
+
 # Run method call interval in seconds
 RUN_INTERVAL = float(1.0 / 30.0)
 
@@ -101,6 +106,12 @@ class TeamBridgeApp(App):
         # Set theme if provided
         if theme:
             self.theme = theme
+
+        # Try to set the locale
+        try:
+            locale.setlocale(locale.LC_TIME, SET_LOCALE)
+        except:
+            LOGGER.warning(f"Unable to set the desired locale '{SET_LOCALE}'.")
 
     def get_theme(self) -> ViewTheme:
         """
