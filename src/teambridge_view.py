@@ -69,6 +69,9 @@ from view_theme import *
 import locale
 SET_LOCALE = 'fr_FR.UTF-8'
 
+# Import the sleep manager
+from sleep_management import SleepManager
+
 # Run method call interval in seconds
 RUN_INTERVAL = float(1.0 / 30.0)
 
@@ -85,7 +88,12 @@ class TeamBridgeApp(App):
     # Set the rebind flag to trigger the observers when the theme changes 
     theme = ObjectProperty(LIGHT_THEME, rebind=True)
 
-    def __init__(self, viewmodel: TeamBridgeViewModel, fullscreen=False, theme: ViewTheme=None):
+    def __init__(self, 
+                 viewmodel: TeamBridgeViewModel, 
+                 fullscreen=False, 
+                 theme: ViewTheme=None,
+                 sleep_manager: SleepManager=None,
+                 sleep_timeout: float=60):
         """
         Initialize the application.
 
@@ -93,10 +101,26 @@ class TeamBridgeApp(App):
             viewmodel: `TeamBridgeViewModel` viewmodel instance
             fullscreen: `bool` enable fullscreen mode
             theme: `ViewTheme` optional theme to customize the UI
+            sleep_manager: `SleepManager` optional sleep manager to use
+            sleep_timeout: `float` sleep timeout, a sleep manager must be provided
         """
         super().__init__()
-        # Save viewmodel
+        # Save parameters
         self._viewmodel = viewmodel
+        self._sleep_manager = sleep_manager
+        self._sleep_timeout = sleep_timeout
+
+        # Create the sleep timer if a sleep manager is provided.
+        if self._sleep_manager:
+            # Enable the sleep manager.
+            self._sleep_manager.enable()
+            # Schedule the timer to call the timeout method after the given delay.
+            self._sleep_timer = Clock.schedule_once(self._on_sleep_timeout, sleep_timeout)
+            # Automatically call the activity method when the screen is touched.
+            Window.bind(on_touch_down=self.on_screen_activity)
+            LOGGER.info(f"The system will enter sleep mode after {sleep_timeout} seconds of inactivity.")
+        else:
+            LOGGER.info("The sleep mode is disabled.")
 
         # Set fullscreen mode
         Window.fullscreen = 'auto' if fullscreen else False
@@ -144,9 +168,32 @@ class TeamBridgeApp(App):
         return MainScreen(self._viewmodel)
 
     def on_stop(self):
-        # Close the viewmodel
+        # Close the viewmodel.
         self._viewmodel.close()
+        # Disable the sleep manager.
+        if self._sleep_manager:
+            self._sleep_manager.disable()
         LOGGER.info("Application closed, goodbye.")
+
+    def on_screen_activity(self, *args):
+        """
+        To call when screen activity occurs. It will update the sleep
+        timeout.
+        """
+        # Check that a sleep manager has been provided.
+        if not self._sleep_manager:
+            return # Nothing to do
+        
+        # Exit sleep mode.
+        self._sleep_manager.soft_sleep = False
+        # Reschedule the sleep timeout.
+        self._sleep_timer.cancel()
+        self._sleep_timer = Clock.schedule_once(self._on_sleep_timeout, self._sleep_timeout)
+
+    def _on_sleep_timeout(self, *args):
+        # Automatically called when the sleep timer finishes.
+        # If this method is called, that means a sleep manager exists.
+        self._sleep_manager.soft_sleep = True
 
     def __repr__(self):
         return self.__class__.__name__
@@ -237,6 +284,9 @@ class MainScreen(FloatLayout):
         """
         Update the state of view elements when the viewmodel state changes.
         """
+        # Call the application activity method to wakeup the screen
+        self._app.on_screen_activity()
+
         # Set the states for which the buttons are enabled
         enabled_states = ['WaitClockActionState', 'WaitConsultationActionState', 'ConsultationSuccessState']
         self.consultation_button.enabled = (state in enabled_states)
