@@ -457,7 +457,7 @@ class _ClockSuccessState(_IViewModelState):
         msg = self._fsm._model.get_result(self._handle)
         if msg:
             if isinstance(msg, EmployeeData):
-                return _ConsultationSuccessState(msg, timeout=15.0)
+                return _ConsultationSuccessState(msg, timeout=20.0)
             elif isinstance(msg, ModelError):
                 return _ErrorState(msg)
             else:
@@ -527,7 +527,7 @@ class _ConsultationActionState(_IViewModelState):
         if msg:
             # The consultation task has completed
             if isinstance(msg, EmployeeData):
-                return _ConsultationSuccessState(msg, timeout=30.0)
+                return _ConsultationSuccessState(msg, timeout=60.0)
             elif isinstance(msg, ModelError):
                 return _ErrorState(msg)
             else:
