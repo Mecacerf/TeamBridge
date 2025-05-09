@@ -69,6 +69,11 @@ from view_theme import *
 import locale
 SET_LOCALE = 'fr_FR.UTF-8'
 
+# Import the screen brightness library and get the current brightness to
+# use as the active one.
+import screen_brightness_control as sbc
+ACTIVE_BRIGHTNESS_LEVEL = sbc.get_brightness()
+
 # Run method call interval in seconds
 RUN_INTERVAL = float(1.0 / 30.0)
 
