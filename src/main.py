@@ -20,6 +20,7 @@ from teambridge_view import TeamBridgeApp
 from spreadsheet_time_tracker import SpreadsheetTimeTracker
 from barcode_scanner import BarcodeScanner
 from spreadsheets_repository import SpreadsheetsRepository
+from sleep_management import SleepManager
 
 def main() -> int:
     """
@@ -31,19 +32,31 @@ def main() -> int:
     # Log welcome message
     logger.info("-- Mecacerf TeamBridge Application --")
 
+    # Custom function to parse positive integer.
+    def positive_int(value):
+        ivalue = int(value)
+        if ivalue < 0:
+            raise argparse.ArgumentTypeError("The value must be a positive integer")
+        return ivalue
+
     # Create the arguments parser
     parser = argparse.ArgumentParser(description="Mecacerf TeamBridge Application")
     parser.add_argument("--repository", type=str, default="assets/", help="Spreadsheets repository folder path")
-    parser.add_argument("--scan-rate", type=int, default=6, help="Set scanning refresh rate [Hz]")
-    parser.add_argument("--camera-id", type=int, default=0, help="Select the camera that will be used for scanning")
+    parser.add_argument("--scan-rate", type=positive_int, default=6, help="Set scanning refresh rate [Hz]")
+    parser.add_argument("--camera-id", type=positive_int, default=0, help="Select the camera that will be used for scanning")
     parser.add_argument("--fullscreen", action="store_true", help="Enable fullscreen mode")
-    parser.add_argument("--auto-wakeup", action="store_true", help="Enable auto screen wakeup on scanning event [NOT IMPLEMENTED]")
+    parser.add_argument("--dark", action="store_true", help="Enable the UI dark mode")
+    parser.add_argument("--sleep-brightness", type=positive_int, default=0, help="Screen brightness in sleep mode")
+    parser.add_argument("--work-brightness", type=positive_int, default=argparse.SUPPRESS, help="Screen brightness in normal/working mode, if not set, the current brightness at application startup is selected")
+    parser.add_argument("--sleep-timeout", type=positive_int, default=argparse.SUPPRESS, help="Sleep timeout in seconds, if not specified the sleep mode is disabled")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     # Parse the arguments
     args = parser.parse_args()
     # Show configuration
-    logger.info(f"Starting with configuration [repository='{args.repository}', scan-rate={args.scan_rate}, fullscreen={args.fullscreen}"+
-                f", auto-wakeup={args.auto_wakeup}, debug={args.debug}]")
+    logger.info(f"Starting with configuration [repository='{args.repository}', scan-rate={args.scan_rate}, camera-id={args.camera_id}, "
+                f"fullscreen={args.fullscreen}, dark_mode={args.dark}, sleep_brightness={args.sleep_brightness}, "
+                f"work_brightness={args.work_brightness if hasattr(args, 'work_brightness') else "auto"}, "
+                f"sleep_timeout={args.sleep_timeout if hasattr(args, 'sleep_timeout') else 'disabled'}, debug={args.debug}]")
 
     # Configure application
     # Use a spreadsheet repository
@@ -56,9 +69,35 @@ def main() -> int:
     scanner = BarcodeScanner()
     # Create the application viewmodel
     viewmodel = TeamBridgeViewModel(model=model, scanner=scanner, debug_mode=args.debug, scan_rate=args.scan_rate, cam_idx=args.camera_id)
-    # Create the teambridge application
-    app = TeamBridgeApp(viewmodel, fullscreen=args.fullscreen)
+    
+    # Configure UI theme
+    from view_theme import DARK_THEME
+    theme = DARK_THEME if args.dark else None
 
+    # Configure sleep mode, it is disabled by default.
+    sleep_timeout = 0
+    sleep_manager = None
+    # If the sleep timeout is specified, the sleep mode is enabled.
+    if hasattr(args, 'sleep_timeout'):
+        # Sleep mode is enabled, configure the sleep manager.
+        if hasattr(args, 'work_brightness'):
+            # Use specified work brightness.
+            sleep_manager = SleepManager(low_brightness_lvl=args.sleep_brightness,
+                                         high_brightness_lvl=args.work_brightness)
+        else:
+            # Use automatic screen brightness (do not specify it).
+            sleep_manager = SleepManager(low_brightness_lvl=args.sleep_brightness)
+        # Set the sleep timeout.
+        sleep_timeout = args.sleep_timeout
+
+    # Create the teambridge application
+    app = TeamBridgeApp(viewmodel, 
+                        fullscreen=args.fullscreen, 
+                        theme=theme,
+                        sleep_manager=sleep_manager,
+                        sleep_timeout=sleep_timeout)
+
+    # Start application
     logger.info(f"Starting application '{app}'.")
     app.run()
 
