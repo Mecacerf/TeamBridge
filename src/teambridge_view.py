@@ -26,6 +26,7 @@ from teambridge_viewmodel import *
 
 # Configure kivy settings
 import os
+from os.path import join
 os.environ["KIVY_LOG_MODE"] = 'MIXED'
 os.environ["KIVY_NO_ARGS"] = '1'
 if os.getenv("KIVY_FORCE_ANGLE_BACKEND") == "1":
@@ -48,16 +49,16 @@ from kivy.clock import Clock
 
 # Register text fonts
 from kivy.core.text import LabelBase
-LabelBase.register(name="InterRegular", fn_regular="assets/Inter_28pt-Regular.ttf")
-LabelBase.register(name="InterMedium", fn_regular="assets/Inter_28pt-Medium.ttf")
+LabelBase.register(name="InterRegular", fn_regular=join("assets", "Inter_28pt-Regular.ttf"))
+LabelBase.register(name="InterMedium", fn_regular=join("assets", "Inter_28pt-Medium.ttf"))
 # Register material design icons font
-LabelBase.register(name="md-icons", fn_regular="assets/md-icons/MaterialDesignIconsDesktop.ttf")
+LabelBase.register(name="md-icons", fn_regular=join("assets", "md-icons/MaterialDesignIconsDesktop.ttf"))
 
 # Import audio files
 from kivy.core.audio import SoundLoader
-SOUND_CLOCKED = SoundLoader.load("assets/clocked.mp3")
-SOUND_SCANNED = SoundLoader.load("assets/scanned.mp3")
-SOUND_ERROR   = SoundLoader.load("assets/error.mp3")
+SOUND_CLOCKED = SoundLoader.load(join("assets", "clocked.mp3"))
+SOUND_SCANNED = SoundLoader.load(join("assets", "scanned.mp3"))
+SOUND_ERROR   = SoundLoader.load(join("assets", "error.mp3"))
 
 # Other imports
 import time
@@ -82,7 +83,7 @@ class TeamBridgeApp(App):
     """
 
     # The kv file is located in the assets/ folder
-    kv_directory = "assets/"
+    kv_directory = "assets"
     
     # Set application theme to light by default
     # Set the rebind flag to trigger the observers when the theme changes 
@@ -718,18 +719,3 @@ class SlidingBoxLayout(BoxLayout):
             return True
         # Normal behavior
         return super().on_touch_down(touch)
-
-class IconLabel(Label):
-    """
-    Simple label containing an icon from the material design icons font.
-    """
-
-    # Icon hexadecimal code
-    icon_code = StringProperty("blank")
-
-    def on_icon_code(self, *args):
-        try:
-            self.text = chr(int(self.icon_code, 16))
-        except ValueError:
-            self.text = ""
-            LOGGER.warning("Cannot convert icon code to unicode.", exc_info=True)
