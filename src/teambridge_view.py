@@ -286,7 +286,10 @@ class MainScreen(FloatLayout):
         Update the state of view elements when the viewmodel state changes.
         """
         # Call the application activity method to wakeup the screen
-        self._app.on_screen_activity()
+        activity_states = ['ClockActionState', 'ClockSuccessState', 'ConsultationActionState', 
+                           'ConsultationSuccessState', 'ErrorState']
+        if state in activity_states:
+            self._app.on_screen_activity()
 
         # Set the states for which the buttons are enabled
         enabled_states = ['WaitClockActionState', 'WaitConsultationActionState', 'ConsultationSuccessState']
