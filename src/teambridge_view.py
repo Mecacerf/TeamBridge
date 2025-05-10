@@ -719,3 +719,18 @@ class SlidingBoxLayout(BoxLayout):
             return True
         # Normal behavior
         return super().on_touch_down(touch)
+
+class IconLabel(Label):
+    """
+    Simple label containing an icon from the material design icons font.
+    """
+
+    # Icon hexadecimal code
+    icon_code = StringProperty("blank")
+
+    def on_icon_code(self, *args):
+        try:
+            self.text = chr(int(self.icon_code, 16))
+        except ValueError:
+            self.text = ""
+            LOGGER.warning("Cannot convert icon code to unicode.", exc_info=True)
