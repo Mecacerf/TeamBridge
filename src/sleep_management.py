@@ -24,6 +24,9 @@ LOGGER = logging.getLogger(__name__)
 import screen_brightness_control as sbc
 DISPLAY = 0 # Use the first display
 
+# Import thread pool executor to asynchronously set the screen brightness.
+from concurrent.futures import ThreadPoolExecutor
+
 # Windows constants
 ES_CONTINUOUS       = 0x80000000 # Tells the system to keep applying the setting.
 ES_SYSTEM_REQUIRED  = 0x00000001 # Prevents sleep.
@@ -56,7 +59,16 @@ class SleepManager:
         if high_brightness_lvl:
             self._high_brightness_lvl = min(100, max(0, high_brightness_lvl))
         else:
-            self._high_brightness_lvl = sbc.get_brightness(display=DISPLAY)[0]
+            try:
+                self._high_brightness_lvl = sbc.get_brightness(display=DISPLAY)[0]
+            except sbc.ScreenBrightnessError:
+                LOGGER.error("Unable to retrieve current screen brightness.", exc_info=True)
+                # Use a default value.
+                self._high_brightness_lvl = 100
+
+        # Create a simple thread pool executor to execute the set brightness task.
+        self._executor = ThreadPoolExecutor(max_workers=1)
+
         # Log the sleep manager initialization.
         LOGGER.info(("Initialized the sleep manager "
                     f"[low_brightness={self._low_brightness_lvl}, high_brightness={self._high_brightness_lvl}]"))
@@ -128,13 +140,20 @@ class SleepManager:
         # Apply change
         if self._soft_sleep:
             # Set the brightness level to low value.
-            # Force to True allows to turn off the backlight on Linux.
-            sbc.set_brightness(self._low_brightness_lvl, display=DISPLAY, force=True)
+            self._executor.submit(self.__set_brightness_async, self._low_brightness_lvl)
             LOGGER.info("Entered sleep mode.")
         else:
             # Set the brightness level to high value.
-            sbc.set_brightness(self._high_brightness_lvl, display=DISPLAY)
-            LOGGER.info("Exited sleep mode.")        
+            self._executor.submit(self.__set_brightness_async, self._high_brightness_lvl)
+            LOGGER.info("Exited sleep mode.")
+
+    def __set_brightness_async(self, brightness: int):
+        # Asynchronously set the screen brightness.
+        try:
+            # Force to True allows to turn off the backlight on Linux.
+            sbc.set_brightness(brightness, display=DISPLAY, force=True)
+        except sbc.ScreenBrightnessError:
+            LOGGER.error("Unable to change the screen brightness.", exc_info=True)
 
     def __enter__(self):
         # Automatic enable using a context manager.
