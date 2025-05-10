@@ -103,7 +103,7 @@ class BarcodeScanner:
         # Save camera id
         self._cam_idx = cam_idx
         # Set the scanning rate as the period between frames
-        self._frame_period_sec = 1.0 / scan_rate
+        self._frame_period_sec = 1.0 / max(1, scan_rate)
         # Save symbols
         self._symbols = symbols
         # Create the scanning thread and start the process

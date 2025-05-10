@@ -35,7 +35,7 @@ def main() -> int:
     # Custom function to parse positive integer.
     def positive_int(value):
         ivalue = int(value)
-        if ivalue <= 0:
+        if ivalue < 0:
             raise argparse.ArgumentTypeError("The value must be a positive integer")
         return ivalue
 
