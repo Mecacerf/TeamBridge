@@ -17,14 +17,7 @@ Contact: info@mecacerf.ch
 # Reduce visibility to public class
 __all__ = ["TeamBridgeApp"]
 
-# Logging system
-import logging
-LOGGER = logging.getLogger(__name__)
-
-# Import application viewmodel
-from teambridge_viewmodel import *
-
-# Configure kivy settings
+# Configure kivy settings before importing it
 import os
 from os.path import join
 os.environ["KIVY_LOG_MODE"] = 'MIXED'
@@ -46,6 +39,13 @@ from kivy.uix.progressbar import ProgressBar
 from kivy.animation import Animation
 from kivy.properties import StringProperty, ObjectProperty, NumericProperty, DictProperty
 from kivy.clock import Clock
+
+# Get view module logger
+import logging
+LOGGER = logging.getLogger(__name__)
+
+# Import application viewmodel
+from teambridge_viewmodel import *
 
 # Register text fonts
 from kivy.core.text import LabelBase

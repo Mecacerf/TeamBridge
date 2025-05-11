@@ -11,16 +11,10 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+# Import general purpose libraries
 import sys
 import argparse
 import logging, logging.handlers
-from teambridge_model import TeamBridgeModel
-from teambridge_viewmodel import TeamBridgeViewModel
-from teambridge_view import TeamBridgeApp
-from spreadsheet_time_tracker import SpreadsheetTimeTracker
-from barcode_scanner import BarcodeScanner
-from spreadsheets_repository import SpreadsheetsRepository
-from sleep_management import SleepManager
 
 def main() -> int:
     """
@@ -58,6 +52,14 @@ def main() -> int:
                 f"work_brightness={args.work_brightness if hasattr(args, 'work_brightness') else "auto"}, "
                 f"sleep_timeout={args.sleep_timeout if hasattr(args, 'sleep_timeout') else 'disabled'}, debug={args.debug}]")
 
+    # Import program backend modules
+    from spreadsheets_repository import SpreadsheetsRepository
+    from spreadsheet_time_tracker import SpreadsheetTimeTracker
+    from teambridge_model import TeamBridgeModel
+    from barcode_scanner import BarcodeScanner
+    from teambridge_viewmodel import TeamBridgeViewModel
+    from sleep_management import SleepManager
+
     # Configure application
     # Use a spreadsheet repository
     repository = SpreadsheetsRepository(args.repository)
@@ -69,10 +71,6 @@ def main() -> int:
     scanner = BarcodeScanner()
     # Create the application viewmodel
     viewmodel = TeamBridgeViewModel(model=model, scanner=scanner, debug_mode=args.debug, scan_rate=args.scan_rate, cam_idx=args.camera_id)
-    
-    # Configure UI theme
-    from view_theme import DARK_THEME
-    theme = DARK_THEME if args.dark else None
 
     # Configure sleep mode, it is disabled by default.
     sleep_timeout = 0
@@ -90,16 +88,30 @@ def main() -> int:
         # Set the sleep timeout.
         sleep_timeout = args.sleep_timeout
 
-    # Create the teambridge application
-    app = TeamBridgeApp(viewmodel, 
-                        fullscreen=args.fullscreen, 
-                        theme=theme,
-                        sleep_manager=sleep_manager,
-                        sleep_timeout=sleep_timeout)
+    def start_kivy_frontend():
+        """
+        Start the Kivy frontend.
+        """
+        # Import the view module first to configure Kivy first
+        from teambridge_view import TeamBridgeApp
 
-    # Start application
-    logger.info(f"Starting application '{app}'.")
-    app.run()
+        # Configure UI theme
+        from view_theme import DARK_THEME
+        theme = DARK_THEME if args.dark else None
+
+        # Create the teambridge application using Kivy frontend       
+        app = TeamBridgeApp(viewmodel, 
+                            fullscreen=args.fullscreen, 
+                            theme=theme,
+                            sleep_manager=sleep_manager,
+                            sleep_timeout=sleep_timeout)
+
+        # Start application
+        logger.info(f"Starting application '{app}' using Kivy frontend.")
+        app.run()
+
+    # Start the frontend to use.
+    start_kivy_frontend()
 
 def configure_logging():
     """
