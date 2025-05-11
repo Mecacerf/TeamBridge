@@ -23,9 +23,9 @@ from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, I
 # Specific implementation imports
 from spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR, SHEET_INIT
 from spreadsheets_repository import SpreadsheetsRepository
-from teambridge_model import TeamBridgeModel
-from teambridge_viewmodel import TeamBridgeViewModel
-from barcode_scanner import BarcodeScanner
+from model.teambridge_model import TeamBridgeModel
+from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
+from io.barcode_scanner import BarcodeScanner
 
 ################################################
 #               Tests constants                #

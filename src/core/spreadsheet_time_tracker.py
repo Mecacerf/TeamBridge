@@ -78,24 +78,26 @@ Contact: info@mecacerf.ch
 # will typically be used by a background thread.
 ################################################################################################
 
+# Import logging and get the module logger
+import logging
+LOGGER = logging.getLogger(__name__)
+
+# Import the time tracker interface
+from .time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, IllegalReadException
+# Import the spreadsheets repository access
+from .spreadsheets_repository import SpreadsheetsRepository
+
+# Import datetime for dates and times manipulation
+import datetime as dt
 # Import openpyxl for spreadsheet manipulation
 import openpyxl
 import openpyxl.cell
 import openpyxl.utils
-import openpyxl.worksheet
-# Import subprocess, pathlib and shutil that will be required to execute processes and manipulate files 
+# Import required modules to execute processes and manipulate files 
 import subprocess
 import pathlib
 import shutil
 import os
-# Import the time tracker interface
-from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, IllegalReadException
-# Import the spreadsheets database access
-from spreadsheets_repository import SpreadsheetsRepository
-# Import datetime
-import datetime as dt
-# Import logging module
-import logging
 
 ################################################
 #           Spreadsheet constants              #
@@ -144,9 +146,6 @@ LOCATION_COL_LAST_CLOCK_OUT = 'A17'
 LIBREOFFICE_PATH = "C:\\Program Files\\LibreOffice\\program\\soffice"
 # Temporary folder in which evaluated spreadsheets are placed by libreoffice
 LIBREOFFICE_CACHE_FOLDER = ".tmp_calc/"
-
-# Get file logger
-LOGGER = logging.getLogger(__name__)
 
 class SpreadsheetTimeTracker(ITodayTimeTracker):
     """

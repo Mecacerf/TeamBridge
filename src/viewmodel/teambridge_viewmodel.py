@@ -14,21 +14,29 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
     
-from enum import Enum
-from state_machine import IStateMachine, IStateBehavior
-from live_data import LiveData
-from teambridge_model import *
-from time_tracker_interface import ClockAction
-from barcode_scanner import BarcodeScanner
-import datetime as dt
+# Import logging and get the module logger
 import logging
+LOGGER = logging.getLogger(__name__)
+
+# Import the state machine base interfaces
+from ..common.state_machine import *
+# Observable live data are used to communicate with the view
+from ..common.live_data import LiveData
+# Model is used to schedule tasks
+from ..model.teambridge_model import *
+# The barcode scanner allows to identify employee's ids
+from ..io.barcode_scanner import BarcodeScanner
+# Needed to interpret data containers from the model
+from ..core.time_tracker_interface import ClockAction
+
+# Other imports
+from enum import Enum
+import datetime as dt
 from abc import ABC
 import time
 
 # Reduce visibility to public classes only
 __all__ = ["TeamBridgeViewModel", "ViewModelAction"]
-
-LOGGER = logging.getLogger(__name__)
 
 # Regular expression to use to identify an employee's ID
 EMPLOYEE_REGEX = r"teambridge@(\w+)"

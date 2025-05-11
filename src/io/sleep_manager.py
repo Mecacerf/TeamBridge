@@ -16,7 +16,7 @@ Contact: info@mecacerf.ch
 # Only import the sleep manager class from this module
 __all__ = ['SleepManager']
 
-# Get module logger
+# Import logging and get the module logger
 import logging
 LOGGER = logging.getLogger(__name__)
 

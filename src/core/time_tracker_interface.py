@@ -11,7 +11,9 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+# Import datetime for dates and times manipulation
 import datetime as dt
+# Enumeration module
 from enum import Enum
 
 ###############################################

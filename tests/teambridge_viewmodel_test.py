@@ -18,8 +18,8 @@ Contact: info@mecacerf.ch
 import time
 import logging
 import datetime as dt
-from teambridge_viewmodel import *
-from barcode_scanner import BarcodeScanner
+from viewmodel.teambridge_viewmodel import *
+from io.barcode_scanner import BarcodeScanner
 
 ################################################
 #               Tests constants                #

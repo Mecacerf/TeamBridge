@@ -1,6 +1,20 @@
+# File: teambridge.kv
+# Author: Bastian Cerf
+# Date: 22/04/2025
+# Description: 
+#     This file defines the user interface layout and components.
+#
+# Company: Mecacerf SA
+# Website: http://mecacerf.ch
+# Contact: info@mecacerf.ch
+
+# Minimum required Kivy version
 #:kivy 2.3.0
+# Import required libraries
 #:import math math
 
+# Define the vertical layout sections of the view.
+# Adjust their size by modifying the properties below.
 #:set header_height_hint 0.16
 #:set buttons_height_hint 0.35
 #:set main_title_text_height_hint 0.25
@@ -8,6 +22,8 @@
 #:set top_space_height_hint 0.09
 
 #:set progress_bar_y_hint 0.015
+
+## Custom components ##
 
 <IconButton>:
     size_hint: None, None
@@ -64,6 +80,8 @@
     valign: 'center'
     text_size: self.size
     font_size: self.height * 0.6
+
+## Main application screen ##
 
 <MainScreen>:
     consultation_button: consultation_button_id
@@ -129,7 +147,7 @@
             Image:
                 pos_hint: {'right': 1.0, 'y': 0.0}
                 size_hint: 0.086, 0.92
-                source: 'assets/company_logo.png'
+                source: 'assets/images/company_logo.png'
                 fit_mode: 'contain'
 
         # Leave some space at the top to center the buttons     
@@ -151,7 +169,7 @@
                 
                 ToggleIconButton:
                     id: consultation_button_id
-                    source: 'assets/time.png'
+                    source: 'assets/images/consultation.png'
                     on_press: if self.enabled: root.on_consultation_press()
         
             AnchorLayout:
@@ -159,14 +177,14 @@
                 
                 ToggleIconButton:
                     id: clock_button_id
-                    source: 'assets/start_pause.png'
+                    source: 'assets/images/start_pause.png'
                     on_press: if self.enabled: root.on_clock_action_press()
 
             AnchorLayout:
                 size_hint: 0.26, 1
 
                 IconButton:
-                    source: 'assets/group.png'
+                    source: 'assets/images/attendance.png'
                     on_press: if self.enabled: root.on_attendance_press()
 
             # Right border

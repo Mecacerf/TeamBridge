@@ -57,7 +57,9 @@ exe = EXE(
 )
 
 print("Executable generation finished, copy utility files...")
-# Copy samples to dist folder to allow the program to access its assets
+# Copy program assets to dist folder  
 shutil.copytree("assets/", "deploy/dist/assets/")
-# Copy autostart utility script
-shutil.copy("src/autostart-exe.ps1", "deploy/dist/autostart-exe.ps1")
+# Copy samples to dist folder to allow to run in test mode
+shutil.copytree("samples/", "deploy/dist/samples/")
+# Copy autostart executable utility script
+shutil.copy("deploy/autostart-exe.ps1", "deploy/dist/autostart-exe.ps1")

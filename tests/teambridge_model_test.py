@@ -14,7 +14,7 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-from teambridge_model import *
+from model.teambridge_model import *
 import time
 import logging
 

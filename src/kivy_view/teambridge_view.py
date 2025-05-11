@@ -40,38 +40,38 @@ from kivy.animation import Animation
 from kivy.properties import StringProperty, ObjectProperty, NumericProperty, DictProperty
 from kivy.clock import Clock
 
-# Get view module logger
+# Import logging and get the module logger
 import logging
 LOGGER = logging.getLogger(__name__)
 
 # Import application viewmodel
-from teambridge_viewmodel import *
+from ..viewmodel.teambridge_viewmodel import *
+# Import the sleep manager
+from ..io.sleep_manager import SleepManager
+# Import the view themes module
+from .view_theme import *
 
 # Register text fonts
 from kivy.core.text import LabelBase
-LabelBase.register(name="InterRegular", fn_regular=join("assets", "Inter_28pt-Regular.ttf"))
-LabelBase.register(name="InterMedium", fn_regular=join("assets", "Inter_28pt-Medium.ttf"))
+LabelBase.register(name="InterRegular", fn_regular=join("assets", "fonts", "Inter_28pt-Regular.ttf"))
+LabelBase.register(name="InterMedium", fn_regular=join("assets", "fonts", "Inter_28pt-Medium.ttf"))
 # Register material design icons font
-LabelBase.register(name="md-icons", fn_regular=join("assets", "md-icons/MaterialDesignIconsDesktop.ttf"))
+LabelBase.register(name="md-icons", fn_regular=join("assets", "md-icons", "MaterialDesignIconsDesktop.ttf"))
 
 # Import audio files
 from kivy.core.audio import SoundLoader
-SOUND_CLOCKED = SoundLoader.load(join("assets", "clocked.mp3"))
-SOUND_SCANNED = SoundLoader.load(join("assets", "scanned.mp3"))
-SOUND_ERROR   = SoundLoader.load(join("assets", "error.mp3"))
+SOUND_CLOCKED = SoundLoader.load(join("assets", "audio", "clocked.mp3"))
+SOUND_SCANNED = SoundLoader.load(join("assets", "audio", "scanned.mp3"))
+SOUND_ERROR   = SoundLoader.load(join("assets", "audio", "error.mp3"))
 
 # Other imports
 import time
 from enum import Enum
-from view_theme import *
 
 # Try to set the locale to french
 # TODO: texts and configurations in a specific file
 import locale
 SET_LOCALE = 'fr_FR.UTF-8'
-
-# Import the sleep manager
-from sleep_management import SleepManager
 
 # Run method call interval in seconds
 RUN_INTERVAL = float(1.0 / 30.0)
@@ -397,7 +397,7 @@ class MainScreen(FloatLayout):
 
 class IconButton(ButtonBehavior, RelativeLayout):
     """
-    Simple material design like icon button.
+    Simple material design icon button.
     """
 
     # Button properties

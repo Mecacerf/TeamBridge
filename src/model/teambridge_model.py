@@ -13,19 +13,22 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction
-from typing import Callable
-import datetime as dt
-from live_data import LiveData
+# Import logging and get the module logger
 import logging
-import threading
-from enum import Enum
-from concurrent.futures import ThreadPoolExecutor, Future
-from abc import ABC
-from dataclasses import dataclass
-
-# Get module logger
 LOGGER = logging.getLogger(__name__)
+
+# Import the time tracker base interface
+from ..core.time_tracker_interface import *
+
+# Import threading tools
+import threading
+from concurrent.futures import ThreadPoolExecutor, Future
+# Import dataclass annotation
+from dataclasses import dataclass
+# Others
+from typing import Callable
+from abc import ABC
+import datetime as dt
 
 # Maximal number of asynchronous tasks that can be handled simultaneously
 MAX_TASK_WORKERS = 4
