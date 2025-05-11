@@ -45,8 +45,8 @@ import logging
 LOGGER = logging.getLogger(__name__)
 
 # Internal imports
-from ..viewmodel.teambridge_viewmodel import *
-from ..io.sleep_manager import SleepManager
+from viewmodel.teambridge_viewmodel import *
+from platform_io.sleep_manager import SleepManager
 from .view_theme import *
 
 # Register text fonts

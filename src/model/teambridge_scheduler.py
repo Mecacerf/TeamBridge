@@ -18,7 +18,7 @@ import logging
 # Import model dataclasses
 from .data import *
 # Import the time tracker generic interface
-from ..core.time_tracker_interface import *
+from core.time_tracker_interface import *
 
 import threading
 from concurrent.futures import ThreadPoolExecutor, Future

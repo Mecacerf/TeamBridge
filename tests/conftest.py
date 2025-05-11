@@ -17,15 +17,14 @@ Contact: info@mecacerf.ch
 # General imports
 import pytest
 import datetime as dt
-from typing import Callable
 from collections.abc import Generator
-from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, IllegalReadException
 # Specific implementation imports
-from spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR, SHEET_INIT
-from spreadsheets_repository import SpreadsheetsRepository
-from model.teambridge_scheduler import TeamBridgeScheduler
+from core.time_tracker_interface import *
+from core.spreadsheet_time_tracker import SpreadsheetTimeTracker
+from core.spreadsheets_repository import SpreadsheetsRepository
+from model import *
 from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
-from io.barcode_scanner import BarcodeScanner
+from platform_io.barcode_scanner import BarcodeScanner
 
 ################################################
 #               Tests constants                #

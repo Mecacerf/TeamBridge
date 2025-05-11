@@ -21,11 +21,11 @@ from enum import Enum
 from abc import ABC
 
 # Import internal modules
-from ..common.state_machine import *
-from ..common.live_data import LiveData             # For view communication
-from ..model import *                               # Task scheduling
-from ..io.barcode_scanner import BarcodeScanner     # Employee ID detection
-from ..core.time_tracker_interface import ClockAction   # Domain model enums
+from common.state_machine import *
+from common.live_data import LiveData             # For view communication
+from model import *                               # Task scheduling
+from platform_io.barcode_scanner import BarcodeScanner  # Employee ID detection
+from core.time_tracker_interface import ClockAction     # Domain model enums
 
 LOGGER = logging.getLogger(__name__)
 

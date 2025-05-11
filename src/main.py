@@ -53,12 +53,12 @@ def main() -> int:
                 f"sleep_timeout={args.sleep_timeout if hasattr(args, 'sleep_timeout') else 'disabled'}, debug={args.debug}]")
 
     # Import program backend modules
-    from .core.spreadsheets_repository import SpreadsheetsRepository
-    from .core.spreadsheet_time_tracker import SpreadsheetTimeTracker
-    from .io.barcode_scanner import BarcodeScanner
-    from .io.sleep_manager import SleepManager
-    from .viewmodel.teambridge_viewmodel import TeamBridgeViewModel
-    from .model.teambridge_scheduler import TeamBridgeScheduler
+    from core.spreadsheets_repository import SpreadsheetsRepository
+    from core.spreadsheet_time_tracker import SpreadsheetTimeTracker
+    from platform_io.barcode_scanner import BarcodeScanner
+    from platform_io.sleep_manager import SleepManager
+    from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
+    from model.teambridge_scheduler import TeamBridgeScheduler
 
     # Configure application
     # Use a spreadsheet repository
@@ -93,10 +93,10 @@ def main() -> int:
         Start the Kivy frontend.
         """
         # Import the view module first to configure Kivy first
-        from .kivy_view.teambridge_view import TeamBridgeApp
+        from kivy_view.teambridge_view import TeamBridgeApp
 
         # Configure UI theme
-        from .kivy_view.view_theme import DARK_THEME
+        from kivy_view.view_theme import DARK_THEME
         theme = DARK_THEME if args.dark else None
 
         # Create the teambridge application using Kivy frontend       
