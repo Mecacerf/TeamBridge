@@ -18,8 +18,8 @@ Contact: info@mecacerf.ch
 import time
 import logging
 import datetime as dt
-from teambridge_viewmodel import *
-from barcode_scanner import BarcodeScanner
+from viewmodel.teambridge_viewmodel import *
+from platform_io.barcode_scanner import BarcodeScanner
 
 ################################################
 #               Tests constants                #
@@ -143,7 +143,7 @@ def test_clock_action(teambridge_viewmodel, monkeypatch):
     # Shall automatically move to consultation state
     wait_state(viewmodel, "ConsultationSuccessState")
     # And finally back to scanning state after the presentation duration 
-    wait_state(viewmodel, "WaitClockActionState", 16.0)
+    wait_state(viewmodel, "WaitClockActionState", 21.0)
 
     # The next action has been reset 
     assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION

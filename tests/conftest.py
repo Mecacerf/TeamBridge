@@ -17,15 +17,14 @@ Contact: info@mecacerf.ch
 # General imports
 import pytest
 import datetime as dt
-from typing import Callable
 from collections.abc import Generator
-from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, IllegalReadException
 # Specific implementation imports
-from spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR, SHEET_INIT
-from spreadsheets_repository import SpreadsheetsRepository
-from teambridge_model import TeamBridgeModel
-from teambridge_viewmodel import TeamBridgeViewModel
-from barcode_scanner import BarcodeScanner
+from core.time_tracker_interface import *
+from core.spreadsheet_time_tracker import SpreadsheetTimeTracker
+from core.spreadsheets_repository import SpreadsheetsRepository
+from model import *
+from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
+from platform_io.barcode_scanner import BarcodeScanner
 
 ################################################
 #               Tests constants                #
@@ -85,14 +84,14 @@ def arrange_spreadsheet_time_tracker():
     shutil.copytree(samples, samples_cache)
 
 @pytest.fixture
-def teambridge_model(arrange_spreadsheet_time_tracker) -> Generator[TeamBridgeModel, None, None]:
+def teambridge_model(arrange_spreadsheet_time_tracker) -> Generator[TeamBridgeScheduler, None, None]:
     """
     Create a configured teambridge model instance.
     """
     # Create the model using a SpreadsheetTimeTracker
     repository = SpreadsheetsRepository(SPREADSHEET_SAMPLES_TEST_FOLDER)
     time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date)
-    model = TeamBridgeModel(time_tracker_provider=time_tracker_provider)
+    model = TeamBridgeScheduler(time_tracker_provider=time_tracker_provider)
     # Yield and close automatically
     yield model
     model.close()

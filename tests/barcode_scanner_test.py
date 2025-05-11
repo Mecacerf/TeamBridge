@@ -18,7 +18,7 @@ import threading
 import pathlib
 import time
 from typing import Generator
-from barcode_scanner import BarcodeScanner
+from platform_io.barcode_scanner import BarcodeScanner
 
 ################################################
 #               Tests constants                #

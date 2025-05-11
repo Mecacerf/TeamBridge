@@ -14,11 +14,11 @@ Contact: info@mecacerf.ch
 from abc import ABC
 from typing import Generic, TypeVar
 
-T = TypeVar('T')
-
 class IStateMachine(ABC):
     """
-    Run a state machine.
+    Base class that runs a finite state machine.
+    Provide the base interface to make state transitions and call the
+    entry(), do() and exit() methods of the states.
     """
 
     def __init__(self, init_state: "IStateBehavior"):
@@ -73,9 +73,15 @@ class IStateMachine(ABC):
         """
         pass
 
+# Define generic state machine class
+T = TypeVar('T', bound=IStateMachine)
+
 class IStateBehavior(ABC, Generic[T]):
     """
     Base interface that defines how a state behaves.
+    The type T is defined by the inheritor of the state. It allows to work
+    with a known subclass of IStateMachine, which is great to get better 
+    static code analysis and autocompletion.
     """
 
     def __init__(self):

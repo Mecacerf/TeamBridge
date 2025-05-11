@@ -11,16 +11,10 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+# Import general purpose libraries
 import sys
 import argparse
 import logging, logging.handlers
-from teambridge_model import TeamBridgeModel
-from teambridge_viewmodel import TeamBridgeViewModel
-from teambridge_view import TeamBridgeApp
-from spreadsheet_time_tracker import SpreadsheetTimeTracker
-from barcode_scanner import BarcodeScanner
-from spreadsheets_repository import SpreadsheetsRepository
-from sleep_management import SleepManager
 
 def main() -> int:
     """
@@ -29,7 +23,7 @@ def main() -> int:
     # Configure logging and get module logger
     configure_logging()
     logger = logging.getLogger("Main")
-    # Log welcome message
+    # Log a welcome message
     logger.info("-- Mecacerf TeamBridge Application --")
 
     # Custom function to parse positive integer.
@@ -41,8 +35,8 @@ def main() -> int:
 
     # Create the arguments parser
     parser = argparse.ArgumentParser(description="Mecacerf TeamBridge Application")
-    parser.add_argument("--repository", type=str, default="assets/", help="Spreadsheets repository folder path")
-    parser.add_argument("--scan-rate", type=positive_int, default=6, help="Set scanning refresh rate [Hz]")
+    parser.add_argument("--repository", type=str, default="samples/", help="Spreadsheets repository folder path")
+    parser.add_argument("--scan-rate", type=positive_int, default=4, help="Set scanning refresh rate [Hz]")
     parser.add_argument("--camera-id", type=positive_int, default=0, help="Select the camera that will be used for scanning")
     parser.add_argument("--fullscreen", action="store_true", help="Enable fullscreen mode")
     parser.add_argument("--dark", action="store_true", help="Enable the UI dark mode")
@@ -58,21 +52,25 @@ def main() -> int:
                 f"work_brightness={args.work_brightness if hasattr(args, 'work_brightness') else "auto"}, "
                 f"sleep_timeout={args.sleep_timeout if hasattr(args, 'sleep_timeout') else 'disabled'}, debug={args.debug}]")
 
+    # Import program backend modules
+    from core.spreadsheets_repository import SpreadsheetsRepository
+    from core.spreadsheet_time_tracker import SpreadsheetTimeTracker
+    from platform_io.barcode_scanner import BarcodeScanner
+    from platform_io.sleep_manager import SleepManager
+    from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
+    from model.teambridge_scheduler import TeamBridgeScheduler
+
     # Configure application
     # Use a spreadsheet repository
     repository = SpreadsheetsRepository(args.repository)
     # Create the time trackers provider
     provider = lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date)
     # Create the application model
-    model = TeamBridgeModel(time_tracker_provider=provider)
+    model = TeamBridgeScheduler(time_tracker_provider=provider)
     # Create the barcode scanner
     scanner = BarcodeScanner()
     # Create the application viewmodel
     viewmodel = TeamBridgeViewModel(model=model, scanner=scanner, debug_mode=args.debug, scan_rate=args.scan_rate, cam_idx=args.camera_id)
-    
-    # Configure UI theme
-    from view_theme import DARK_THEME
-    theme = DARK_THEME if args.dark else None
 
     # Configure sleep mode, it is disabled by default.
     sleep_timeout = 0
@@ -90,16 +88,30 @@ def main() -> int:
         # Set the sleep timeout.
         sleep_timeout = args.sleep_timeout
 
-    # Create the teambridge application
-    app = TeamBridgeApp(viewmodel, 
-                        fullscreen=args.fullscreen, 
-                        theme=theme,
-                        sleep_manager=sleep_manager,
-                        sleep_timeout=sleep_timeout)
+    def start_kivy_frontend():
+        """
+        Start the Kivy frontend.
+        """
+        # Import the view module first to configure Kivy first
+        from kivy_view.teambridge_view import TeamBridgeApp
 
-    # Start application
-    logger.info(f"Starting application '{app}'.")
-    app.run()
+        # Configure UI theme
+        from kivy_view.view_theme import DARK_THEME
+        theme = DARK_THEME if args.dark else None
+
+        # Create the teambridge application using Kivy frontend       
+        app = TeamBridgeApp(viewmodel, 
+                            fullscreen=args.fullscreen, 
+                            theme=theme,
+                            sleep_manager=sleep_manager,
+                            sleep_timeout=sleep_timeout)
+
+        # Start application
+        logger.info(f"Starting application '{app}' using Kivy frontend.")
+        app.run()
+
+    # Start the frontend to use.
+    start_kivy_frontend()
 
 def configure_logging():
     """

@@ -11,16 +11,14 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-# Libraries for files access
+import logging
 import os
 import pathlib
 import shutil
-# Threading for locking mechanism
 import threading
-# Logging mechanism
-import logging
-# Time for sleep
 import time
+
+LOGGER = logging.getLogger(__name__)
 
 ################################################
 #               Configuration                  #
@@ -36,9 +34,6 @@ DUMMY_FILE_NAME = ".remote_wakeup.txt"
 RETRY_ACCESS_DELAY = 5.0 # [s]
 # Number of retries
 RETRY_NUMBER = 3
-
-# Get the file logger
-LOGGER = logging.getLogger(__name__)
 
 class SpreadsheetsRepository:
     """

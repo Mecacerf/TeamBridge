@@ -1,115 +1,51 @@
 #!/usr/bin/env python3
 """
-File: teambridge_model.py
+File: teambridge_scheduler.py
 Author: Bastian Cerf
 Date: 02/03/2025
 Description: 
-    Gives an asynchronous way of manipulating employees time tracker through the
-    TimeTrackerModel object. Different tasks can be started and responses can
-    be listened by observing the message bus.
+    Provides an asynchronous way to manipulate employee time trackers.
+    The scheduler allows to execute different I/O bound tasks and get
+    their result when they are finished.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-from time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction
+import logging
+
+# Import model dataclasses
+from .data import *
+# Import the time tracker generic interface
+from core.time_tracker_interface import *
+
+import threading
+from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Callable
 import datetime as dt
-from live_data import LiveData
-import logging
-import threading
-from enum import Enum
-from concurrent.futures import ThreadPoolExecutor, Future
-from abc import ABC
-from dataclasses import dataclass
 
-# Get module logger
 LOGGER = logging.getLogger(__name__)
 
-# Maximal number of asynchronous tasks that can be handled simultaneously
+# Maximal number of asynchronous tasks that can be handled simultaneously by the scheduler
 MAX_TASK_WORKERS = 4
 
-@dataclass(frozen=True)
-class IModelMessage(ABC):
+class TeamBridgeScheduler:
     """
-    A generic asynchronous message sent by the model to upper layers.
-    """
-    pass
-
-@dataclass(frozen=True)
-class IEmployeeMessage(IModelMessage, ABC):
-    """
-    Base container for employee's message.
-
-    Attributes:
-        name: `str` employee's name
-        firstname: `str` employee's firstname
-        id: `str` employee's id
-    """
-    name: str
-    firstname: str
-    id: str
-
-@dataclass(frozen=True)
-class EmployeeEvent(IEmployeeMessage):
-    """
-    Describes a clock event for an employee.
-
-    Attributes:
-        name: `str` employee's name
-        firstname: `str` employee's firstname
-        id: `str` employee's id
-        clock_evt: `ClockEvent` related clock event
-    """
-    clock_evt: ClockEvent
-
-@dataclass(frozen=True)
-class EmployeeData(IEmployeeMessage):
-    """
-    Container of different information about an employee.
-
-    Attributes:
-        name: `str` employee's name
-        firstname: `str` employee's firstname
-        id: `str` employee's id
-        daily_worked_time: `timedelta` employee's daily worked time 
-        daily_balance: `timedelta` employee's daily balance
-        daily_scheduled_time: `timedelta` employee's daily scheduled time
-        monthly_balance: `timedelta` employee's monthly balance
-    """
-    daily_worked_time: dt.timedelta
-    daily_balance: dt.timedelta
-    daily_scheduled_time: dt.timedelta
-    monthly_balance: dt.timedelta
-
-@dataclass(frozen=True)
-class ModelError(IModelMessage):
-    """
-    Error message container.
-
-    Attributes:
-        error_code: error code
-        message: error description message
-    """
-    error_code: int
-    message: str
-
-class TeamBridgeModel:
-    """
-    The model holds a thread pool executor and can be used to perform various I/O bound tasks, such as 
-    clocking in/out an employee, performing a balance query, and so on. The model can be polled to retrieve 
-    task results via the defined message containers.
-    Note that this class is not thread safe, meaning that a single thread shall post tasks and read results.
+    The scheduler holds a thread pool executor and can be used to perform various I/O bound 
+    tasks, such as clocking in/out an employee, performing a balance query, and so on. The 
+    model can be polled to retrieve task results via the defined message containers.
+    Note that this class is not thread safe, meaning that a single thread must post tasks
+    and read results. Tasks are however executed in parallel using the thread pool executor.
     """
 
     def __init__(self, time_tracker_provider: Callable[[dt.date, str], ITodayTimeTracker]):
         """
-        Create the model.
+        Create the tasks scheduler.
 
         Args:
-            time_tracker_provider: `Callable[[dt.date, str], ITodayTimeTracker]` the time tracker provider
-                as a callable object
+            time_tracker_provider: `Callable[[dt.date, str], ITodayTimeTracker]` the time 
+                tracker provider as a callable object
         """
         # Save the provider method and create a lock for concurrent access
         self._provider = time_tracker_provider
@@ -121,10 +57,12 @@ class TeamBridgeModel:
         # Task handle counter
         self._task_handle = -1
 
-    def start_clock_action_task(self, id: str, datetime: dt.datetime, action: ClockAction=None) -> int:
+    def start_clock_action_task(self, id: str, 
+                                datetime: dt.datetime, 
+                                action: ClockAction=None) -> int:
         """
         Start a clock action task for the employee with given identifier.
-        It will post an EmployeeEvent on success and a ModelError on failure.  
+        It will post an EmployeeEvent on success or a ModelError on failure.  
         The action (clock in or out) can be specified or left None. In this case, 
         the task automatically clocks in an employee who's clocked out and clocks
         out an employee who's clocked in at given datetime.
@@ -132,7 +70,7 @@ class TeamBridgeModel:
         Args:
             id: `str` employee's identifier
             datetime: `datetime` time and date for the clock action
-            action: `action` clock action to register or None to leave the task choose
+            action: `action` clock action to register or None to let the task choose
         Returns:
             int: task handle
         """
@@ -146,7 +84,7 @@ class TeamBridgeModel:
     def start_consultation_task(self, id: str, datetime: dt.datetime) -> int:
         """
         Start a consultation task for the employee with given identifier at given date.
-        It will post an EmployeeData on success and a ModelError on failure.
+        It will post an EmployeeData on success or a ModelError on failure.
 
         Args:
             id: `str` employee's identifier

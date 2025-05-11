@@ -13,5 +13,5 @@
 Set-Location -Path (Get-Item $PSScriptRoot)
 
 # Run TeamBridge
-.\TeamBridge.exe --repository assets/ --fullscreen
+.\TeamBridge.exe --repository samples/ --fullscreen --dark --sleep-timeout 80 --sleep-brightness 0 --work-brightness 100
 pause

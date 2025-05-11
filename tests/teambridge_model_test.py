@@ -4,7 +4,7 @@ File: teambridge_model_test.py
 Author: Bastian Cerf
 Date: 13/04/2025
 Description: 
-    Unit test the TeamBridgeModel to validate expected behaviors.
+    Unit test the TeamBridgeScheduler to validate expected behaviors.
 Usage:
     Use pytest to execute the tests. You can run it by executing the command below in the TeamBridge/ folder.
     - pytest
@@ -14,7 +14,7 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-from teambridge_model import *
+from model.teambridge_scheduler import *
 import time
 import logging
 

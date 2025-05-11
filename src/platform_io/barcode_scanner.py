@@ -11,6 +11,7 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+import logging
 import cv2
 import pyzbar.pyzbar
 import time
@@ -18,9 +19,7 @@ import threading
 import numpy as np
 import uuid
 import re
-import logging
 
-# Get module logger
 LOGGER = logging.getLogger(__name__)
 
 class BarcodeScanner:

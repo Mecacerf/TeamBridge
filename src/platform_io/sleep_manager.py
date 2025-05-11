@@ -13,24 +13,25 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-# Only import the sleep manager class from this module
-__all__ = ['SleepManager']
-
-# Get module logger
 import logging
-LOGGER = logging.getLogger(__name__)
 
 # Screen brightness control library
 import screen_brightness_control as sbc
-DISPLAY = 0 # Use the first display
 
 # Import thread pool executor to asynchronously set the screen brightness.
 from concurrent.futures import ThreadPoolExecutor
+
+__all__ = ['SleepManager']
+
+LOGGER = logging.getLogger(__name__)
 
 # Windows constants
 ES_CONTINUOUS       = 0x80000000 # Tells the system to keep applying the setting.
 ES_SYSTEM_REQUIRED  = 0x00000001 # Prevents sleep.
 ES_DISPLAY_REQUIRED = 0x00000002 # Keeps the screen from turning off.
+
+# Display ID to control
+DISPLAY = 0
 
 class SleepManager:
     """
