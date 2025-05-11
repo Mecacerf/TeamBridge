@@ -11,18 +11,14 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-# Import logging and get the module logger
 import logging
-LOGGER = logging.getLogger(__name__)
-
-# Libraries for files access
 import os
 import pathlib
 import shutil
-# Threading for locking mechanism
 import threading
-# Time for sleep
 import time
+
+LOGGER = logging.getLogger(__name__)
 
 ################################################
 #               Configuration                  #

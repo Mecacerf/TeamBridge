@@ -14,7 +14,7 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-# Reduce visibility to public class
+# Only the application class is publicly available
 __all__ = ["TeamBridgeApp"]
 
 # Configure kivy settings before importing it
@@ -44,11 +44,9 @@ from kivy.clock import Clock
 import logging
 LOGGER = logging.getLogger(__name__)
 
-# Import application viewmodel
+# Internal imports
 from ..viewmodel.teambridge_viewmodel import *
-# Import the sleep manager
 from ..io.sleep_manager import SleepManager
-# Import the view themes module
 from .view_theme import *
 
 # Register text fonts

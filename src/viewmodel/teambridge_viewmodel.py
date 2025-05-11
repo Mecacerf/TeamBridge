@@ -13,36 +13,29 @@ Company: Mecacerf SA
 Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
-    
-# Import logging and get the module logger
+
 import logging
+import datetime as dt
+import time
+from enum import Enum
+from abc import ABC
+
+# Import internal modules
+from ..common.state_machine import *
+from ..common.live_data import LiveData             # For view communication
+from ..model import *                               # Task scheduling
+from ..io.barcode_scanner import BarcodeScanner     # Employee ID detection
+from ..core.time_tracker_interface import ClockAction   # Domain model enums
+
 LOGGER = logging.getLogger(__name__)
 
-# Import the state machine base interfaces
-from ..common.state_machine import *
-# Observable live data are used to communicate with the view
-from ..common.live_data import LiveData
-# Model is used to schedule tasks
-from ..model.teambridge_model import *
-# The barcode scanner allows to identify employee's ids
-from ..io.barcode_scanner import BarcodeScanner
-# Needed to interpret data containers from the model
-from ..core.time_tracker_interface import ClockAction
-
-# Other imports
-from enum import Enum
-import datetime as dt
-from abc import ABC
-import time
-
-# Reduce visibility to public classes only
 __all__ = ["TeamBridgeViewModel", "ViewModelAction"]
 
-# Regular expression to use to identify an employee's ID
+# Regex to identify an employee's ID from the barcode scanner
 EMPLOYEE_REGEX = r"teambridge@(\w+)"
-# Regex group to extract ID
 EMPLOYEE_REGEX_GROUP = 1
-# Timeout [s] to prevent scanning the same ID multiple times
+
+# Timeout in seconds to prevent double-scanning the same ID
 SCAN_ID_TIMEOUT = 10.0
 
 class ViewModelAction(Enum):
@@ -68,7 +61,7 @@ class TeamBridgeViewModel(IStateMachine):
     Application state machine.
     """
 
-    def __init__(self, model: TeamBridgeModel, 
+    def __init__(self, model: TeamBridgeScheduler, 
                  scanner: BarcodeScanner,
                  cam_idx: int, 
                  scan_rate: float, 
@@ -77,7 +70,7 @@ class TeamBridgeViewModel(IStateMachine):
         Create the viewmodel state machine.
 
         Args:
-            model: `TeamBridgeModel` reference on the model to use to perform tasks
+            model: `TeamBridgeScheduler` reference on the scheduler to use to perform tasks
             scanner: `BarcodeScanner` reference on the barcode scanner to use to identify ids
             cam_idx: `int` barcode scanner camera id
             scan_rate: `float` barcode scanner rate in Hz

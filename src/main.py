@@ -58,7 +58,7 @@ def main() -> int:
     from .io.barcode_scanner import BarcodeScanner
     from .io.sleep_manager import SleepManager
     from .viewmodel.teambridge_viewmodel import TeamBridgeViewModel
-    from .model.teambridge_model import TeamBridgeModel
+    from .model.teambridge_scheduler import TeamBridgeScheduler
 
     # Configure application
     # Use a spreadsheet repository
@@ -66,7 +66,7 @@ def main() -> int:
     # Create the time trackers provider
     provider = lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date)
     # Create the application model
-    model = TeamBridgeModel(time_tracker_provider=provider)
+    model = TeamBridgeScheduler(time_tracker_provider=provider)
     # Create the barcode scanner
     scanner = BarcodeScanner()
     # Create the application viewmodel

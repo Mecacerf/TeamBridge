@@ -11,12 +11,10 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-# Kivy imports
+from dataclasses import dataclass
+
 from kivy.graphics import Color
 from kivy.utils import get_color_from_hex
-
-# Others
-from dataclasses import dataclass
 
 @dataclass
 class ViewTheme:

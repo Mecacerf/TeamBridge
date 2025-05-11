@@ -73,7 +73,7 @@ class IStateMachine(ABC):
         """
         pass
 
-# Define generic state machine class.
+# Define generic state machine class
 T = TypeVar('T', bound=IStateMachine)
 
 class IStateBehavior(ABC, Generic[T]):

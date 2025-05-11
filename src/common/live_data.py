@@ -34,12 +34,10 @@ class LiveData(Generic[T]):
             value: initial value
             bus_mode: enable/disable bus mode
         """
-        # Create generic value
+        # Declare live data parameters
         self._value = value
-        # Bus mode
         self._bus_mode = bus_mode
-        # Create observers list
-        self._observers = []
+        self._observers = set() # Use a set to prevent observers to be added more than once
 
     def observe(self, observer: Callable[[T], None]):
         """
@@ -48,9 +46,7 @@ class LiveData(Generic[T]):
         Parameters:
             observer: new observer as a lambda or a function
         """
-        # Check for doublon and append
-        if not observer in self._observers:
-            self._observers.append(observer)
+        self._observers.add(observer)
 
     def remove(self, observer: Callable[[T], None]):
         """
@@ -59,7 +55,7 @@ class LiveData(Generic[T]):
         Parameters:
             observer: observer to remove
         """
-        # Check observer exists in the list and remove
+        # Remove only if not present
         if observer in self._observers:
             self._observers.remove(observer)
     
@@ -84,8 +80,7 @@ class LiveData(Generic[T]):
         # Notify on change if not in bus mode
         if not self._bus_mode and self._value == value:
             return
-        # Set new value
+        # Set the new value and notify observers
         self._value = value
-        # Notify observers
         for observer in self._observers:
             observer(self._value)
