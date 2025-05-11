@@ -22,7 +22,8 @@ binaries = collect_dynamic_libs('pyzbar')
 
 a = Analysis(
     ['..\\src\\main.py'],
-    pathex=[],
+    # Put the source package in pathex to allow to import the modules properly
+    pathex=[os.path.abspath("src")],
     binaries=binaries,
     datas=[],
     hiddenimports=[],
