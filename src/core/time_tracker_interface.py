@@ -11,8 +11,11 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-import datetime as dt
+# Standard libraries
+from abc import ABC
 from enum import Enum
+from dataclasses import dataclass
+import datetime as dt
 
 # TODO
 # - Mettre à jour dernière version de l'excel
@@ -25,10 +28,42 @@ from enum import Enum
 # Ajout: def get_previous_day_balance(self) -> Balance totale fin du jour précédent (calcul dynamique: get_current_balance - get_daily_balance, validé avec JC --=+)
 # Ajout: def get_remaining_vacation(self) -> vacances restantes à la fin du mois
 # Ajout: def get_monthly_vacation(self) -> vacances planifiées pour le mois courant
-# ITodayTimeTracker -> enlever le today, la restriction à un jour défini ne fait pas spécialement de sens, ajouter méthode set_day() ?
+# ITodayTimeTracker -> enlever le today, la restriction à un jour défini ne fait pas spécialement de sens, ajouter méthode set_day() ? ABC, abstractmethod
 
 ###############################################
-# Employee Time Tracker Interface Declaration #
+#   Time tracker related errors declaration   #
+###############################################
+
+class TimeTrackerReadException(Exception):
+    """
+    Custom exception for illegal read operation.
+    """
+    def __init__(self, message="Illegal read operation attempted"):
+        super().__init__(message)
+
+class TimeTrackerWriteException(Exception):
+    """
+    Custom exception for illegal write operation.
+    """
+    def __init__(self, message="Illegal write operation attempted"):
+        super().__init__(message)
+
+class TimeTrackerOpenException(Exception):
+    """
+    Custom exception for time tracker opening errors.
+    """
+    def __init__(self, message="Unable to open the time tracker"):
+        super().__init__(message)
+
+class TimeTrackerCloseException(Exception):
+    """
+    Custom exception for time tracker closing errors.
+    """
+    def __init__(self, message="The time tracker hasn't been properly closed"):
+        super().__init__(message)
+
+###############################################
+#    Clocking event dataclass declaration     #
 ###############################################
 
 class ClockAction(Enum):
@@ -38,36 +73,23 @@ class ClockAction(Enum):
     CLOCK_IN = 0
     CLOCK_OUT = 1
 
+@dataclass(frozen=True)
 class ClockEvent:
     """
     Simple container for a clock event.
+
+    Attributes:
+        time: `datetime.time` hour and minutes in the day at which the event occurred
+        action: `ClockAction` related clock action
     """
-
-    def __init__(self, time: dt.time, action: ClockAction):
-        """
-        Create a clock event.
-
-        Parameters:
-            time: time event occurred
-            action: event action
-        """
-        self.time = time
-        self.action = action
-
-    def __repr__(self):
-        """
-        Get a string representation of this clock event.
-        """
-        return f"ClockEvent[time={self.time}, action={self.action}]"
+    time: dt.time       # TODO: should be a datetime?
+    action: ClockAction
     
-class IllegalReadException(Exception):
-    """
-    Custom exception for illegal read operations.
-    """
-    def __init__(self, message="Illegal read operation attempted"):
-        super().__init__(message)
+###############################################
+#      Time tracker interface declaration     #
+###############################################
 
-class ITodayTimeTracker:
+class ITodayTimeTracker(ABC):
     """
     Interface for accessing and managing an employee's daily attendance data.
 

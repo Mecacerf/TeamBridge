@@ -78,26 +78,22 @@ Contact: info@mecacerf.ch
 # will typically be used by a background thread.
 ################################################################################################
 
-# Import logging and get the module logger
+# Standard libraries
 import logging
-LOGGER = logging.getLogger(__name__)
-
-# Import the time tracker interface
-from .time_tracker_interface import ITodayTimeTracker, ClockEvent, ClockAction, IllegalReadException
-# Import the spreadsheets repository access
-from .spreadsheets_repository import SpreadsheetsRepository
-
-# Import datetime for dates and times manipulation
-import datetime as dt
-# Import openpyxl for spreadsheet manipulation
-import openpyxl
-import openpyxl.cell
-import openpyxl.utils
-# Import required modules to execute processes and manipulate files 
 import subprocess
 import pathlib
 import shutil
 import os
+import datetime as dt
+
+# Third-party libraries
+import openpyxl, openpyxl.cell, openpyxl.utils # Spreadsheets manipulation library
+
+# Internal imports
+from .time_tracker_interface import * # Interface to implement
+from .spreadsheets_repository import SpreadsheetsRepository # Spreadsheets repository access
+
+LOGGER = logging.getLogger(__name__)
 
 ################################################
 #           Spreadsheet constants              #
@@ -107,7 +103,7 @@ import os
 # Init sheet index
 SHEET_INIT = 0
 # January sheet index, next months are incremented
-SHEET_JANUARY = 1
+SHEET_JANUARY = 2
 
 ## Init sheet
 # Cell containing the name information
@@ -118,24 +114,28 @@ CELL_FIRSTNAME = 'A7'
 CELL_DATE = 'A8'
 # Cell containing the current hour information
 CELL_HOUR = 'A9'
+# Cell containing the year information
+# Unlike the date cell, this is a raw cell (no formula) used to indicate the year of the file's data
+CELL_YEAR = 'A20'
+# Cell containing the spreadsheet version information
+CELL_VERSION = 'A19'
 
 ## Month sheets
-## Following cells of the init sheet contain the locations in the month's
-## sheets to find the information. That allows to dynamcally change these
-## locations by file and account for different spreadsheet versions.
-# Cell containing the monthly balance (total of daily balances)
+# These raw cells of the init sheet are pointers to the cells containing the actual information
+# in the month's sheets  
+# Cell containing the monthly balance pointer
 LOCATION_MONTHLY_BALANCE = 'A11'
-# Cell containing the first day of the month
+# Cell containing the first day of the month pointer
 LOCATION_FIRST_MONTH_DATE = 'A12'
-# Cell containing the daily schedule for the first day of the month
+# Cell containing the daily schedule for the first day of the month pointer
 LOCATION_DAILY_SCHEDULE = 'A13'
-# Cell containing the daily balance for the first day of the month
+# Cell containing the daily balance for the first day of the month pointer
 LOCATION_DAILY_BALANCE = 'A14'
-# Cell containing the worked time for the first day of the month
+# Cell containing the worked time for the first day of the month pointer
 LOCATION_WORKED_TIME = 'A15'
-# Column containing the first clock in action of the day
+# Column containing the first clock in action of the day pointer
 LOCATION_COL_FIRST_CLOCK_IN = 'A16'
-# Column containing the last clock out action of the day
+# Column containing the last clock out action of the day pointer
 LOCATION_COL_LAST_CLOCK_OUT = 'A17'
 
 ################################################
@@ -143,9 +143,18 @@ LOCATION_COL_LAST_CLOCK_OUT = 'A17'
 ################################################
 
 # Path to 'soffice' in the filesystem
+# TODO: put this path in a config file
 LIBREOFFICE_PATH = "C:\\Program Files\\LibreOffice\\program\\soffice"
 # Temporary folder in which evaluated spreadsheets are placed by libreoffice
 LIBREOFFICE_CACHE_FOLDER = ".tmp_calc/"
+
+# Expected spreadsheets version
+# Opening a spreadsheet that doesn't use this version will fail to prevent compatibity issues
+EXPECTED_SHEET_VERSION = "v220425"
+
+################################################
+#   Spreadsheets time tracker implementation   #
+################################################
 
 class SpreadsheetTimeTracker(ITodayTimeTracker):
     """
@@ -154,7 +163,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
 
     def __init__(self, repository: SpreadsheetsRepository, employee_id: str, date: dt.date):
         """
-        Open the employee's data for given date.
+        Open the employee's data at given date.
 
         Parameters:
             repository: spreadsheets repository access provider 
@@ -297,7 +306,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         """
         # Check read status
         if not self.is_readable():
-            raise IllegalReadException()
+            raise TimeTrackerReadException()
         # Get current date row
         row = self.__get_date_row()
         # Get column containing information
@@ -355,7 +364,7 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         """
         # Check read status
         if not self.is_readable():
-            raise IllegalReadException()
+            raise TimeTrackerReadException()
         # Get evaluated month's sheet 
         month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
         # Get monthly balance value as a timedelta
@@ -495,6 +504,21 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
 
         # Get the init sheet
         init_sheet = self._workbook_raw.worksheets[SHEET_INIT]
+        
+        # Read the spreadsheet version in use
+        version = init_sheet[CELL_VERSION].value
+        # Make sure the expected file version is used
+        if version != EXPECTED_SHEET_VERSION:
+            raise ValueError((f"Cannot load workbook '{self._file_path}' that uses version '{version}'."
+                              f" The expected version is '{EXPECTED_SHEET_VERSION}'."))
+
+        # Read the spreadsheet file's data year
+        year = init_sheet[CELL_YEAR].value
+        # Make sure the given date is in this spreadsheet file
+        if year != self._date.year:
+            raise ValueError((f"Cannot open date '{self._date}' of workbook '{self._file_path}' that holds "
+                              f"data for the year '{year}'."))
+
         # The init sheet contains the locations of different data in the month's sheets, which
         # allows to dynamically configure data locations and account for different sheets 
         # versions. Read these locations.
