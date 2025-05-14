@@ -631,7 +631,3 @@ class _ErrorState(_IViewModelState):
     @property
     def main_subtitle_text(self):
         return "Veuillez vous addresser à la direction"
-    
-    @property
-    def panel_subtitle_text(self):
-        return self._error.message
