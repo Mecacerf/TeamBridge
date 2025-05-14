@@ -20,9 +20,9 @@ import datetime as dt
 from typing import Callable
 from collections.abc import Generator
 # Specific implementation imports
-from core.time_tracker_interface import *
-from core.spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR, SHEET_INIT
-from core.spreadsheets_repository import SpreadsheetsRepository
+from src.core.time_tracker_interface import *
+from src.core.spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR, SHEET_INIT, SHEET_JANUARY
+from src.core.spreadsheets_repository import SpreadsheetsRepository
 
 ################################################
 #               Tests constants                #
@@ -180,16 +180,16 @@ def test_read_unavailable(default_time_tracker_provider):
     # Readable is initially False
     assert employee.is_readable() is False
     # Try to access worked time directly
-    with pytest.raises(IllegalReadException):
+    with pytest.raises(TimeTrackerReadException):
         employee.get_daily_worked_time()
     # Try to access monthly balance directly
-    with pytest.raises(IllegalReadException):
+    with pytest.raises(TimeTrackerReadException):
         employee.get_monthly_balance()
     # Try to access daily schedule
-    with pytest.raises(IllegalReadException):
+    with pytest.raises(TimeTrackerReadException):
         employee.get_daily_schedule()
     # Try to access daily balance
-    with pytest.raises(IllegalReadException):
+    with pytest.raises(TimeTrackerReadException):
         employee.get_daily_balance()
 
 def test_evaluation(default_time_tracker_provider):
@@ -518,7 +518,7 @@ def test_spreadsheet_time_tracker_write(arrange_spreadsheet_time_tracker):
     import openpyxl
     workbook = openpyxl.load_workbook(filename=file_path)
     # Get sheet for test month
-    month_sheet = workbook.worksheets[DATE.month] # Assuming sheet 0 is init
+    month_sheet = workbook.worksheets[DATE.month - 1 + SHEET_JANUARY] # Month 0 is January
     # Check values
     assert month_sheet[CLOCK_IN_CELL_AT_DATE].value == dt.time(hour=8, minute=35)
     assert month_sheet[CLOCK_OUT_CELL_AT_DATE].value == dt.time(hour=9, minute=45)
