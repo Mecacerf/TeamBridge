@@ -149,8 +149,9 @@ LIBREOFFICE_PATH = "C:\\Program Files\\LibreOffice\\program\\soffice"
 LIBREOFFICE_CACHE_FOLDER = ".tmp_calc/"
 
 # Expected spreadsheets version
-# Opening a spreadsheet that doesn't use this version will fail to prevent compatibity issues
-EXPECTED_SHEET_VERSION = "v220425"
+# Opening a spreadsheet that doesn't use this major version will fail to prevent compatibity issues
+# This version may be preceded by a minor version in the form '.xx'
+EXPECTED_MAJOR_VERSION = "v220425"
 
 ################################################
 #   Spreadsheets time tracker implementation   #
@@ -507,10 +508,10 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         
         # Read the spreadsheet version in use
         version = init_sheet[CELL_VERSION].value
-        # Make sure the expected file version is used
-        if version != EXPECTED_SHEET_VERSION:
+        # Make sure the expected major file version is used
+        if version is None or not str(version).lower().startswith(EXPECTED_MAJOR_VERSION.lower()):
             raise ValueError((f"Cannot load workbook '{self._file_path}' that uses version '{version}'."
-                              f" The expected version is '{EXPECTED_SHEET_VERSION}'."))
+                              f" The expected major version is '{EXPECTED_MAJOR_VERSION}'."))
 
         # Read the spreadsheet file's data year
         year = init_sheet[CELL_YEAR].value
@@ -543,7 +544,8 @@ class SpreadsheetTimeTracker(ITodayTimeTracker):
         if not self._readable:
             self._workbook_eval = None
         # Log activity
-        LOGGER.debug(f"[Employee '{self._employee_id}'] (Re)loaded workbook '{self._file_path}', readable={self._readable}.")
+        LOGGER.debug((f"[Employee '{self._employee_id}'] (Re)loaded workbook '{self._file_path}' "
+                     f"({version}), readable={self._readable}."))
 
     def __invalidate_eval_wb(self):
         """
