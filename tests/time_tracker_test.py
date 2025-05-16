@@ -20,7 +20,7 @@ import datetime as dt
 from typing import Callable
 from collections.abc import Generator
 # Specific implementation imports
-from src.core.time_tracker_interface import *
+from src.core.time_tracker import *
 from src.core.spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR, SHEET_INIT, SHEET_JANUARY
 from src.core.spreadsheets_repository import SpreadsheetsRepository
 
@@ -51,7 +51,7 @@ SPREADSHEET_TEST_FILE_NAME = f"{TEST_EMPLOYEE_ID}-template.xlsx"
 #      Spreadsheet Time Tracker provider       #
 ################################################
 
-def build_spreadsheet_time_tracker(employee_id: str, date: dt.date) -> ITimeTracker:
+def build_spreadsheet_time_tracker(employee_id: str, date: dt.date) -> BaseTimeTracker:
     """
     Build an ITodayTimeTracker that uses spreadsheet files for data storage.
 
@@ -124,7 +124,7 @@ def arrange_spreadsheet_time_tracker():
 ])
 def time_tracker_provider(request, 
                           arrange_spreadsheet_time_tracker
-                          ) -> tuple[Callable[[str, dt.date], ITimeTracker], Callable[[ITimeTracker, dt.datetime], None]]:
+                          ) -> tuple[Callable[[str, dt.date], BaseTimeTracker], Callable[[BaseTimeTracker, dt.datetime], None]]:
     """
     Parametrized fixture for retrieving instances of time tracker implementations.
 
@@ -136,7 +136,7 @@ def time_tracker_provider(request,
     return request.param
 
 @pytest.fixture
-def default_time_tracker_provider(time_tracker_provider) -> Generator[tuple[ITimeTracker, Callable[[ITimeTracker, dt.datetime], None]], None, None]:
+def default_time_tracker_provider(time_tracker_provider) -> Generator[tuple[BaseTimeTracker, Callable[[BaseTimeTracker, dt.datetime], None]], None, None]:
     """
     Get a default time tracker opened for default test employee at default test date.
     Automatically manages opening and closing.

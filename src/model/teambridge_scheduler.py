@@ -18,7 +18,7 @@ import logging
 # Import model dataclasses
 from .data import *
 # Import the time tracker generic interface
-from core.time_tracker_interface import *
+from src.core.time_tracker import *
 
 import threading
 from concurrent.futures import ThreadPoolExecutor, Future
@@ -39,7 +39,7 @@ class TeamBridgeScheduler:
     and read results. Tasks are however executed in parallel using the thread pool executor.
     """
 
-    def __init__(self, time_tracker_provider: Callable[[dt.date, str], ITimeTracker]):
+    def __init__(self, time_tracker_provider: Callable[[dt.date, str], BaseTimeTracker]):
         """
         Create the tasks scheduler.
 

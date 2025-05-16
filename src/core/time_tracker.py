@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-File: time_tracker_interface.py
+File: time_tracker.py
 Author: Bastian Cerf
 Date: 17/02/2025
 Description: 
@@ -96,10 +96,10 @@ class ClockEvent:
     action: ClockAction
     
 ###############################################
-#      Time tracker interface declaration     #
+#    Time tracker base class declaration      #
 ###############################################
 
-class ITimeTracker(ABC):
+class BaseTimeTracker(ABC):
     """
     Base abstract class for accessing and managing an employee's attendance data.
 

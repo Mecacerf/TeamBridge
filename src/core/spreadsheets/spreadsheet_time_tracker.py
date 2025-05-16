@@ -90,7 +90,7 @@ import datetime as dt
 import openpyxl, openpyxl.cell, openpyxl.utils # Spreadsheets manipulation library
 
 # Internal imports
-from core.time_tracker_interface import * # Interface to implement
+from src.core.time_tracker import * # Interface to implement
 from .spreadsheets_repository import SpreadsheetsRepository # Spreadsheets repository access
 
 LOGGER = logging.getLogger(__name__)
@@ -157,7 +157,7 @@ EXPECTED_MAJOR_VERSION = "v220425"
 #   Spreadsheets time tracker implementation   #
 ################################################
 
-class SpreadsheetTimeTracker(ITimeTracker):
+class SpreadsheetTimeTracker(BaseTimeTracker):
     """
     Implementation of the time tracker that uses spreadsheet files as database.
     """

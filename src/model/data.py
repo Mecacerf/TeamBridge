@@ -17,7 +17,7 @@ import datetime as dt
 from abc import ABC
 
 # Internal import: ClockEvent is used as is in some dataclasses
-from core.time_tracker_interface import ClockEvent
+from src.core.time_tracker import ClockEvent
 
 @dataclass(frozen=True)
 class IModelMessage(ABC):

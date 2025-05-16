@@ -24,6 +24,9 @@ LOGGER = logging.getLogger(__name__)
 #               Configuration                  #
 ################################################
 
+#TODO: this class may become a simple module (this way being a true singleton)
+# I think that the time_tracker_factory should not be related to this, must be a base factory interface with its own implementation for the spreadsheets
+
 # Temporary folder in which opened spreadsheets are placed
 SPREADSHEETS_CACHE_FOLDER = ".local_cache/"
 # Temporary folder on remote in which saved files are copied
