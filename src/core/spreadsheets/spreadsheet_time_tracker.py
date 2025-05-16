@@ -90,7 +90,7 @@ import datetime as dt
 import openpyxl, openpyxl.cell, openpyxl.utils # Spreadsheets manipulation library
 
 # Internal imports
-from .time_tracker_interface import * # Interface to implement
+from core.time_tracker_interface import * # Interface to implement
 from .spreadsheets_repository import SpreadsheetsRepository # Spreadsheets repository access
 
 LOGGER = logging.getLogger(__name__)
