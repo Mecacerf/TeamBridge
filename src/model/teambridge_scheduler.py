@@ -39,7 +39,7 @@ class TeamBridgeScheduler:
     and read results. Tasks are however executed in parallel using the thread pool executor.
     """
 
-    def __init__(self, time_tracker_provider: Callable[[dt.date, str], ITodayTimeTracker]):
+    def __init__(self, time_tracker_provider: Callable[[dt.date, str], ITimeTracker]):
         """
         Create the tasks scheduler.
 

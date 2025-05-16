@@ -4,7 +4,7 @@ File: time_tracker_interface.py
 Author: Bastian Cerf
 Date: 17/02/2025
 Description: 
-    Give access to employees data through a simple interface.
+    Base abstract class for accessing and managing an employee's attendance data.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -12,23 +12,12 @@ Contact: info@mecacerf.ch
 """
 
 # Standard libraries
-from abc import ABC
-from enum import Enum
+from abc import ABC, abstractmethod
+from typing import Optional
 from dataclasses import dataclass
+from contextlib import contextmanager
+from enum import Enum
 import datetime as dt
-
-# TODO
-# - Mettre à jour dernière version de l'excel
-# L'interface est définie comme suit
-# def get_daily_schedule(self) -> OK Heure à travailler dans la journéee
-# def get_daily_balance(self) -> OK reste la balance actuel, càd du jour courant
-# def get_daily_worked_time(self) -> OK reste le temps travaillé du jour
-# def get_monthly_balance(self) -> OK balance du mois par rapport à l'heure du jour courant
-# Ajout: def get_current_balance(self) -> Balance totale (tous les mois) par rapport à l'heure du jour courant
-# Ajout: def get_previous_day_balance(self) -> Balance totale fin du jour précédent (calcul dynamique: get_current_balance - get_daily_balance, validé avec JC --=+)
-# Ajout: def get_remaining_vacation(self) -> vacances restantes à la fin du mois
-# Ajout: def get_monthly_vacation(self) -> vacances planifiées pour le mois courant
-# ITodayTimeTracker -> enlever le today, la restriction à un jour défini ne fait pas spécialement de sens, ajouter méthode set_day() ? ABC, abstractmethod
 
 ###############################################
 #   Time tracker related errors declaration   #
@@ -55,6 +44,27 @@ class TimeTrackerOpenException(Exception):
     def __init__(self, message="Unable to open the time tracker"):
         super().__init__(message)
 
+class TimeTrackerDateException(Exception):
+    """
+    Custom exception for time tracker date errors.
+    """
+    def __init__(self, message="The operation failed due to a date error"):
+        super().__init__(message)
+
+class TimeTrackerEvaluationException(Exception):
+    """
+    Custom exception for time tracker evaluation errors.
+    """
+    def __init__(self, message="The data evaluation failed"):
+        super().__init__(message)
+
+class TimeTrackerSaveException(Exception):
+    """
+    Custom exception for time tracker saving errors.
+    """
+    def __init__(self, message="The time tracker hasn't been saved properly"):
+        super().__init__(message)
+
 class TimeTrackerCloseException(Exception):
     """
     Custom exception for time tracker closing errors.
@@ -79,167 +89,437 @@ class ClockEvent:
     Simple container for a clock event.
 
     Attributes:
-        time: `datetime.time` hour and minutes in the day at which the event occurred
-        action: `ClockAction` related clock action
+        time (datetime.time): time in the day at which the event occurred
+        action (ClockAction): related clock action
     """
-    time: dt.time       # TODO: should be a datetime?
+    time: dt.time
     action: ClockAction
     
 ###############################################
 #      Time tracker interface declaration     #
 ###############################################
 
-class ITodayTimeTracker(ABC):
+class ITimeTracker(ABC):
     """
-    Interface for accessing and managing an employee's daily attendance data.
+    Base abstract class for accessing and managing an employee's attendance data.
 
-    This interface is designed with simplicity in mind: it is initialized for a specific date, 
-    after which all operations relate exclusively to times within that date. By focusing on a single 
-    day at a time, the interface avoids the complexity of date management, allowing straightforward 
-    retrieval and manipulation of attendance events such as clock-ins, clock-outs, and breaks.
-    
-    Typical use cases include daily time tracking, attendance validation, and working hours reporting.
+    This interface handles attendance data for a single employee over the course of one year.
+    It provides functionality to manage and retrieve clock-in and clock-out events across 
+    multiple dates within that year.
+
+    The `current_date` property controls the working date, and the `data_year` property 
+    indicates the required year for all operations. If a date outside of the specified year 
+    is used, a `TimeTrackerDateException` is raised.
+
+    This object is stateful since it relies on the `current_date` property for the different
+    reading and writing operations. It is therefore not thread-safe.
+
+    In addition to reading and modifying raw attendance data, the time tracker can perform 
+    calculations based on that data. Raw data are always accessible through properties, 
+    while calculated values (prefixed with `read_`) become available only after calling 
+    the `evaluate()` method. These calculated properties are only valid when the
+    `readable` property is `True`.
     """
 
-    def __init__(self, employee_id: str, date: dt.date):
+    def __init__(self, employee_id: str, date: Optional[dt.date] = None):
         """
-        Open the employee's data for given date.
+        Opens the employee's data for the given date.
 
-        Parameters:
-            id: employee unique ID
-            date: date index
-        Raise:
-            ValueError: employee not found
-            ValueError: wrong / unavailable date time
+        Args:
+            employee_id (str): unique identifier for the employee
+            date (Optional[datetime.date]): the current date pointer, defaults to first of January
+
+        Raises:
+            TimeTrackerOpenException: raised when data cannot be opened
+            See subclass implementations for more detailed reasons.
+        """
+        self._employee_id = employee_id
+        self._date = date
+
+        # Call the setup method to get access to properties
+        self._setup()
+
+        # Date defaults to the first of January when not provided
+        if self._date is None:
+            self._date = dt.date(year=self.data_year, month=1, day=1)
+
+    def __enter__(self):
+        # Allow the use of a context manager
+        return self
+
+    @abstractmethod
+    def _setup(self):
+        """
+        Internally setup the data access. Properties must then be accessible.
+        Note that the current date may not be set at this point.
         """
         pass
 
-    def get_firstname(self) -> str:
+    @property
+    @abstractmethod
+    def firstname(self) -> str:
         """
         Get employee's firstname.
-        Always accessible.
 
         Returns:
             str: employee's firstname
         """
         pass
 
-    def get_name(self) -> str:
+    @property
+    @abstractmethod
+    def name(self) -> str:
         """
         Get employee's name.
-        Always accessible.
 
         Returns:
             str: employee's name
         """
         pass
 
-    def get_clock_events_today(self) -> list[ClockEvent]:
+    @property
+    @abstractmethod
+    def data_year(self) -> int:
         """
-        Get all clock-in/out events for the date.
-        Always accessible.
-        
+        Get the year of the information held by the time tracker.
+
         Returns:
-            list[ClockEvent]: list of today's clock events (can be empty)
+            int: year of the information
         """
         pass
 
-    def is_clocked_in_today(self) -> bool:
+    @property
+    def current_date(self) -> dt.date:
         """
-        Check if the employee is currently clocked in (today).
-        Always accessible.
+        Get the current date.
+
+        Returns:
+            datetime.date: current date pointer
+        """
+        return self._date
+
+    @current_date.setter
+    def current_date(self, new_date: dt.date):
+        """
+        Set the current date.
+        
+        Args:
+            new_date (datetime.date): new date pointer
+        """ 
+        self._date = new_date
+
+    @contextmanager
+    def date_context(self, temp_date: dt.date):
+        """
+        Temporarily set `current_date` to a different date and restore it afterward.
+        Useful for scoped operations like aggregations.
+
+        Args:
+            temp_date (datetime.date): the temporary date to set
+        """
+        original_date = self.current_date
+        self.current_date = temp_date
+        try:
+            yield
+        finally:
+            # Current date is always restored, even if an error occurred
+            self.current_date = original_date
+
+    @property
+    @abstractmethod
+    def clock_events(self) -> list[ClockEvent]:
+        """
+        Get all clock-in/out events for the current date.
+
+        Returns:
+            list[ClockEvent]: list of date's clock events (may be empty)
+        """
+        pass
+
+    @property
+    def is_clocked_in(self) -> bool:
+        """
+        Check if the employee is clocked in at current date.
 
         Returns:
             bool: True if clocked in
         """
         # Get last today event and check if it's a clock in action
-        events = self.get_clock_events_today()
+        events = self.clock_events
         return bool(events) and (events[-1].action == ClockAction.CLOCK_IN)
 
-    def is_readable(self) -> bool:
+    @property
+    @abstractmethod
+    def readable(self) -> bool:
         """
         Check if the reading functions are accessible at this moment. 
-        They are initially not accessible (since the opened data are not evaluated) and
-        get accessible after an evaluation is performed.
+        They are initially not accessible (since the opened data are not evaluated) 
+        and get accessible after an evaluation is performed.
 
         Returns:
             bool: reading flag
         """
         pass
 
-    def get_daily_schedule(self) -> dt.timedelta:
+    def check_attendance_errors(self) -> list[dt.date]:
         """
-        Get employee's daily schedule (how much time he's supposed to work).
-        Accessible when is_readable() returns True.
+        Analyze all past days of the year and check for clocking errors.
+
+        This implementation simply verifies that each day has an even number of clock actions.
+        Subclasses may override this method to implement more advanced or custom checks.
 
         Returns:
-            timedelta: daily schedule
+            list[datetime.date]: a list of dates that contain errors, may be empty
+        """
+        day_delta = dt.timedelta(days=1)
+        end_date = self.current_date
+        # List of days with an attendance error
+        errors = []
+        # Iterate all days from the first of January until the current day
+        date = dt.date(day=1, month=1, year=self.data_year)
+        while date < end_date:
+            with self.date_context(date):
+                # Add to errors list if the number of clock actions is odd
+                if (len(self.clock_events) % 2) == 1:
+                    errors.append(self.current_date)
+                self.current_date += day_delta
+
+        return errors
+
+    @abstractmethod
+    def read_day_schedule(self) -> dt.timedelta:
+        """
+        Get employee's daily schedule at current date (how much time he's supposed to work).
+
+        Accessible when the `readable` property is `True`.
+
+        Returns:
+            datetime.timedelta: schedule for the day as a timedelta
         """
         pass
 
-    def get_daily_balance(self) -> dt.timedelta:
+    @abstractmethod
+    def read_day_balance(self) -> dt.timedelta:
         """
-        Get employee's daily balance (remaining time he's supposed to work).
+        Get employee's balance at current date (remaining time he's supposed to work).
         If the employee is clocked in the value is calculated based on the time the last evaluation
-        has been done.
-        Accessible when is_readable() returns True.
+        has been done. This value is always in the range [00:00, 23:59].
+
+        Special case: if the current date is a day that has already passed this year and the 
+        employee has forgotten to clock out on that day, the calculated value depends on the time of 
+        the current day, which is not conceptually correct.
+        
+        Accessible when the `readable` property is `True`.
 
         Returns:
-            timedelta: daily balance
+            datetime.timedelta: balance for the day as a timedelta
         """
         pass
 
-    def get_daily_worked_time(self) -> dt.timedelta:
+    @abstractmethod
+    def read_day_worked_time(self) -> dt.timedelta:
         """
-        Get employee's worked time for the day.
+        Get employee's worked time at current date.
         If the employee is clocked in the value is calculated based on the time the last evaluation
         has been done.
-        Accessible when is_readable() returns True.
+
+        Special case: if the current date is a day that has already passed this year and the 
+        employee has forgotten to clock out on that day, the calculated value depends on the time of 
+        the current day, which is not conceptually correct.
+        
+        Accessible when the `readable` property is `True`.
         
         Returns:
-            timedelta: delta time object
+            datetime.timedelta: worked time for the day as a timedelta
         """
         pass
 
-    def get_monthly_balance(self) -> dt.timedelta:
+    @abstractmethod
+    def read_month_balance(self) -> dt.timedelta:
         """
-        Get employee's balance for the current month.
-        Accessible when is_readable() returns True.
+        Get employee's balance for the current month (depends on current date).
+        If the employee is clocked in the value is calculated based on the time the last evaluation
+        has been done.
+
+        Special case: if the employee has forgotten to clock out on a past day, the balance 
+        for that day may be calculated using today's time, affecting the total. This 
+        value is only accurate if all prior clocking actions in the month are correct.
+        You can validate the data using `check_attendance_errors()`.
+        
+        Accessible when the `readable` property is `True`.
 
         Returns:
-            timedelta: delta time object
+            datetime.timedelta: balance for the month as a timedelta
         """
         pass
 
+    @abstractmethod
+    def read_year_balance(self) -> dt.timedelta:
+        """
+        Get employee's year-to-date balance.
+
+        Special case: if the employee has forgotten to clock out on a past day, the balance 
+        for that day may be calculated using today's time, affecting the total. This 
+        value is only accurate if all prior clocking actions are correct.
+        You can validate the data using `check_attendance_errors()`.
+
+        Accessible when the `readable` property is `True`.
+
+        Returns:
+            datetime.timedelta: balance for the year as a timedelta
+        """
+        pass
+
+    def read_year_balance_until_yesterday(self) -> dt.timedelta:
+        """
+        Get the employee's accumulated balance from the start of the year up to yesterday.
+
+        This is often more relevant for employees than the full year-to-date balance,
+        especially when today's work is still in progress.
+
+        Special case: if the employee has forgotten to clock out on a past day, the balance 
+        for that day may be calculated using today's time, affecting the total. This 
+        value is only accurate if all prior clocking actions are correct.
+        You can validate the data using `check_attendance_errors()`.
+
+        Accessible when the `readable` property is `True`.
+
+        Returns:
+            datetime.timedelta: balance from the start of the year up to (but excluding) today.
+        """
+        return (self.read_year_balance() - self.read_day_balance())
+
+    @abstractmethod
+    def read_remaining_vacation(self) -> float:
+        """
+        Get the number of vacation days the employee still has available (not yet planned or used).
+
+        Accessible when the `readable` property is `True`.
+
+        Returns:
+            float: number of remaining vacation days
+        """
+        pass
+
+    @abstractmethod
+    def read_month_vacation(self) -> float:
+        """
+        Get the total number of vacation days planned for the current month.
+
+        Accessible when the `readable` property is `True`.
+
+        Returns:
+            float: number of planned vacation days for the current month.
+        """
+        pass
+
+    @abstractmethod
+    def read_day_vacation(self) -> float:
+        """
+        Get the vacation ratio for the current date.
+
+        Typically returns a value in the range [0.0, 1.0], where:
+        - 1.0 represents a full vacation day,
+        - 0.5 represents a half-day,
+        - 0.0 means no vacation.
+
+        Accessible when the `readable` property is `True`.
+
+        Returns:
+            float: vacation ratio for the current date.
+        """
+        pass
+
+    def read_year_vacation(self) -> float:
+        """
+        Get the total number of vacation days planned for the year.
+       
+        Accessible when the `readable` property is `True`.
+
+        Returns:
+            float: number of planned vacation days for the year.
+        """
+        # Iterate the months and sum the vacation days
+        total_days = 0.0
+        for month in range(1, 13):
+            # Read the planned vacations for the month
+            with self.date_context(dt.date(day=1, month=month, year=self.data_year)):
+                total_days += self.read_month_vacation()
+
+        return total_days
+
+    @abstractmethod
     def register_clock(self, event: ClockEvent) -> None:
         """
-        Register a clock in/out event.
-        After a clock event is registered, the reading functions are not available until a
-        new evaluation is performed.
+        Register a clock in/out event at the current date.
 
-        Parameters:
-            event: clock event object
-        Raise:
-            ValueError: double clock in/out detected
+        After a clock event is registered, the `readable` property gets `False` and the reading
+        functions are not available until a new evaluation is performed.
+
+        Args:
+            event (ClockEvent): clock event to register at current date
+        
+        Raises:
+            TimeTrackerWriteException: raised when the registering fails
+            See subclass implementations for more detailed reasons.
         """
         pass
 
-    def commit(self) -> None:
-        """
-        Commit changes. This must be called after changes have been done (typically after new clock events
-        have been registered) to save the modifications.
-        """
-        pass
-
+    @abstractmethod
     def evaluate(self) -> None:
         """
-        Start an employee's data evaluation. This must be done after changes have been committed.
-        Once done, the reading functions are available again and will provide up to date results.
+        Evaluate the employee's data. Depending on the implementation in use, this process may take 
+        some time. Once complete and successful, the 'readable' property will be set to 'True', 
+        meaning that all 'read_' prefixed methods will be available for use.
+
+        Raises:
+            TimeTrackerEvaluationException: raised when the evaluation fails
+            See subclass implementations for more detailed reasons.
         """
         pass
 
-    def close(self) -> None:
+    @abstractmethod
+    def save(self) -> None:
         """
-        Close the time tracker, save and release resources.
+        Save changes. 
+        
+        This must be called after changes have been done (typically after new clock events have been 
+        registered) to save the modifications.
+
+        Raises:
+            TimeTrackerSaveException: raised when the saving fails
+            See subclass implementations for more detailed reasons.
         """
         pass
+
+    @abstractmethod
+    def close(self) -> None:
+        """
+        Close the time tracker. It should not be used again after this call.
+
+        This does not automatically save the data. In most cases, the `save()` method should be called
+        before this.
+
+        Raises:
+            TimeTrackerCloseException: raised when the closing fails
+            See subclass implementations for more detailed reasons.
+        """
+        pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Ensures the time tracker is properly closed when exiting the context manager.
+
+        If an exception occurs in the `with` block and `close()` also fails, the original
+        exception is re-raised and the close error is chained to it. If only the close
+        fails, that exception is raised. Otherwise, lets Python handle any other exception.
+        """
+        try:
+            self.close()
+        except TimeTrackerCloseException as close_ex:
+            if exc_val:
+                # If there was an exception during the context block, chain close error to it
+                raise exc_val from close_ex
+            # No prior exception: just raise the close failure
+            raise close_ex
+        return False  # Propagate any exception from the context block

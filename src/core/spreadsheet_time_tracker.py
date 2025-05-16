@@ -157,7 +157,7 @@ EXPECTED_MAJOR_VERSION = "v220425"
 #   Spreadsheets time tracker implementation   #
 ################################################
 
-class SpreadsheetTimeTracker(ITodayTimeTracker):
+class SpreadsheetTimeTracker(ITimeTracker):
     """
     Implementation of the time tracker that uses spreadsheet files as database.
     """
