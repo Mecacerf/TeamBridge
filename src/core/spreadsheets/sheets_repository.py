@@ -4,194 +4,336 @@ File: spreadsheets_repository.py
 Author: Bastian Cerf
 Date: 19/03/2025
 Description: 
-    Manage access to spreadsheet files repository.    
+    Manages access to the spreadsheet files repository with thread-safe, 
+    singleton-like behavior. This module is intended to be used as a 
+    globally configured, singleton-style interface, supporting concurrent 
+    access from multiple threads.
+
+    It operates on any directory available in the local file system, 
+    including network-mounted drives. To improve reliability, it includes 
+    a simple retry mechanism to handle temporary unavailability (e.g., due 
+    to NAS devices entering sleep mode), and uses locking mechanisms to 
+    prevent simultaneous access to the same files.
+
+    It is the responsibility of the user to ensure the file has been acquired
+    before saving it or releasing it. Calling these functions without having
+    acquiring the file before may cause unexpected behaviors.
+
+    If an error happens during acquired spreadsheet file operations, it is
+    normal and intended to not release it. The file will stay unusable until
+    someone manually remove the lock file from the remote repository, assuming
+    the errors have been manually solved.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+# Standard libraries
 import logging
 import os
 import pathlib
 import shutil
-import threading
 import time
+import re
+from typing import Optional
 
 LOGGER = logging.getLogger(__name__)
 
-################################################
-#               Configuration                  #
-################################################
+# Temporary local and remote cache folders used to store files in use 
+SHEETS_LOCAL_CACHE = ".local_cache"
+SHEETS_REMOTE_CACHE = ".remote_cache"
 
-#TODO: this class may become a simple module (this way being a true singleton)
-# I think that the time_tracker_factory should not be related to this, must be a base factory interface with its own implementation for the spreadsheets
+# Retry delay and timeout for remote repository access
+REPOSITORY_DELAY = 1.0
+REPOSITORY_TIMEOUT = 20.0
 
-# Temporary folder in which opened spreadsheets are placed
-SPREADSHEETS_CACHE_FOLDER = ".local_cache/"
-# Temporary folder on remote in which saved files are copied
-REMOTE_CACHE_FOLDER = ".remote_cache/"
-# Dummy file to create and write when trying to wakeup the NAS
-DUMMY_FILE_NAME = ".remote_wakeup.txt"
-# Delay between accesses retries
-RETRY_ACCESS_DELAY = 5.0 # [s]
-# Number of retries
-RETRY_NUMBER = 3
+# retry delay and timeout for saving a file in the repository
+SAVE_FILE_DELAY = 0.5
+SAVE_FILE_TIMEOUT = 3.0
 
-class SpreadsheetsRepository:
+# Retry delay and timeout for file access on the remote repository
+FILE_LOCK_DELAY = 0.5
+FILE_LOCK_TIMEOUT = 5.0
+
+# Pattern to list spreadsheet files
+SPREADSHEETS_FILE_PATTERN = "*.xlsx"
+# Regular expression to extract the employee ID from the file name
+ID_FROM_FILE_NAME_REGEX = r"^(\d{3})[-_,:;]"
+# The extension is added as a suffix to the file name
+LOCK_FILE_EXTENSION = ".lock"
+
+# Internal variables
+_remote_repository: str = "samples" # Default test repository
+
+def configure(remote_repository: str, local_cache: Optional[str]):
     """
-    Typically unique class shared among the spreadsheet time trackers to read and write files
-    on a remote repository mounted on a disk drive.
-    Thread-safe.
+    Configure the module. Must be called before any usage.
+    
+    Args:
+        remote_repository (str): Absolute or relative path to the remote spreadsheet 
+            files repository
+        local_cache (Optional[str]): Optionally change the default local cache folder
     """
+    global _remote_repository
+    _remote_repository = remote_repository
 
-    def __init__(self, repository_path: str, local_cache: str=None):
-        """
-        Create a repository accesser.
+    if local_cache:
+        global SHEETS_LOCAL_CACHE
+        SHEETS_LOCAL_CACHE = local_cache
 
-        Parameters:
-            repository_path: path to files folder
-            local_cache: local folder to cache opened files
-        """
-        # Create the lock object that will prevent multiple simultaneous file accesses
-        self._lock = threading.Lock()
-        # Save the database path
-        self._repository_path = repository_path
-        # Save the local cache path
-        self._local_cache = SPREADSHEETS_CACHE_FOLDER
-        if local_cache:
-            self._local_cache = local_cache
-        # Log activity
-        LOGGER.info(f"The spreadsheets database is located under '{self._repository_path}'.")
+    # Check that the system has access to the remote repository
+    __acquire_repository_path()    
 
-    def acquire_employee_file(self, employee_id: str) -> pathlib.Path | None:
-        """
-        Search and acquire the employee's file and copy it in local cache.
+def acquire_spreadsheet_file(employee_id: str) -> pathlib.Path:
+    """
+    Acquire the employee's spreadsheet file from the remote repository.
 
-        Returns:
-            pathlib.Path: local employee's file path or None if not found
-        Raise:
-            RuntimeError: employee's file is already opened
-            OSError: error related to file access
-            TimeoutError: failed to access database folder after timeout
-        """
-        # Acquire lock
-        with self._lock:
-            # Check that the local cache doesn't already contain the file, that would mean the
-            # file is already in use.
-            if any(file.name.startswith(employee_id) for file in pathlib.Path(self._local_cache).glob("*.xlsx")):
-                raise RuntimeError(f"The employee's file with id={employee_id} is already in use.")
-            # Acquire the database files folder
-            folder = self.__acquire_repository_path()
-            # Search the employee's file based on given id by iterating on all spreadsheet files
-            for remote_file in folder.glob("*.xlsx"):
-                # Check that this is a file and its name starts with correct id
-                if remote_file.is_file() and remote_file.name.startswith(employee_id):
-                    # Employee's file is found
-                    # Ensure local cache folder exists
-                    os.makedirs(self._local_cache, exist_ok=True)
-                    # Copy file to local cache, keeping metadata
-                    local_file = pathlib.Path(self._local_cache) / remote_file.name
-                    shutil.copy2(remote_file, local_file)
-                    # Log activity
-                    LOGGER.info(f"Successfully acquired '{remote_file}' as '{local_file}'.")
-                    # Return local file path
-                    return local_file
-            # Employee's file not found
-            return None
+    This function performs the following steps:
+    - Acquire the path to the remote repository
+    - Ensure the employee's spreadsheet file exists
+    - Acquire a lock on the remote file to prevent concurrent access
+    - Create a local cache directory if it doesn't already exist
+    - Copy the remote file to the local cache
+    - Return a `Path` object pointing to the cached file
 
-    def save_employee_file(self, path: pathlib.Path) -> None:
-        """
-        Save the employee's file.
+    This function always returns a valid path or raises an exception on failure.
 
-        Parameters:
-            path: path to local employee's file that was previously acquired
-        Raise:
-            FileNotFoundError: no file exists for given path
-            FileExistsError: the remote database cache already contain the file
-            OSError: a problem occurred related to OS operations
-            TimeoutError: failed to access folder after timeout
-        """
-        # Check path exists
-        if not path.exists():
-            raise FileNotFoundError(f"Cannot find file '{path}' in local cache. Unable to save.")
-        # Acquire lock
-        with self._lock:
-            # Acquire database folder
-            folder = self.__acquire_repository_path()
-            # Get remote cache folder and ensure the file doesn't already exist, which would mean
-            # a previous operation failed.
-            remote_cache_file = folder / REMOTE_CACHE_FOLDER / path.name
-            if remote_cache_file.exists():
-                raise FileExistsError(f"The employee's file '{remote_cache_file}' exists in remote cache folder," 
-                                      "which may indicate that a previous operation failed. Saving aborted.")
-            # Ensure remote cache folder exists
-            os.makedirs(folder / REMOTE_CACHE_FOLDER, exist_ok=True)
-            # Get actual remote file
-            remote_file = folder / path.name
-            # Copy the file to remote cache folder using copy2 from shutil (keep metadata)
-            shutil.copy2(path, remote_cache_file)
-            # Replace old file on remote, cached file is moved so it won't exist after the replace
-            os.replace(remote_cache_file, remote_file)
-            # Log activity
-            LOGGER.info(f"Successfully saved '{path}' under '{remote_file}'.")
+    Returns:
+        pathlib.Path: Path to the local cached spreadsheet file
 
-    def close_employee_file(self, path: pathlib.Path):
-        """
-        Close an employee's file. It will release the file lock. 
-        Save the file before closing it.
+    Raises:
+        TimeoutError: If accessing the remote repository or acquiring the file lock times out
+        FileNotFoundError: If no spreadsheet file exists for the given employee's id
+        OSError: For general operating system-related errors (e.g., I/O issues)
+    """
+    repo_path = __acquire_repository_path()
+    
+    # Search the employee's file in the remote files repository
+    try:
+        repo_file = next(
+            file for file in repo_path.glob(SPREADSHEETS_FILE_PATTERN) 
+            if file.is_file() and file.name.startswith(employee_id)
+            )
+    except StopIteration:
+        raise FileNotFoundError(f"The spreadsheet file for employee '{employee_id}' doesn't exist.")
+    
+    # Acquire the file lock
+    __acquire_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
 
-        Parameters:
-            path: path to local employee's file that was previously acquired
-        Raise:
-            FileNotFoundError: no file exists for given path
-            FileExistsError: the remote database cache already contain the file
-            OSError: a problem occurred related to OS operations
-            TimeoutError: failed to access folder after timeout
-        """
-        # Check path exists
-        if not path.exists():
-            raise FileNotFoundError(f"Cannot find file '{path}' in local cache. Unable to close.")
-        # Acquire lock
-        with self._lock:
-            # Remove file from local cache
-            path.unlink()
-            # Log activity
-            LOGGER.info(f"Removed local file '{path}'.")
+    # Make sure the local cache exists
+    os.makedirs(SHEETS_LOCAL_CACHE, exist_ok=True)
+    # Copy the repository file in the local cache with copy2() to keep metadata
+    # Note that if a previous operation failed and the lock file has been manually
+    # deleted, this copy may overwrite an old temporary file.
+    local_file = pathlib.Path(SHEETS_LOCAL_CACHE) / repo_file.name
+    shutil.copy2(repo_file, local_file)
 
-    def __acquire_repository_path(self) -> pathlib.Path:
-        """
-        Try to acquire the path to employees files folder.
+    LOGGER.debug(f"Acquired '{repo_file}' as '{local_file}'.")
+    return local_file
 
-        Returns:
-            pathlib.Path: path to files folder
-        Raise:
-            TimeoutError: failed to access folder after timeout
-        """
-        # Get path to employees data files, it might be on a NAS
-        folder = pathlib.Path(self._repository_path)
-        # Get dummy file path
-        dummy_file = folder / DUMMY_FILE_NAME
-        # Number of access attempts
-        attempts = 0
-        # While the folder doesn't exist, try to open and write a simple file
-        # It might wakeup the sleeping NAS
-        while not folder.exists():
+def save_spreadsheet_file(local_file: pathlib.Path):
+    """
+    Save the spreadsheet file to the remote repository. This operation must be
+    performed only after acquiring exclusive access to the file.
+
+    The saving process follows these steps:
+    - Acquire the path to the remote repository
+    - Ensure the remote cache directory exists
+    - Copy the spreadsheet file from the local cache to the remote cache
+    - Atomically move the file from the remote cache to the main repository,
+       replacing the previous versio
+
+    The intermediate copy to the remote cache ensures that, in case of failure
+    during the file transfer, the existing file in the repository remains intact.
+    The final replacement is performed using an atomic `os.replace()` call.
+
+    Args:
+        local_file (pathlib.Path): Path to the spreadsheet file in the local cache
+
+    Raises:
+        TimeoutError: If accessing the remote repository or saving the file times out
+        FileNotFoundError: If the specified local file does not exist
+        OSError: For general I/O or file system-related issues
+    """
+    repo_path = __acquire_repository_path()
+    remote_cache_path = repo_path / SHEETS_REMOTE_CACHE
+    # Make sure the remote cache exists
+    remote_cache_path.mkdir(parents=True, exist_ok=True)
+
+    repo_cache_file = remote_cache_path / local_file.name
+    repo_file = repo_path / local_file.name
+
+    oserror = None
+    timeout = time.time() + SAVE_FILE_TIMEOUT
+    while time.time() < timeout:
+        try:
+            # Step 1: Copy from local cache to remote cache
+            shutil.copy2(local_file, repo_cache_file)
+            # Step 2: Atomically move to final repository location
+            os.replace(repo_cache_file, repo_file)
+
+            LOGGER.debug(f"Saved '{repo_file}'.")
+            return
+        except OSError as e:
+            oserror = e
+            time.sleep(SAVE_FILE_DELAY)
+        finally:
+            # Always attempt to clean up intermediate file
             try:
-                # Open and write a dummy file
-                with open(dummy_file, 'w') as file:
-                    file.write("Wakeup attempt.")
-            # Catch potential errors
-            except (OSError, FileNotFoundError) as e:
-                # Retry mechanism
-                attempts += 1
-                if attempts >= RETRY_NUMBER:
-                    raise TimeoutError(f"Cannot access '{folder}' after {RETRY_NUMBER} attempts.")
-                # Log activity
-                LOGGER.warning(f"Cannot access files database (attempt #{attempts}).")
-                LOGGER.warning(e)
-                # Wait until next attempt
-                time.sleep(RETRY_ACCESS_DELAY)
+                if repo_cache_file.exists():
+                    repo_cache_file.unlink()
+            except Exception:
+                pass  # Best effort cleanup; ignore any errors
 
-        # Return the existing folder
-        return folder
+    raise TimeoutError(
+        f"Unable to save '{repo_file}' after {SAVE_FILE_TIMEOUT} seconds."
+    ) from oserror
+
+def release_spreadsheet_file(local_file: pathlib.Path):
+    """
+    Release the employee's spreadsheet file, allowing other processes to access it again.
+
+    The releasing process follows these steps:
+    - Acquire the path to the remote repository
+    - Delete the spreadsheet file from the local cache
+    - Delete the lock file in the repository
+
+    Args:
+        local_file (pathlib.Path):  Path to the spreadsheet file in the local cache
+
+    Raises:
+        TimeoutError: raised if the remote folder cannot be accessed after the specified retries
+        TimeoutError: If the lock file could not be removed within the timeout
+        OSError: For general I/O or file system-related issues
+    """
+    repo_path = __acquire_repository_path()
+    repo_file = repo_path / local_file.name
+    local_file.unlink()
+    __release_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
+
+def list_employee_ids() -> list[str]:
+    """
+    List all registered employees from the remote repository. 
+
+    Returns:
+        list[str]: A list of all employee IDs extracted from spreadsheet filenames
+
+    Raises:
+        TimeoutError: raised if the remote folder cannot be accessed after the specified retries
+    """
+    repo_path = __acquire_repository_path()
+
+    return [
+        match.group(1)
+        for file in repo_path.glob(SPREADSHEETS_FILE_PATTERN)
+        if file.is_file() and (match := re.match(ID_FROM_FILE_NAME_REGEX, file.name))
+    ]
+
+def __acquire_file_lock(lock_path: str):
+    """
+    Internal use only.
+    Attempt to acquire the file lock by creating the lock file.
+
+    This function retries for a defined timeout period to create the file,
+    which may be temporarily inaccessible if currently used by another process.
+
+    Args:
+        lock_path (str): file lock path
+
+    Raises:
+        TimeoutError: If the lock file could not be acquired within the timeout
+        OSError: For general I/O or file system-related issues
+    """
+    # Lock file creation flags
+    # https://docs.python.org/3/library/os.html
+    # https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/open-wopen
+    # These flags are available on Windows and Unix
+    flags = (os.O_CREAT |   # Creates a file as temporary
+             os.O_EXCL  |   # Returns an error value if the file already exists
+             os.O_WRONLY)   # Opens a file for writing only
+    # Using os.O_EXCL allows to check if the file exists and create it if not, in one operation. 
+    # It seems like it is the best way of implementing such a mechanism in a platform independent 
+    # way, even though the operation atomicity may depend on different factors such as the 
+    # filesystem in use.
+
+    timeout = time.time() + FILE_LOCK_TIMEOUT
+    while time.time() < timeout:
+        try:
+            # Try to create the lock file and return on success
+            fd = os.open(lock_path, flags)
+            os.close(fd)
+            return
+        except FileExistsError:
+            time.sleep(FILE_LOCK_DELAY)
+        except OSError as e:
+            raise e  # Unexpected errors
+        
+    raise TimeoutError(f"Cannot acquire file lock '{lock_path}' after {FILE_LOCK_TIMEOUT} seconds.")
+
+def __release_file_lock(lock_path: str):
+    """
+    Internal use only.
+    Attempt to release the file lock by deleting the lock file.
+
+    This function retries for a defined timeout period to remove the file,
+    which may be temporarily inaccessible (e.g., due to OS or network delays).
+
+    Args:
+        lock_path (str): Path to the lock file
+
+    Raises:
+        TimeoutError: If the lock file could not be removed within the timeout
+    """
+    timeout = time.time() + FILE_LOCK_TIMEOUT
+    oserror = None
+
+    while time.time() < timeout:
+        try:
+            os.remove(lock_path)
+            return  # Lock successfully released
+        except FileNotFoundError:
+            return  # Lock already released (nothing to do)
+        except OSError as e:
+            # Likely permission error, file in use, etc.
+            oserror = e
+            time.sleep(FILE_LOCK_DELAY)
+
+    raise TimeoutError(f"Cannot release file lock '{lock_path}' after {FILE_LOCK_TIMEOUT} seconds.") from oserror
+
+def __acquire_repository_path() -> pathlib.Path:
+    """
+    Internal use only.
+    Acquire the path to the remote spreadsheet files folder. Implements a simple retry
+    mechanism if the path is unavailable. A dummy file is written up to RETRY_NUMBER
+    times to attempt waking up a potentially sleeping drive.
+
+    Returns:
+        pathlib.Path: the path to the remote repository
+
+    Raises:
+        TimeoutError: raised if the remote folder cannot be accessed after the specified retries
+    """
+    repo_path = pathlib.Path(_remote_repository)
+    dummy_file = repo_path / "remote_wakeup.txt"
+    
+    attempts = 0
+    oserror = None
+    timeout = time.time() + REPOSITORY_TIMEOUT
+
+    while time.time() < timeout:
+        # Return the repository Path as soon as it gets available
+        if repo_path.exists():
+            return repo_path
+        
+        # Otherwise try to write a dummy file to wakeup the sleeping drive
+        try:
+            attempts += 1
+            with open(dummy_file, 'w') as file:
+                file.write("Wakeup attempt.")
+        except OSError as e:
+            oserror = e
+            # Only sleep on exception, if the operation succeeded the path should exist
+            time.sleep(REPOSITORY_DELAY)
+
+    raise TimeoutError(f"Failed to access '{repo_path}' after {attempts} attempts.") from oserror
