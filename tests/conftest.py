@@ -4,34 +4,27 @@ File: conftest.py
 Author: Bastian Cerf
 Date: 13/04/2025
 Description: 
-    Common configuration for unit tests.
-Usage:
-    Use pytest to execute the tests. You can run it by executing the command below in the TeamBridge/ folder.
-    - pytest
+    Declaration of shared fixtures across unit test modules.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-# General imports
+# Standard libraries
 import pytest
+import pathlib
+import shutil
+import os
 import datetime as dt
-from collections.abc import Generator
-# Specific implementation imports
-from core.time_tracker_interface import *
-from core.spreadsheet_time_tracker import SpreadsheetTimeTracker
-from core.spreadsheets_repository import SpreadsheetsRepository
-from model import *
-from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
-from platform_io.barcode_scanner import BarcodeScanner
+
+# Internal libraries
+from tests.test_constants import *
 
 ################################################
 #               Tests constants                #
 ################################################
 
-# General tests configuration
-TEST_EMPLOYEE_ID = "unit-test"
 # Test date and time
 TEST_DATE = dt.date(year=2025, month=3, day=10) # 10 March 2025 is a monday
 TEST_TIME = dt.time(hour=8, minute=10)
@@ -43,75 +36,63 @@ TEST_DAILY_SCHEDULE = dt.timedelta(hours=8, minutes=17)
 # Equal to number of working days times daily schedule
 TEST_MONTHLY_BALANCE_NO_WORK = (TEST_DAILY_SCHEDULE * 6)
 
-# Spreadsheet Time Tracker
-SPREADSHEET_SAMPLES_FOLDER = "tests/assets/"
-SPREADSHEET_SAMPLES_TEST_FOLDER = ".cache/samples/"
-SPREADSHEET_LOCAL_CACHE_TEST_FOLDER = ".cache/local-cache/"
-SPREADSHEET_TEST_FILE_NAME = f"{TEST_EMPLOYEE_ID}-template.xlsx"
-
 ################################################
 #               Common fixtures                #
 ################################################
 
 @pytest.fixture
-def arrange_spreadsheet_time_tracker():
+def arrange_assets():
     """
-    Prepare the cache folder that will be used to store temporary spreadsheet file(s) for the tests.
+    This pytest fixture prepares the test assets. It removes any existing old
+    test asset folders and creates a new one.
     """
-    import shutil, pathlib
-    # Get source samples and cache folder
-    samples = pathlib.Path(SPREADSHEET_SAMPLES_FOLDER)
-    samples_cache = pathlib.Path(SPREADSHEET_SAMPLES_TEST_FOLDER)
-    local_cache = pathlib.Path(SPREADSHEET_LOCAL_CACHE_TEST_FOLDER)
-    # Check samples folder exists 
-    if not samples.exists():
-        raise FileNotFoundError(f"Samples folder not found at {samples.resolve()}")
+    assets_src = pathlib.Path(TEST_ASSETS_SRC_FOLDER)
+    assets_dst = pathlib.Path(TEST_ASSETS_DST_FOLDER)
     
-    # Remove with privileges
-    def remove_readonly(func, path, exc_info):
-            """Changes the file attribute and retries deletion if permission is denied."""
-            import os
+    if not assets_src.exists():
+        raise FileNotFoundError(f"Test assets folder not found at '{assets_src.resolve()}'.")
+    
+    if assets_dst.exists():
+        def remove_readonly(func, path, exc_info):
+            """
+            Changes the file attribute and retries deletion if permission is denied.
+            """
             os.chmod(path, 0o777) # Grant full permissions
             func(path) # Retry the function
+        # Remove old test assets folder
+        shutil.rmtree(assets_dst, onexc=remove_readonly)
 
-    # Delete old cache folder if existing
-    if samples_cache.exists():
-        shutil.rmtree(samples_cache, onexc=remove_readonly)
-    # Delete local cache folder if last time tracker wasn't correctly closed
-    if local_cache.exists():
-        shutil.rmtree(local_cache, onexc=remove_readonly)   
-    # Copy samples to test samples cache
-    shutil.copytree(samples, samples_cache)
+    shutil.copytree(assets_src, assets_dst)
 
-@pytest.fixture
-def teambridge_model(arrange_spreadsheet_time_tracker) -> Generator[TeamBridgeScheduler, None, None]:
-    """
-    Create a configured teambridge model instance.
-    """
-    # Create the model using a SpreadsheetTimeTracker
-    repository = SpreadsheetsRepository(SPREADSHEET_SAMPLES_TEST_FOLDER)
-    time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date)
-    model = TeamBridgeScheduler(time_tracker_provider=time_tracker_provider)
-    # Yield and close automatically
-    yield model
-    model.close()
+# @pytest.fixture
+# def teambridge_model(arrange_spreadsheet_time_tracker) -> Generator[TeamBridgeScheduler, None, None]:
+#     """
+#     Create a configured teambridge model instance.
+#     """
+#     # Create the model using a SpreadsheetTimeTracker
+#     repository = SpreadsheetsRepository(SAMPLES_TEST_FOLDER)
+#     time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date)
+#     model = TeamBridgeScheduler(time_tracker_provider=time_tracker_provider)
+#     # Yield and close automatically
+#     yield model
+#     model.close()
 
-@pytest.fixture
-def teambridge_viewmodel(teambridge_model, monkeypatch) -> Generator[TeamBridgeViewModel, None, None]:
-    """
-    Create a configured teambridge viewmodel instance.
-    """
-    # Create a barcode scanner
-    scanner = BarcodeScanner()
-    def void(**kwargs): pass
-    monkeypatch.setattr(scanner, "close", void)
-    # Create a viewmodel
-    viewmodel = TeamBridgeViewModel(teambridge_model, 
-                                    scanner=scanner, 
-                                    cam_idx=0,
-                                    scan_rate=10,
-                                    debug_mode=True)
-    # Yield and close automatically
-    # The scanner is also given in order to use monkeypatch to mock its functionalities
-    yield (viewmodel, scanner)
-    viewmodel.close()
+# @pytest.fixture
+# def teambridge_viewmodel(teambridge_model, monkeypatch) -> Generator[TeamBridgeViewModel, None, None]:
+#     """
+#     Create a configured teambridge viewmodel instance.
+#     """
+#     # Create a barcode scanner
+#     scanner = BarcodeScanner()
+#     def void(**kwargs): pass
+#     monkeypatch.setattr(scanner, "close", void)
+#     # Create a viewmodel
+#     viewmodel = TeamBridgeViewModel(teambridge_model, 
+#                                     scanner=scanner, 
+#                                     cam_idx=0,
+#                                     scan_rate=10,
+#                                     debug_mode=True)
+#     # Yield and close automatically
+#     # The scanner is also given in order to use monkeypatch to mock its functionalities
+#     yield (viewmodel, scanner)
+#     viewmodel.close()
