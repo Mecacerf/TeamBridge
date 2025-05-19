@@ -96,6 +96,23 @@ class ClockEvent:
     action: ClockAction
     
 ###############################################
+#           Attendance error types            #
+###############################################
+
+@dataclass(frozen=True)
+class AttendanceError:
+    """
+    Simple attendance error class.
+
+    Attributes:
+        description (str): concise error description
+    """
+    description: str
+
+CLOCK_EVENT_MISSING = AttendanceError("A clock event is missing.")
+CLOCK_EVENTS_UNORDERED = AttendanceError("Clock events times are unordered.")
+
+###############################################
 #    Time tracker base class declaration      #
 ###############################################
 
@@ -136,8 +153,11 @@ class BaseTimeTracker(ABC):
         self._employee_id = employee_id
         self._date = date
 
-        # Call the setup method to get access to properties
-        self._setup()
+        try:
+            # Call the setup method to get access to properties
+            self._setup()
+        except Exception as e:
+            raise TimeTrackerOpenException() from e
 
         # Date defaults to the first of January when not provided
         if self._date is None:
@@ -229,10 +249,17 @@ class BaseTimeTracker(ABC):
     @abstractmethod
     def clock_events(self) -> list[ClockEvent]:
         """
-        Get all clock-in/out events for the current date.
+        Retrieve all clock-in and clock-out events for the current date.
+
+        Events are supposed to be ordered chronologically. They follow the 
+        expected pattern:
+        clock-in, clock-out, clock-in, clock-out, etc. If a corresponding 
+        event is missing (e.g., a missing clock-out after a clock-in), `None` 
+        is inserted in its place to preserve the sequence structure.
 
         Returns:
-            list[ClockEvent]: list of date's clock events (may be empty)
+            list[ClockEvent]: A list of clock events for the current date.
+                The list may be empty if no events are recorded for the date.
         """
         pass
 
@@ -261,28 +288,58 @@ class BaseTimeTracker(ABC):
         """
         pass
 
-    def check_attendance_errors(self) -> list[dt.date]:
+    def check_date_error(self) -> Optional[AttendanceError]:
+        """
+        Analyze the current date and check for clocking errors.
+
+        This method verifies that:
+        - The day finishes with a clock-out event
+        - There is no missing clock event
+        - Clock events times are in ascending order
+
+        Returns:
+            Optional[AttendanceError]: Optionally return an `AttendanceError`
+                object corresponding to the error found
+        """
+        events = self.clock_events
+
+        # Check 1: day finishes with a clock-out
+        if events[-1].action != ClockAction.CLOCK_OUT:
+            return CLOCK_EVENT_MISSING
+        # Check 2: no missing (None) clock event
+        if any([evt == None for evt in events]):
+            return CLOCK_EVENT_MISSING
+        # Check 3: events times are in ascending order
+        if any(e1.time >= e2.time for e1, e2 in zip(events, events[1:])):
+            return CLOCK_EVENTS_UNORDERED 
+        
+        return None
+
+    def check_attendance_errors(self) -> dict[dt.date, AttendanceError]:
         """
         Analyze all past days of the year and check for clocking errors.
 
-        This implementation simply verifies that each day has an even number of clock actions.
-        Subclasses may override this method to implement more advanced or custom checks.
+        This method internally uses `time_tracker.check_date_error()` on each
+        past day of the year.
 
         Returns:
-            list[datetime.date]: a list of dates that contain errors, may be empty
+            dict[datetime.date, AttendanceError]: A dictionary of error dates
+                as keys and error type as values. The dictionary is empty if no 
+                error is found.
         """
         day_delta = dt.timedelta(days=1)
         end_date = self.current_date
-        # List of days with an attendance error
-        errors = []
+        # Dictionary of days with an attendance error
+        errors = {}
         # Iterate all days from the first of January until the current day
+        # and search for errors
         date = dt.date(day=1, month=1, year=self.data_year)
         while date < end_date:
             with self.date_context(date):
-                # Add to errors list if the number of clock actions is odd
-                if (len(self.clock_events) % 2) == 1:
-                    errors.append(self.current_date)
-                self.current_date += day_delta
+                error = self.check_date_error()
+                if error:
+                    errors[date] = error
+            date += day_delta
 
         return errors
 

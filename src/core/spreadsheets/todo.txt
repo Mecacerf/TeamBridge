@@ -1,0 +1,66 @@
+################################################################################################
+#                           Note about spreadsheets management                                 #
+# 
+# - Library choice
+# After some tests of the different available libraries for spreadsheet access, openpyxl appeared
+# to be the most advanced one, with the only disadvantage that it supports only the XLSX format.
+# 
+# - Cells evaluation
+# The software is designed to be optional, meaning the spreadsheets alone can be used to save and
+# calculate employees information such as clock in / out events, monthly and daily balances, and 
+# so on. That means that when an event is added in the spreadsheet by the software, the sheet
+# must be reevaluated in order to update the affected cells values. The evaluation cannot be done
+# directly by Python, since no formula interpreter seems to exist at this time. So the solution
+# is to invoke libreoffice calc in headless mode (subprocess) and use it to save an evaluated 
+# version of the sheet, then replace the old version by the new evaluated file.  
+#
+# - Spreadsheet file states
+# According to the process described above, a spreadsheet can be in the following states:
+#
+# +---------------------+-------------+---------------------+--------------+-------------+
+# |        State        | File System | Cached Cells Values | Write Access | Read Access |
+# +---------------------+-------------+---------------------+--------------+-------------+
+# | Saved and evaluated | Up to date  | Up to date          | Yes          | Yes         |
+# | Modified in RAM     | Outdated    | Outdated            | Yes          | No          |
+# | Saved on disk       | Up to date  | Unavailable         | Yes          | No          |
+# | Evaluating          | Up to date  | Unavailable         | Yes          | No          |
+# +---------------------+-------------+---------------------+--------------+-------------+
+# 
+# In the initial state, the file is saved on disk and the forumla cells have been evaluated, 
+# meaning their values are available in the cells cache (when opnening the file in 
+# data_only=True). 
+# Once the employee's data have been modified, the file on disk is outdated as well as the 
+# cells values (since the modified cell may be used in a formula). The read access is unset
+# because the read values would be outdated.
+# Once the file has been saved, changes are saved on disk but the file cache is deleted
+# (this process is done automatically by openpyxl because it cannot evaluate the formulas). The
+# read access is obviously still unavailable. 
+# To evaluate the formula cells, libreoffice is invoked in a subprocess. The evaluation can take
+# some time to finish. Once the evaluation is done, the old sheet file is replaced by the new
+# one. The sheet is saved and evaluated again and the read access is available. Note that if
+# a write is done during the sheet evaluation, it would be outdated on disk again.
+# 
+# When a file is initially opened (the Time Tracker is created), it is in the third state by
+# default (saved on disk, data unavailable). This is because the formulas use the current
+# date and time to calculate their values, and an evaluation is required to update these
+# fields.
+#
+# - Design
+# The problem arises when thinking about a common interface for both time trackers based on 
+# spreadsheets or a database. With a database, read and write accesses would be faster and the 
+# formula evaluation mechanism would probably be done on the fly with SQL commands.
+# Nevertheless, two mechanisms can be identified:
+# * Commit: after changes have been done, committing them would save the data in the file 
+#   system. With the spreadsheets version that involves saving the file on disk. With a DB it 
+#   would probably involve sending the queued SQL commands. This mechanism is implementation
+#   dependant though. This function changes the state from "modified in RAM" to "saved on disk".
+# * Evaluate: once changes have been committed, an evaluation must be done in order to calculate
+#   the formula cells and read up-to-date data. A function can be used to know whether the read
+#   functions are accessible or not at this moment. This function changes the state from "saved
+#   on disk" to "evaluating" and finally "saved and evaluated".
+#
+# The state change functions can take a while to execute, depending on IO bound operations such
+# as accessing the file system, a NAS or an external executable (libreoffice). It has been 
+# decided that all functions will be blocking and synchronous and that a time tracker object
+# will typically be used by a background thread.
+################################################################################################

@@ -4,79 +4,14 @@ File: spreadsheet_time_tracker.py
 Author: Bastian Cerf
 Date: 21/02/2025
 Description: 
-    Implementation of the time tracker interface using spreadsheet files for data storage.
+    Implementation of the time tracker abstract class using spreadsheet files for 
+    data storage. This implementation works with the `sheets_repository` module
+    to access and manipulate files on a remote repository.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
-
-################################################################################################
-#                           Note about spreadsheets management                                 #
-# 
-# - Library choice
-# After some tests of the different available libraries for spreadsheet access, openpyxl appeared
-# to be the most advanced one, with the only disadvantage that it supports only the XLSX format.
-# 
-# - Cells evaluation
-# The software is designed to be optional, meaning the spreadsheets alone can be used to save and
-# calculate employees information such as clock in / out events, monthly and daily balances, and 
-# so on. That means that when an event is added in the spreadsheet by the software, the sheet
-# must be reevaluated in order to update the affected cells values. The evaluation cannot be done
-# directly by Python, since no formula interpreter seems to exist at this time. So the solution
-# is to invoke libreoffice calc in headless mode (subprocess) and use it to save an evaluated 
-# version of the sheet, then replace the old version by the new evaluated file.  
-#
-# - Spreadsheet file states
-# According to the process described above, a spreadsheet can be in the following states:
-#
-# +---------------------+-------------+---------------------+--------------+-------------+
-# |        State        | File System | Cached Cells Values | Write Access | Read Access |
-# +---------------------+-------------+---------------------+--------------+-------------+
-# | Saved and evaluated | Up to date  | Up to date          | Yes          | Yes         |
-# | Modified in RAM     | Outdated    | Outdated            | Yes          | No          |
-# | Saved on disk       | Up to date  | Unavailable         | Yes          | No          |
-# | Evaluating          | Up to date  | Unavailable         | Yes          | No          |
-# +---------------------+-------------+---------------------+--------------+-------------+
-# 
-# In the initial state, the file is saved on disk and the forumla cells have been evaluated, 
-# meaning their values are available in the cells cache (when opnening the file in 
-# data_only=True). 
-# Once the employee's data have been modified, the file on disk is outdated as well as the 
-# cells values (since the modified cell may be used in a formula). The read access is unset
-# because the read values would be outdated.
-# Once the file has been saved, changes are saved on disk but the file cache is deleted
-# (this process is done automatically by openpyxl because it cannot evaluate the formulas). The
-# read access is obviously still unavailable. 
-# To evaluate the formula cells, libreoffice is invoked in a subprocess. The evaluation can take
-# some time to finish. Once the evaluation is done, the old sheet file is replaced by the new
-# one. The sheet is saved and evaluated again and the read access is available. Note that if
-# a write is done during the sheet evaluation, it would be outdated on disk again.
-# 
-# When a file is initially opened (the Time Tracker is created), it is in the third state by
-# default (saved on disk, data unavailable). This is because the formulas use the current
-# date and time to calculate their values, and an evaluation is required to update these
-# fields.
-#
-# - Design
-# The problem arises when thinking about a common interface for both time trackers based on 
-# spreadsheets or a database. With a database, read and write accesses would be faster and the 
-# formula evaluation mechanism would probably be done on the fly with SQL commands.
-# Nevertheless, two mechanisms can be identified:
-# * Commit: after changes have been done, committing them would save the data in the file 
-#   system. With the spreadsheets version that involves saving the file on disk. With a DB it 
-#   would probably involve sending the queued SQL commands. This mechanism is implementation
-#   dependant though. This function changes the state from "modified in RAM" to "saved on disk".
-# * Evaluate: once changes have been committed, an evaluation must be done in order to calculate
-#   the formula cells and read up-to-date data. A function can be used to know whether the read
-#   functions are accessible or not at this moment. This function changes the state from "saved
-#   on disk" to "evaluating" and finally "saved and evaluated".
-#
-# The state change functions can take a while to execute, depending on IO bound operations such
-# as accessing the file system, a NAS or an external executable (libreoffice). It has been 
-# decided that all functions will be blocking and synchronous and that a time tracker object
-# will typically be used by a background thread.
-################################################################################################
 
 # Standard libraries
 import logging
@@ -87,71 +22,86 @@ import os
 import datetime as dt
 
 # Third-party libraries
-import openpyxl, openpyxl.cell, openpyxl.utils # Spreadsheets manipulation library
+import openpyxl 
+import openpyxl.cell 
+import openpyxl.utils
 
 # Internal imports
-from src.core.time_tracker import * # Interface to implement
-from .sheets_repository import SpreadsheetsRepository # Spreadsheets repository access
+from core.time_tracker import *
+from .sheets_repository import *
+from .libreoffice import *
 
 LOGGER = logging.getLogger(__name__)
 
 ################################################
-#           Spreadsheet constants              #
+#      Spreadsheet constants declaration       #
 ################################################
 
-## Sheets
+# Expected spreadsheets major version
+# Opening a spreadsheet that doesn't use this major version will fail to prevent 
+# compatibity issues
+# This version may be preceded by a minor version in the form '.xx', that is discarded
+EXPECTED_MAJOR_VERSION = "v190525"
+
 # Init sheet index
 SHEET_INIT = 0
-# January sheet index, next months are incremented
-SHEET_JANUARY = 2
 
-## Init sheet
-# Cell containing the name information
-CELL_NAME = 'A6'
-# Cell containing the firstname information
-CELL_FIRSTNAME = 'A7'
-# Cell containing the current date information
-CELL_DATE = 'A8'
-# Cell containing the current hour information
-CELL_HOUR = 'A9'
-# Cell containing the year information
-# Unlike the date cell, this is a raw cell (no formula) used to indicate the year of the file's data
-CELL_YEAR = 'A20'
-# Cell containing the spreadsheet version information
-CELL_VERSION = 'A19'
+## Init sheet cells
+# Employee's name and firstname
+CELL_NAME = 'A10'
+CELL_FIRSTNAME = 'A11'
 
-## Month sheets
-# These raw cells of the init sheet are pointers to the cells containing the actual information
-# in the month's sheets  
-# Cell containing the monthly balance pointer
-LOCATION_MONTHLY_BALANCE = 'A11'
-# Cell containing the first day of the month pointer
-LOCATION_FIRST_MONTH_DATE = 'A12'
-# Cell containing the daily schedule for the first day of the month pointer
-LOCATION_DAILY_SCHEDULE = 'A13'
-# Cell containing the daily balance for the first day of the month pointer
-LOCATION_DAILY_BALANCE = 'A14'
-# Cell containing the worked time for the first day of the month pointer
-LOCATION_WORKED_TIME = 'A15'
-# Column containing the first clock in action of the day pointer
-LOCATION_COL_FIRST_CLOCK_IN = 'A16'
-# Column containing the last clock out action of the day pointer
-LOCATION_COL_LAST_CLOCK_OUT = 'A17'
+# Date and time information
+# These cells contains formulas that must be evaluated
+CELL_DATE = 'A21'
+CELL_HOUR = 'A22'
+
+# Year the employee's data in the file belong to
+# This is a raw cell (no formula) used for verification of dates
+CELL_YEAR = 'A4'
+
+# Spreadsheet major version
+# This time tracker is designed to work with a defined major version and opening
+# a newer / older spreadsheet version will fail. The minor version is discarded. 
+CELL_VERSION = 'A3'
+
+## Next cells of the init sheet are pointers to the actual information in the 
+## month sheets. This is used to allow changes in the files without having to 
+## modify the code.
+# January sheet index
+LOCATION_JANUARY_SHEET = 'A23'
+
+# Row number for the first date of the month (01.xx.xxxx)
+LOCATION_FIRST_MONTH_DATE_ROW = 'A24'
+
+# Day information: scheduled work, worked time and balance columns
+LOCATION_DAY_SCHEDULE_COL = 'A25'
+LOCATION_DAY_WORKED_TIME_COL = 'A26'
+LOCATION_DAY_BALANCE_COL = 'A27'
+
+# Month and year balance cells
+LOCATION_MONTH_BALANCE = 'A28'
+LOCATION_YEAR_BALANCE = 'A29'
+
+# Vacation information: remaining days, planned for the month and for the day
+LOCATION_REMAINING_VACATION = 'A30'
+LOCATION_MONTH_VACATION = 'A31'
+LOCATION_DAY_VACATION_COL = 'A32'
+
+# Clock in/out times columns (left and right array delimeters)
+LOCATION_FIRST_CLOCK_IN_COL = 'A33'
+LOCATION_LAST_CLOCK_OUT_COL = 'A34'
 
 ################################################
-#              General constants               #
+#   Spreadsheets time tracker custom errors    #
 ################################################
 
-# Path to 'soffice' in the filesystem
-# TODO: put this path in a config file
-LIBREOFFICE_PATH = "C:\\Program Files\\LibreOffice\\program\\soffice"
-# Temporary folder in which evaluated spreadsheets are placed by libreoffice
-LIBREOFFICE_CACHE_FOLDER = ".tmp_calc/"
-
-# Expected spreadsheets version
-# Opening a spreadsheet that doesn't use this major version will fail to prevent compatibity issues
-# This version may be preceded by a minor version in the form '.xx'
-EXPECTED_MAJOR_VERSION = "v220425"
+class SheetTimeTrackerError(Exception):
+    """
+    Custom exception for general spreadsheet exceptions.
+    """
+    def __init__(self, message="An error occurred while manipulating the spreadsheet"):
+        super().__init__(message)
 
 ################################################
 #   Spreadsheets time tracker implementation   #
@@ -159,398 +109,369 @@ EXPECTED_MAJOR_VERSION = "v220425"
 
 class SheetTimeTracker(BaseTimeTracker):
     """
-    Implementation of the time tracker that uses spreadsheet files as database.
+    Implementation of the time tracker abstract class using spreadsheet files for 
+    data storage. This implementation works with the `sheets_repository` module
+    to access and manipulate files on a remote repository.
     """
 
-    def __init__(self, repository: SpreadsheetsRepository, employee_id: str, date: dt.date):
+    def _setup(self):
         """
-        Open the employee's data at given date.
+        Acquire and load the spreadsheet file. Time tracker properties are available
+        after this call. Note that even though the spreadsheet file may have evaluated
+        formula values, the evaluated workbook is intentionally invalidated to prevent
+        access to potentially outdated data and ensure the time tracker is always 
+        created in the same state; i.e. the `read_` methods are unavalaible.
+        """
+        self._file_path = acquire_spreadsheet_file(self._employee_id)
 
-        Parameters:
-            repository: spreadsheets repository access provider 
-            id: employee unique ID
-            date: date index
-        Raise:
-            ValueError: employee not found
-            ValueError: wrong / unavailable date time                       TODO
-            RuntimeError: employee's file is already opened
-            OSError: error related to file access
-            TimeoutError: failed to access database folder after timeout
-            FileNotFoundError: employee's file not found
-        """
-        # Save current date
-        self._date = date
-        # Save employees database access provider
-        self._repository = repository
-        # Save employee's id
-        self._employee_id = employee_id
-        # Set readable flag to be initially False
-        self._readable = False
-        # Acquire employee's file
-        self._file_path = self._repository.acquire_employee_file(self._employee_id)
-        # Throw a file not found error if necessary
-        if self._file_path is None:
-            raise FileNotFoundError(f"File not found for employee's ID '{self._employee_id}'.")
-        # Load workbook
         self.__load_workbook()
-        # Even though the evaluated workbook might be available, it is defined that at time tracker
-        # creation the data may be too old to be actually used. The time tracker must be evaluated
-        # to access reading functions.
-        self.__invalidate_eval_wb()
+        self.__invalidate_eval_wb() # Prevent access to outdated data
 
-    def get_firstname(self) -> str:
-        """
-        Get employee's firstname.
-        Always accessible.
-
-        Returns:
-            str: employee's firstname
-        """
-        # Get information in raw notebook
-        return str(self._workbook_raw.worksheets[SHEET_INIT][CELL_FIRSTNAME].value)
-
-    def get_name(self) -> str:
-        """
-        Get employee's name.
-        Always accessible.
-
-        Returns:
-            str: employee's name
-        """
-        # Get information in raw notebook
-        return str(self._workbook_raw.worksheets[SHEET_INIT][CELL_NAME].value)
-
-    def __get_date_row(self) -> int:
-        """
-        Returns:
-            int: the row containing the information related to current date
-        """
-        # Get coordinates of the first day of the month
-        row, _ = openpyxl.utils.coordinate_to_tuple(self._cell_first_month_date)
-        # Find the row corresponding to current date
-        return (row + self._date.day - 1)
-
-    def __get_clock_action_for_cell(self, cell: openpyxl.cell.Cell) -> ClockAction:
-        """
-        Check if the given cell contains a clock in or a clock out action, based on its column index.
-        """
-        # Get first clock in column
-        _, clock_in_col = openpyxl.utils.coordinate_to_tuple(f"{self._col_first_clock_in}1")
-        # Get difference between first clock in column and given cell column
-        delta_actions = cell.column - clock_in_col
-        # Sanity check
-        if delta_actions < 0:
-            raise ValueError(f"Cannot evaluate clock action for cell '{cell.coordinate}' that is beyond limits.")
-        # Since a clock in is followed by a clock out and so on, 0=in, 1=out, 2=in, etc
-        if (delta_actions % 2) == 0:
-            # This is a clock in column
-            return ClockAction.CLOCK_IN
-        else:
-            # This is a clock out action
-            return ClockAction.CLOCK_OUT
-
-    def get_clock_events_today(self) -> list[ClockEvent]:
-        """
-        Get all clock-in/out events for the date.
-        Always accessible.
+        init_sheet = self._workbook_raw.worksheets[SHEET_INIT]
         
-        Returns:
-            list[ClockEvent]: list of today's clock events (can be empty)
-        """
-        # Get current date row
-        date_row = self.__get_date_row()
-        # Get current month's sheet 
-        month_sheet = self._workbook_raw.worksheets[self._date.month - 1 + SHEET_JANUARY]
-        # Create current date events list
-        clock_events = []
-        # Get clock actions boundaries
-        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{self._col_first_clock_in}1:{self._col_last_clock_out}1")
-        # Iterate in clock actions row for current date
-        for column in month_sheet.iter_cols(min_row=date_row, max_row=date_row, min_col=min_col, max_col=max_col):
-            # Get cell value
-            cell = column[0]
-            # Check if the cell exists and contains an entry
-            if cell and cell.value:
-                # Create and append the clock event to the list
-                event = ClockEvent(time=cell.value, action=self.__get_clock_action_for_cell(cell))
-                clock_events.append(event)
-            else:
-                # No clock event in the cell
-                # For this implementation, consider that no other clock action can exist after a hole is found
-                break
+        # Check that the spreadsheet uses the expected major version
+        version = init_sheet[CELL_VERSION].value
+        if version is None or not str(version).lower().startswith(EXPECTED_MAJOR_VERSION.lower()):
+            raise SheetTimeTrackerError((f"Cannot load workbook '{self._file_path}' that uses "
+                f"version '{version}'. The expected major version is '{EXPECTED_MAJOR_VERSION}'."))
 
-        # Return the events list
-        return clock_events
-    
-    def is_readable(self) -> bool:
+        # Get locations of the actual values from the init sheet 
+        self._sheet_january         = str(init_sheet[LOCATION_JANUARY_SHEET].value)
+        self._row_first_month_date  = str(init_sheet[LOCATION_FIRST_MONTH_DATE_ROW].value)
+        self._col_day_schedule      = str(init_sheet[LOCATION_DAY_SCHEDULE_COL].value)
+        self._col_day_worked_time   = str(init_sheet[LOCATION_DAY_WORKED_TIME_COL].value)
+        self._col_day_balance       = str(init_sheet[LOCATION_DAY_BALANCE_COL].value)
+        self._cell_month_balance    = str(init_sheet[LOCATION_MONTH_BALANCE].value)
+        self._cell_year_balance     = str(init_sheet[LOCATION_YEAR_BALANCE].value)
+        self._cell_remaining_vac    = str(init_sheet[LOCATION_REMAINING_VACATION].value)
+        self._cell_month_vac        = str(init_sheet[LOCATION_MONTH_VACATION].value)
+        self._col_day_vac           = str(init_sheet[LOCATION_DAY_VACATION_COL].value)
+        self._col_first_clock_in    = str(init_sheet[LOCATION_FIRST_CLOCK_IN_COL].value)
+        self._col_last_clock_out    = str(init_sheet[LOCATION_LAST_CLOCK_OUT_COL].value)
+
+        LOGGER.debug(f"[Employee '{self._employee_id}'] Finished spreadsheet time tracker setup.")
+
+    def __get_init_sheet_val(self, cell: str):
         """
-        Check if the reading functions are accessible at this moment. 
-        They are initially not accessible (since the opened data are not evaluated) and
-        get accessible after an evaluation is performed.
+        Retrieve a property from the init sheet.
+
+        Args:
+            cell (str): Cell coordinates (ex. 'A1', 'B36', etc.)
 
         Returns:
-            bool: reading flag
+            Any: Value stored in the given cell of the init sheet
         """
-        return self._readable
-    
-    def __get_daily_info(self, first_cell: str) -> dt.timedelta:
-        """
-        Extract a daily information based on the given cell (column) and
-        the current date (row). 
+        return self._workbook_raw.worksheets[SHEET_INIT][cell].value
 
-        Parameters:
-            first_cell: a cell containing the information to identify the column
-        Returns:
-            timedelta: timedelta read in the identified cell
+    @property
+    def firstname(self) -> str:
+        return str(self.__get_init_sheet_val(CELL_FIRSTNAME))
+
+    @property
+    def name(self) -> str:
+        return str(self.__get_init_sheet_val(CELL_NAME)) 
+
+    @property
+    def data_year(self) -> int:
+        return int(self.__get_init_sheet_val(CELL_YEAR))
+
+    @property
+    def clock_events(self) -> list[ClockEvent]:
+        """
+        Implementation of `time_tracker.clock_events`. 
+
+        Retrieve the clock events for the `current_date` by iterating the current date 
+        row of the month's sheet.
+
         Raises:
-            IllegalReadException: read is unavailable  
+            TimeTrackerDateException: If the opened file doesn't contain the month (i.e. wrong year)
+            SheetTimeTrackerError: The spreadsheet file might be corrupted
         """
-        # Check read status
-        if not self.is_readable():
+        date_row = self.__get_date_row() 
+        month_sheet = self._workbook_raw.worksheets[self.__get_month_sheet_idx()]
+
+        # Convert columns letters to 1-based indexes
+        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(
+            f"{self._col_first_clock_in}1:{self._col_last_clock_out}1"
+        )
+
+        clock_events = []
+        # Iterate columns along the date row from the first clock-in column to the last clock-out column
+        # The column therefore always contains a single cell
+        for column in month_sheet.iter_cols(min_row=date_row, max_row=date_row, 
+                                            min_col=min_col, max_col=max_col):
+            if len(column) != 1:
+                raise SheetTimeTrackerError(f"Expected one date in the column, got {len(column)}.")
+
+            cell = column[0]
+            event = None
+
+            # Create and append a ClockEvent if a time is available in the cell, otherwise just append 
+            # None in the clock events list
+            if cell and cell.value and isinstance(cell.value, dt.time):
+                event = ClockEvent(time=cell.value, 
+                                   action=self.__get_clock_action_for_cell(cell))
+            clock_events.append(event)
+
+        # Return the events list without the trailing None values
+        for i in reversed(range(len(clock_events))):
+            if clock_events[i] is not None:
+                return clock_events[:i+1]
+        return [] # All values are None
+
+    @property
+    def readable(self) -> bool:
+        return (self._workbook_eval is not None)
+
+    def __read_month_static_cell(self, cell: str):
+        """
+        Read the value of a specific evaluated cell from the current month's sheet.
+
+        The cell is identified by its coordinate string (e.g., 'A1', 'B26').
+
+        Args:
+            cell (str): Cell coordinate
+
+        Returns:
+            Any: The value of the evaluated cell
+
+        Raises:
+            TimeTrackerReadException: If the spreadsheet is not readable
+            TimeTrackerDateException: If the opened file doesn't contain the month (i.e. wrong year)
+        """
+        if not self.readable:
             raise TimeTrackerReadException()
-        # Get current date row
-        row = self.__get_date_row()
-        # Get column containing information
-        _, column = openpyxl.utils.coordinate_to_tuple(first_cell)
-        # Get current month's sheet in read mode
-        month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
-        # Get the timedelta object
-        timedelta = month_sheet.cell(row=row, column=column).value
-        # It might happen that the object is a dt.time
-        if isinstance(timedelta, dt.time):
-            timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
-        return timedelta
 
-    def get_daily_schedule(self) -> dt.timedelta:
+        sheet = self._workbook_eval.worksheets[self.__get_month_sheet_idx()]
+        return sheet[cell].value
+
+    def __read_month_day_cell(self, col: int):
         """
-        Get employee's daily schedule (how much time he's supposed to work).
-        Accessible when is_readable() returns True.
+        Read the value of a cell from the current month's sheet based on the current date.
+
+        The row is computed from the date (e.g., 1st = base row, 2nd = base row + 1, etc.),
+        and the column is provided as an index.
+
+        Args:
+            col (int): Column index to read from (1-based, like Excel columns)
 
         Returns:
-            timedelta: daily schedule
+            Any: The value of the evaluated cell at the given column and date row
+
+        Raises:
+            TimeTrackerReadException: If the spreadsheet is not readable
+            TimeTrackerDateException: If the opened file doesn't contain the month (i.e. wrong year)
         """
-        return self.__get_daily_info(self._cell_daily_schedule)
-    
-    def get_daily_balance(self) -> dt.timedelta:
+        if not self.readable:
+            raise TimeTrackerReadException()
+
+        day_row = self._row_first_month_date + self._date.day - 1
+        sheet = self._workbook_eval.worksheets[self.__get_month_sheet_idx()]
+        return sheet.cell(row=day_row, column=col).value
+
+    def __to_timedelta(self, value) -> dt.timedelta:
         """
-        Get employee's daily balance (remaining time he's supposed to work).
-        If the employee is clocked in the value is calculated based on the time the last evaluation
-        has been done.
-        Accessible when is_readable() returns True.
+        Make sure the given value is a `datetime.timedelta` type. Convert if necessary.
+
+        Args:
+            value (Any): Input value
 
         Returns:
-            timedelta: daily balance
-        """
-        return self.__get_daily_info(self._cell_daily_balance)
+            datetime.timedelta: Value converted to a `datetime.timedelta`
 
-    def get_daily_worked_time(self) -> dt.timedelta:
+        Raises:
+            ValueError: If the value cannot be converted
         """
-        Get employee's worked time for the day.
-        If the employee is clocked in the value is calculated based on the time the last evaluation
-        has been done.
-        Accessible when is_readable() returns True.
+        if isinstance(value, dt.timedelta):
+            # Passthrough
+            return value
+        if isinstance(value, dt.time):
+            return dt.timedelta(hours=value.hour, minutes=value.minute, seconds=value.second)
         
-        Returns:
-            timedelta: delta time object
-        """
-        return self.__get_daily_info(self._cell_worked_time)
-    
-    def get_monthly_balance(self) -> dt.timedelta:
-        """
-        Get employee's balance for the current month.
-        Accessible when is_readable() returns True.
+        raise ValueError("The given value cannot be converted to a timedelta.")
 
-        Returns:
-            timedelta: delta time object
-        """
-        # Check read status
-        if not self.is_readable():
-            raise TimeTrackerReadException()
-        # Get evaluated month's sheet 
-        month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
-        # Get monthly balance value as a timedelta
-        timedelta = month_sheet[self._cell_monthly_balance].value
-        # It might happen that the object is a dt.time
-        if isinstance(timedelta, dt.time):
-            timedelta = dt.timedelta(hours=timedelta.hour, minutes=timedelta.minute, seconds=timedelta.second)
-        return timedelta
+    def read_day_schedule(self) -> dt.timedelta:
+        value = self.__read_month_day_cell(self._col_day_schedule)
+        return self.__to_timedelta(value)
+
+    def read_day_balance(self) -> dt.timedelta:
+        value = self.__read_month_day_cell(self._col_day_balance)
+        return self.__to_timedelta(value)
+
+    def read_day_worked_time(self) -> dt.timedelta:
+        value = self.__read_month_day_cell(self._col_day_worked_time)
+        return self.__to_timedelta(value)
+
+    def read_month_balance(self) -> dt.timedelta:
+        value = self.__read_month_static_cell(self._cell_month_balance)
+        return self.__to_timedelta(value)
+
+    def read_year_balance(self) -> dt.timedelta:
+        value = self.__read_month_static_cell(self._cell_year_balance)
+        return self.__to_timedelta(value)
+
+    def read_remaining_vacation(self) -> float:
+        value = self.__read_month_static_cell(self._cell_remaining_vac)
+        return float(value)
+
+    def read_month_vacation(self) -> float:
+        value = self.__read_month_static_cell(self._cell_month_vac)
+        return float(value)
+
+    def read_day_vacation(self) -> float:
+        value = self.__read_month_day_cell(self._col_day_vac)
+        return float(value)
 
     def register_clock(self, event: ClockEvent) -> None:
         """
-        Register a clock in/out event.
-        After a clock event is registered, the reading functions are not available until a
-        new evaluation is performed.
+        Implementation of `time_tracker.register_clock()`.
 
-        Parameters:
-            event: clock event object
-        Raise:
-            ValueError: double clock in/out detected
+        Searches for the next available time slot in the current date's row on the monthly sheet,
+        and writes the event time. If no slot is available, raises a TimeTrackerWriteException.
+
+        Raises:
+            TimeTrackerDateException: If the opened file doesn't contain the month (i.e. wrong year)
+            TimeTrackerWriteException: If no available slot is found for the clock event
         """
-        # Get current date cell
         date_row = self.__get_date_row()
-        # Get current month's sheet
-        # This function will only use the raw workbook
-        month_sheet = self._workbook_raw.worksheets[self._date.month - 1 + SHEET_JANUARY]
-        # Set written flag
-        written = False
-        # Get clock actions boundaries
-        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(f"{self._col_first_clock_in}1:{self._col_last_clock_out}1")
-        # Previous clock action time, used to verify that clock event times are ascending
-        prev_clock_time = None
-        # Iterate in clock actions row for current date
-        for column in month_sheet.iter_cols(min_row=date_row, max_row=date_row, min_col=min_col, max_col=max_col):
-            # Get cell in the column
-            cell = column[0]
-            # Iterate until a free cell is found
-            if cell.value:
-                # Save previous clock action time
-                prev_clock_time = cell.value
-            else:
-                # Cell value is None, free to write a clock action
-                # For this implementation, check that the cell is intended to contain the given clock action and raise an error if not
-                expected_action = self.__get_clock_action_for_cell(cell)
-                if event.action != expected_action:
-                    raise ValueError(f"Got a '{event.action}' while expecting a '{expected_action}'.")
-                # Check that the clock action times are in ascending order
-                if prev_clock_time and prev_clock_time > event.time:
-                    raise ValueError(f"Cannot clock at {event.time} while last clock was at {prev_clock_time}.")
-                # Write the clock action
-                # Save as HH:MM, do not take seconds into account for final user simplicity
+        month_sheet = self._workbook_raw.worksheets[self.__get_month_sheet_idx()]
+
+        # Determine starting column index based on clock action
+        start_idx = self._col_first_clock_in + (1 if event.action == ClockAction.CLOCK_OUT else 0) 
+
+        for col_idx in range(start_idx, self._col_last_clock_out + 1, 2):
+            cell = month_sheet.cell(row=date_row, column=col_idx)
+
+            if cell.value is None:
+                # The slot is available, write the clock time in HH:MM format
                 cell.number_format = 'HH:MM'
                 cell.value = dt.time(hour=event.time.hour, minute=event.time.minute, second=0)
-                # Log action, set written flag and leave
-                written = True
-                LOGGER.debug(f"[Employee '{self._employee_id}'] Registered {cell.value} in cell {cell.coordinate}")
-                break
-            
-        # Check if event has been correctly registered
-        if written:
-            # Invalidate evaluated workbook
-            self.__invalidate_eval_wb()
-        else:
-            raise ValueError(f"Event ({event.action} at {event.time}) has not been correctly registered.")
+                
+                # The workbook is saved upon modification, and the reading methods become inaccessible 
+                # to prevent access to values that may have changed
+                self._workbook_raw.save(self._file_path)
+                self.__invalidate_eval_wb()
 
-    def commit(self) -> None:
-        """
-        Commit changes. This must be called after changes have been done (typically after new clock events
-        have been registered) to save the modifications.
-        """
-        # Save the workbook in the local cache
-        self._workbook_raw.save(self._file_path)
-        LOGGER.debug(f"[Employee '{self._employee_id}'] Saved local file '{self._file_path}'.")
+                LOGGER.debug((f"[Employee '{self._employee_id}'] Registered clock event '{event}' "
+                              f"in cell '{cell.coordinate}'."))
+
+        raise TimeTrackerWriteException(f"No available time slot to write the clock event '{event}'.")
 
     def evaluate(self) -> None:
         """
-        Start an employee's data evaluation. This must be done after changes have been committed.
-        Once done, the reading functions are available again and will provide up to date results.
+        Implementation of `time_tracker.evaluate()`.
+
+        Try to evaluate the spreadsheet file using the LibreOffice module. 
+        The workbooks are reloaded on success in order to update the `readable` property.
         """
-        # After cell values are modified, use libreoffice in headless mode to update the values of formula cells. 
-        # This requires 'soffice' to be installed on the system.
-        LOGGER.debug(f"[Employee '{self._employee_id}'] Evaluation of '{self._file_path}' started...")
-        # Make sure the libre office cache folder exists
-        os.makedirs(LIBREOFFICE_CACHE_FOLDER, exist_ok=True)
-        # Get temporary file path based on real file path and temporary folder path
-        tmp_file = pathlib.Path(LIBREOFFICE_CACHE_FOLDER) / self._file_path.name
-        # Ensure the temporary folder doesn't contain a file with the same name
-        if tmp_file.exists():
-            raise FileExistsError(f"The temporary file '{tmp_file}' already exists and may contain unsaved data. Manual check required.")
-        # Create libreoffice command to evaluate and save a spreadsheet
-        command = [
-            LIBREOFFICE_PATH,                       # Libreoffice invokation
-            "--headless",                           # Headless means no GUI
-            "--calc",                               # Spreadsheets mode
-            "--convert-to", "xlsx",                 # Go to xlsx format
-            "--outdir", LIBREOFFICE_CACHE_FOLDER,   # Output in temporary folder
-            str(self._file_path.absolute())         # Input employee file
-        ]
-        # Run command with subprocess
-        # Use check=True to ensure raising an exception if the process fails
-        # By definition, run() is blocking so it waits for the process to finish
-        result = subprocess.run(command, check=True, capture_output=True)
-        # It seems like the soffice process can fail and still return 0. Double check for error:
-        if result.returncode != 0 or len(result.stderr) > 0:
-            raise subprocess.CalledProcessError(returncode=result.returncode, cmd=command, output=result.stderr)
-        # Check that the evaluated workbook exists in the temporary folder with the same file name
-        if not tmp_file.exists():
-            raise FileNotFoundError(f"Subprocess failed to create temporary file under '{tmp_file}'.")
-        # Delete old spreadsheet
-        self._file_path.unlink(missing_ok=False)
-        # Copy temporary spreadsheet to deleted spreadsheet location
-        shutil.copy2(src=tmp_file, dst=self._file_path)
-        # Delete temporary file
-        tmp_file.unlink(missing_ok=True)
-        # Load workbook, it will update the readable flag
-        self.__load_workbook()
-        LOGGER.debug(f"[Employee '{self._employee_id}'] File evaluation succeeded.")
+        try:
+            evaluate_calc(self._file_path)
+            self.__load_workbook()
+        except Exception as e:
+            raise TimeTrackerEvaluationException() from e 
+
+    def save(self) -> None:
+        """
+        Implementation of `time_tracker.save()`.
+
+        Try to save the file on the spreadsheets repository.  
+        """
+        try:
+            save_spreadsheet_file(self._file_path)
+            LOGGER.debug(f"[Employee '{self._employee_id}'] Spreadsheet file saved.")
+        except Exception as e:
+            raise TimeTrackerSaveException() from e
 
     def close(self) -> None:
         """
-        Close the time tracker, save and release resources.
+        Implementation of `time_tracker.close()`.
+
+        Release the file lock from the spreadsheets repository, allowing other
+        processes to access the employee's file.
         """
-        # Save the employee's file on repository
-        self._repository.save_employee_file(self._file_path)
-        # Close employee's file
-        self._repository.close_employee_file(self._file_path)
-        LOGGER.debug(f"[Employee '{self._employee_id}'] Time tracker successfully closed.")
+        try:
+            release_spreadsheet_file(self._file_path)
+            self._workbook_eval = None
+            self._workbook_raw = None
+            LOGGER.debug(f"[Employee '{self._employee_id}'] Spreadsheet time tracker closed.")
+        except Exception as e:
+            raise TimeTrackerCloseException() from e
+    
+    def __get_date_row(self) -> int:
+        """
+        Returns:
+            int: The row index corresponding to the day of the month in the month's sheets
+        """
+        return (self._date.day - 1 + self._row_first_month_date)
+
+    def __get_month_sheet_idx(self) -> int:
+        """
+        Returns:
+            int: The sheet index corresponding to the current date's month
+        
+        Raises:
+            TimeTrackerDateException: If the opened file doesn't contain the month (i.e. wrong year)
+        """
+        if self.data_year != self._date.year:
+            raise TimeTrackerDateException((f"Cannot access date '{self._date}' while the file "
+                                            f"targets the year {self.data_year}."))
+
+        return (self._date.month - 1 + self._sheet_january)
+
+    def __get_clock_action_for_cell(self, cell: openpyxl.cell.Cell) -> ClockAction:
+        """
+        Get the clock action (clock-in / clock-out) that the cell is supposed to hold. 
+        The function assumes the sequence `self._col_first_clock_in` is a clock-in,
+        `self._col_first_clock_in + 1` is a clock-out and so on until 
+        `self._col_last_clock_out`
+
+        Args:
+            cell (openpyxl.cell.Cell): Openpyxl `Cell`
+        
+        Returns:
+            ClockAction: Clock action for the cell
+        """
+        # Get first clock-in and last clock-out columns as 1-based indexes
+        _, clock_in_col  = openpyxl.utils.coordinate_to_tuple(f"{self._col_first_clock_in}1")
+        _, clock_out_col = openpyxl.utils.coordinate_to_tuple(f"{self._col_last_clock_out}1")
+
+        if (cell.column < clock_in_col) or (cell.column > clock_out_col):
+            raise ValueError(f"Cell column {cell.column} is out of the range [{clock_in_col}; {clock_out_col}].")
+
+        # Follow the sequence 0: clock-in, 1: cock-out, 2: clock-in, etc.
+        return ClockAction.CLOCK_IN if ((cell.column - clock_in_col) % 2) == 0 else ClockAction.CLOCK_OUT
 
     def __load_workbook(self):
         """
-        Load the employee's workbook in raw and evaluated modes. Update the reading flag.
+        Load the employee's spreadsheet file (workbook) in two modes:
+
+        - `self._workbook_raw` is loaded with `data_only=False`, allowing access to raw cell values.
+        In this mode, formula cells contain the actual formula text rather than the evaluated result.
+        This workbook is always available and can be safely saved.
+
+        - `self._workbook_eval` is loaded with `data_only=True`, enabling access to evaluated formula values.
+        This workbook is available only after the spreadsheet has been opened, evaluated, and saved by
+        a spreadsheet application such as LibreOffice Calc. It must **not** be saved, as doing so would 
+        overwrite the formula cells with their last evaluated values.
+
+        After loading both workbooks, a check is performed on the evaluated one to determine whether
+        formula cells have actually been evaluated. If not, `self._workbook_eval` is set to `None` 
+        to prevent accidental use.
         """
-        # Open the employee's workbook in normal (raw) mode to access non evaluated values.
-        # Formula cells will contain the raw formula (and not the evaluated value).
-        # This workbook can be written and saved safely. It can also be used to read 
-        # non formula cell values.
         self._workbook_raw = openpyxl.load_workbook(self._file_path, data_only=False)
-
-        # Get the init sheet
-        init_sheet = self._workbook_raw.worksheets[SHEET_INIT]
-        
-        # Read the spreadsheet version in use
-        version = init_sheet[CELL_VERSION].value
-        # Make sure the expected major file version is used
-        if version is None or not str(version).lower().startswith(EXPECTED_MAJOR_VERSION.lower()):
-            raise ValueError((f"Cannot load workbook '{self._file_path}' that uses version '{version}'."
-                              f" The expected major version is '{EXPECTED_MAJOR_VERSION}'."))
-
-        # Read the spreadsheet file's data year
-        year = init_sheet[CELL_YEAR].value
-        # Make sure the given date is in this spreadsheet file
-        if year != self._date.year:
-            raise ValueError((f"Cannot open date '{self._date}' of workbook '{self._file_path}' that holds "
-                              f"data for the year '{year}'."))
-
-        # The init sheet contains the locations of different data in the month's sheets, which
-        # allows to dynamically configure data locations and account for different sheets 
-        # versions. Read these locations.
-        self._cell_monthly_balance = init_sheet[LOCATION_MONTHLY_BALANCE].value
-        self._cell_first_month_date = init_sheet[LOCATION_FIRST_MONTH_DATE].value
-        self._cell_daily_schedule = init_sheet[LOCATION_DAILY_SCHEDULE].value
-        self._cell_daily_balance = init_sheet[LOCATION_DAILY_BALANCE].value
-        self._cell_worked_time = init_sheet[LOCATION_WORKED_TIME].value
-        self._col_first_clock_in = init_sheet[LOCATION_COL_FIRST_CLOCK_IN].value
-        self._col_last_clock_out = init_sheet[LOCATION_COL_LAST_CLOCK_OUT].value
-
-        # Open the employee's workbook in data only mode to access evaluated values.
-        # If the workbook hasn't been evaluated before, formula cells will contain the
-        # value 'None', which will be used to update the reading flag.
-        # This workbook is used to read evaluated cell values.
         self._workbook_eval = openpyxl.load_workbook(self._file_path, data_only=True)
-        # Check if the workbook is evaluated by checking a formula cell value
-        month_sheet = self._workbook_eval.worksheets[self._date.month - 1 + SHEET_JANUARY]
-        # Check the first month's day cell arbitrarily
-        self._readable = month_sheet[self._cell_first_month_date].value is not None
-        # If not readable, nullify the workbook to prevent unintended access
-        if not self._readable:
+
+        # The eval workbook has not been evaluated if the date cell from the init sheet is None, since
+        # this cell contains the TODAY() formula.
+        if self._workbook_eval.worksheets[SHEET_INIT][CELL_DATE].value is None:
             self._workbook_eval = None
-        # Log activity
-        LOGGER.debug((f"[Employee '{self._employee_id}'] (Re)loaded workbook '{self._file_path}' "
-                     f"({version}), readable={self._readable}."))
+
+        LOGGER.debug((f"[Employee '{self._employee_id}'] (Re)loaded spreadsheet '{self._file_path.name}', "
+                     f"readable={self.readable}."))
 
     def __invalidate_eval_wb(self):
         """
-        Invalidate the evaluated workbook.
+        Invalidate the evaluated workbook. This is typically done after a modification that may change the 
+        result of a formula has been made.
         """
-        # Clear readable flag and nullify evaluated workbook
-        self._readable = False
         self._workbook_eval = None
