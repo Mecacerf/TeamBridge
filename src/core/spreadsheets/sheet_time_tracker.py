@@ -15,16 +15,11 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 import logging
-import subprocess
-import pathlib
-import shutil
-import os
 import datetime as dt
 
 # Third-party libraries
-import openpyxl 
-import openpyxl.cell 
-import openpyxl.utils
+import openpyxl
+from openpyxl.utils import column_index_from_string as col_idx
 
 # Internal imports
 from core.time_tracker import *
@@ -136,18 +131,18 @@ class SheetTimeTracker(BaseTimeTracker):
                 f"version '{version}'. The expected major version is '{EXPECTED_MAJOR_VERSION}'."))
 
         # Get locations of the actual values from the init sheet 
-        self._sheet_january         = str(init_sheet[LOCATION_JANUARY_SHEET].value)
-        self._row_first_month_date  = str(init_sheet[LOCATION_FIRST_MONTH_DATE_ROW].value)
-        self._col_day_schedule      = str(init_sheet[LOCATION_DAY_SCHEDULE_COL].value)
-        self._col_day_worked_time   = str(init_sheet[LOCATION_DAY_WORKED_TIME_COL].value)
-        self._col_day_balance       = str(init_sheet[LOCATION_DAY_BALANCE_COL].value)
+        self._sheet_january         = int(init_sheet[LOCATION_JANUARY_SHEET].value)
+        self._row_first_month_date  = int(init_sheet[LOCATION_FIRST_MONTH_DATE_ROW].value)
+        self._col_day_schedule      = col_idx(init_sheet[LOCATION_DAY_SCHEDULE_COL].value)
+        self._col_day_worked_time   = col_idx(init_sheet[LOCATION_DAY_WORKED_TIME_COL].value)
+        self._col_day_balance       = col_idx(init_sheet[LOCATION_DAY_BALANCE_COL].value)
         self._cell_month_balance    = str(init_sheet[LOCATION_MONTH_BALANCE].value)
         self._cell_year_balance     = str(init_sheet[LOCATION_YEAR_BALANCE].value)
         self._cell_remaining_vac    = str(init_sheet[LOCATION_REMAINING_VACATION].value)
         self._cell_month_vac        = str(init_sheet[LOCATION_MONTH_VACATION].value)
-        self._col_day_vac           = str(init_sheet[LOCATION_DAY_VACATION_COL].value)
-        self._col_first_clock_in    = str(init_sheet[LOCATION_FIRST_CLOCK_IN_COL].value)
-        self._col_last_clock_out    = str(init_sheet[LOCATION_LAST_CLOCK_OUT_COL].value)
+        self._col_day_vac           = col_idx(init_sheet[LOCATION_DAY_VACATION_COL].value)
+        self._col_first_clock_in    = col_idx(init_sheet[LOCATION_FIRST_CLOCK_IN_COL].value)
+        self._col_last_clock_out    = col_idx(init_sheet[LOCATION_LAST_CLOCK_OUT_COL].value)
 
         LOGGER.debug(f"[Employee '{self._employee_id}'] Finished spreadsheet time tracker setup.")
 
@@ -190,16 +185,13 @@ class SheetTimeTracker(BaseTimeTracker):
         date_row = self.__get_date_row() 
         month_sheet = self._workbook_raw.worksheets[self.__get_month_sheet_idx()]
 
-        # Convert columns letters to 1-based indexes
-        min_col, _, max_col, _ = openpyxl.utils.range_boundaries(
-            f"{self._col_first_clock_in}1:{self._col_last_clock_out}1"
-        )
-
         clock_events = []
+        
         # Iterate columns along the date row from the first clock-in column to the last clock-out column
         # The column therefore always contains a single cell
         for column in month_sheet.iter_cols(min_row=date_row, max_row=date_row, 
-                                            min_col=min_col, max_col=max_col):
+                                            min_col=self._col_first_clock_in, 
+                                            max_col=self._col_last_clock_out):
             if len(column) != 1:
                 raise SheetTimeTrackerError(f"Expected one date in the column, got {len(column)}.")
 
@@ -337,7 +329,7 @@ class SheetTimeTracker(BaseTimeTracker):
         month_sheet = self._workbook_raw.worksheets[self.__get_month_sheet_idx()]
 
         # Determine starting column index based on clock action
-        start_idx = self._col_first_clock_in + (1 if event.action == ClockAction.CLOCK_OUT else 0) 
+        start_idx = self._col_first_clock_in + (1 if event.action == ClockAction.CLOCK_OUT else 0)
 
         for col_idx in range(start_idx, self._col_last_clock_out + 1, 2):
             cell = month_sheet.cell(row=date_row, column=col_idx)
@@ -354,6 +346,7 @@ class SheetTimeTracker(BaseTimeTracker):
 
                 LOGGER.debug((f"[Employee '{self._employee_id}'] Registered clock event '{event}' "
                               f"in cell '{cell.coordinate}'."))
+                return
 
         raise TimeTrackerWriteException(f"No available time slot to write the clock event '{event}'.")
 
@@ -431,15 +424,13 @@ class SheetTimeTracker(BaseTimeTracker):
         Returns:
             ClockAction: Clock action for the cell
         """
-        # Get first clock-in and last clock-out columns as 1-based indexes
-        _, clock_in_col  = openpyxl.utils.coordinate_to_tuple(f"{self._col_first_clock_in}1")
-        _, clock_out_col = openpyxl.utils.coordinate_to_tuple(f"{self._col_last_clock_out}1")
-
-        if (cell.column < clock_in_col) or (cell.column > clock_out_col):
-            raise ValueError(f"Cell column {cell.column} is out of the range [{clock_in_col}; {clock_out_col}].")
+        if (cell.column < self._col_first_clock_in) or (cell.column > self._col_last_clock_out):
+            raise ValueError((f"Cell column {cell.column} is out of the range "
+                              f"[{self._col_first_clock_in}; {self._col_last_clock_out}]."))
 
         # Follow the sequence 0: clock-in, 1: cock-out, 2: clock-in, etc.
-        return ClockAction.CLOCK_IN if ((cell.column - clock_in_col) % 2) == 0 else ClockAction.CLOCK_OUT
+        even = ((cell.column - self._col_first_clock_in) % 2) == 0
+        return ClockAction.CLOCK_IN if even else ClockAction.CLOCK_OUT
 
     def __load_workbook(self):
         """

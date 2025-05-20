@@ -66,7 +66,7 @@ LOCK_FILE_EXTENSION = ".lock"
 # Internal variables
 _remote_repository: str = "samples" # Default test repository
 
-def configure(remote_repository: str, local_cache: Optional[str]):
+def configure(remote_repository: str, local_cache: Optional[str] = None):
     """
     Configure the module. Must be called before any usage.
     
@@ -129,7 +129,7 @@ def acquire_spreadsheet_file(employee_id: str) -> pathlib.Path:
     local_file = pathlib.Path(SHEETS_LOCAL_CACHE) / repo_file.name
     shutil.copy2(repo_file, local_file)
 
-    LOGGER.debug(f"Acquired '{repo_file}' as '{local_file}'.")
+    LOGGER.debug(f"Acquired '{repo_file}' in local cache as '{local_file}'.")
     return local_file
 
 def save_spreadsheet_file(local_file: pathlib.Path):
@@ -211,6 +211,7 @@ def release_spreadsheet_file(local_file: pathlib.Path):
     repo_file = repo_path / local_file.name
     local_file.unlink()
     __release_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
+    LOGGER.debug(f"Released '{repo_file}'.")
 
 def list_employee_ids() -> list[str]:
     """

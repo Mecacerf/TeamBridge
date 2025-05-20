@@ -19,8 +19,8 @@ from pathlib import Path
 from openpyxl import Workbook, load_workbook
 
 # Internal libraries
-from tests.test_constants import *
-from src.core.spreadsheets.libreoffice import *
+from .test_constants import *
+from core.spreadsheets.libreoffice import *
 
 @pytest.fixture
 def spreadsheet_file(arrange_assets) -> Path:

@@ -17,8 +17,8 @@ from pathlib import Path
 import threading
 
 # Internal libraries
-from tests.test_constants import *
-from src.core.spreadsheets.sheets_repository import *
+from .test_constants import *
+from core.spreadsheets.sheets_repository import *
 
 # Local spreadsheet files cache folder
 TEST_LOCAL_CACHE_FOLDER = str((Path(TEST_ASSETS_DST_FOLDER) / "local_cache").resolve())
