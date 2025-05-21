@@ -51,6 +51,10 @@ CELL_FIRSTNAME = 'A11'
 CELL_DATE = 'A21'
 CELL_HOUR = 'A22'
 
+# This cell is specifically used to know whether the formula values are 
+# currently available or not
+CELL_EVALUATED = 'A23'
+
 # Year the employee's data in the file belong to
 # This is a raw cell (no formula) used for verification of dates
 CELL_YEAR = 'A4'
@@ -64,28 +68,28 @@ CELL_VERSION = 'A3'
 ## month sheets. This is used to allow changes in the files without having to 
 ## modify the code.
 # January sheet index
-LOCATION_JANUARY_SHEET = 'A23'
+LOCATION_JANUARY_SHEET = 'A24'
 
 # Row number for the first date of the month (01.xx.xxxx)
-LOCATION_FIRST_MONTH_DATE_ROW = 'A24'
+LOCATION_FIRST_MONTH_DATE_ROW = 'A25'
 
 # Day information: scheduled work, worked time and balance columns
-LOCATION_DAY_SCHEDULE_COL = 'A25'
-LOCATION_DAY_WORKED_TIME_COL = 'A26'
-LOCATION_DAY_BALANCE_COL = 'A27'
+LOCATION_DAY_SCHEDULE_COL = 'A26'
+LOCATION_DAY_WORKED_TIME_COL = 'A27'
+LOCATION_DAY_BALANCE_COL = 'A28'
 
 # Month and year balance cells
-LOCATION_MONTH_BALANCE = 'A28'
-LOCATION_YEAR_BALANCE = 'A29'
+LOCATION_MONTH_BALANCE = 'A29'
+LOCATION_YEAR_BALANCE = 'A30'
 
 # Vacation information: remaining days, planned for the month and for the day
-LOCATION_REMAINING_VACATION = 'A30'
-LOCATION_MONTH_VACATION = 'A31'
-LOCATION_DAY_VACATION_COL = 'A32'
+LOCATION_REMAINING_VACATION = 'A31'
+LOCATION_MONTH_VACATION = 'A32'
+LOCATION_DAY_VACATION_COL = 'A33'
 
 # Clock in/out times columns (left and right array delimeters)
-LOCATION_FIRST_CLOCK_IN_COL = 'A33'
-LOCATION_LAST_CLOCK_OUT_COL = 'A34'
+LOCATION_FIRST_CLOCK_IN_COL = 'A34'
+LOCATION_LAST_CLOCK_OUT_COL = 'A35'
 
 ################################################
 #   Spreadsheets time tracker custom errors    #
@@ -144,7 +148,8 @@ class SheetTimeTracker(BaseTimeTracker):
         self._col_first_clock_in    = col_idx(init_sheet[LOCATION_FIRST_CLOCK_IN_COL].value)
         self._col_last_clock_out    = col_idx(init_sheet[LOCATION_LAST_CLOCK_OUT_COL].value)
 
-        LOGGER.debug(f"[Employee '{self._employee_id}'] Finished spreadsheet time tracker setup.")
+        LOGGER.debug((f"[Employee '{self._employee_id}'] Finished spreadsheet time tracker setup "
+                      f"(readable={self.readable})."))
 
     def __get_init_sheet_val(self, cell: str):
         """
@@ -186,7 +191,7 @@ class SheetTimeTracker(BaseTimeTracker):
         month_sheet = self._workbook_raw.worksheets[self.__get_month_sheet_idx()]
 
         clock_events = []
-        
+
         # Iterate columns along the date row from the first clock-in column to the last clock-out column
         # The column therefore always contains a single cell
         for column in month_sheet.iter_cols(min_row=date_row, max_row=date_row, 
@@ -452,13 +457,13 @@ class SheetTimeTracker(BaseTimeTracker):
         self._workbook_raw = openpyxl.load_workbook(self._file_path, data_only=False)
         self._workbook_eval = openpyxl.load_workbook(self._file_path, data_only=True)
 
-        # The eval workbook has not been evaluated if the date cell from the init sheet is None, since
-        # this cell contains the TODAY() formula.
-        if self._workbook_eval.worksheets[SHEET_INIT][CELL_DATE].value is None:
+        # Check the "evaluated" cell from the init sheet to know if the formula values are available
+        # When unavailable, the eval workbook is None and the readable property is False
+        if self._workbook_eval.worksheets[SHEET_INIT][CELL_EVALUATED].value is None:
             self._workbook_eval = None
 
-        LOGGER.debug((f"[Employee '{self._employee_id}'] (Re)loaded spreadsheet '{self._file_path.name}', "
-                     f"readable={self.readable}."))
+        LOGGER.debug((f"[Employee '{self._employee_id}'] (Re)loaded spreadsheet '{self._file_path.name}' "
+                      f"(readable={self.readable})."))
 
     def __invalidate_eval_wb(self):
         """

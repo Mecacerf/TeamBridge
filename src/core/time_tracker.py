@@ -83,17 +83,27 @@ class ClockAction(Enum):
     CLOCK_IN = 0
     CLOCK_OUT = 1
 
+    def __str__(self):
+        # Return a user friendly string
+        # Keep the default __repr__ implementation
+        return self.name.lower().replace('_', '-')
+
 @dataclass(frozen=True)
 class ClockEvent:
     """
     Simple container for a clock event.
 
     Attributes:
-        time (datetime.time): time in the day at which the event occurred
-        action (ClockAction): related clock action
+        time (datetime.time): Time in the day at which the event occurred.
+        action (ClockAction): Related clock action.
     """
     time: dt.time
     action: ClockAction
+
+    def __str__(self):
+        # Return a user friendly string
+        # Keep the default __repr__ implementation
+        return f"{self.action} at {self.time}"
     
 ###############################################
 #           Attendance error types            #
@@ -105,7 +115,7 @@ class AttendanceError:
     Simple attendance error class.
 
     Attributes:
-        description (str): concise error description
+        description (str): Concise error description.
     """
     description: str
 
@@ -143,11 +153,11 @@ class BaseTimeTracker(ABC):
         Opens the employee's data for the given date.
 
         Args:
-            employee_id (str): unique identifier for the employee
-            date (Optional[datetime.date]): the current date pointer, defaults to first of January
+            employee_id (str): Unique identifier for the employee.
+            date (Optional[datetime.date]): The current date pointer, defaults to first of January.
 
         Raises:
-            TimeTrackerOpenException: raised when data cannot be opened
+            TimeTrackerOpenException: Raised when data cannot be opened.
             See subclass implementations for more detailed reasons.
         """
         self._employee_id = employee_id
@@ -176,13 +186,23 @@ class BaseTimeTracker(ABC):
         pass
 
     @property
+    def employee_id(self) -> str:
+        """
+        Get employee's id.
+
+        Returns:
+            str: Employee's id.
+        """
+        return self._employee_id
+
+    @property
     @abstractmethod
     def firstname(self) -> str:
         """
         Get employee's firstname.
 
         Returns:
-            str: employee's firstname
+            str: Employee's firstname.
         """
         pass
 
@@ -193,7 +213,7 @@ class BaseTimeTracker(ABC):
         Get employee's name.
 
         Returns:
-            str: employee's name
+            str: Employee's name.
         """
         pass
 
@@ -204,7 +224,7 @@ class BaseTimeTracker(ABC):
         Get the year of the information held by the time tracker.
 
         Returns:
-            int: year of the information
+            int: Year of the information.
         """
         pass
 
@@ -214,7 +234,7 @@ class BaseTimeTracker(ABC):
         Get the current date.
 
         Returns:
-            datetime.date: current date pointer
+            datetime.date: Current date pointer.
         """
         return self._date
 
@@ -224,7 +244,7 @@ class BaseTimeTracker(ABC):
         Set the current date.
         
         Args:
-            new_date (datetime.date): new date pointer
+            new_date (datetime.date): New date pointer.
         """ 
         self._date = new_date
 
@@ -235,7 +255,7 @@ class BaseTimeTracker(ABC):
         Useful for scoped operations like aggregations.
 
         Args:
-            temp_date (datetime.date): the temporary date to set
+            temp_date (datetime.date): The temporary date to set.
         """
         original_date = self.current_date
         self.current_date = temp_date
@@ -269,7 +289,7 @@ class BaseTimeTracker(ABC):
         Check if the employee is clocked in at current date.
 
         Returns:
-            bool: True if clocked in
+            bool: True if clocked in.
         """
         # Get last today event and check if it's a clock in action
         events = self.clock_events
@@ -284,7 +304,7 @@ class BaseTimeTracker(ABC):
         and get accessible after an evaluation is performed.
 
         Returns:
-            bool: reading flag
+            bool: Reading flag.
         """
         pass
 
@@ -299,7 +319,7 @@ class BaseTimeTracker(ABC):
 
         Returns:
             Optional[AttendanceError]: Optionally return an `AttendanceError`
-                object corresponding to the error found
+                object corresponding to the error found.
         """
         events = self.clock_events
 
@@ -351,7 +371,7 @@ class BaseTimeTracker(ABC):
         Accessible when the `readable` property is `True`.
 
         Returns:
-            datetime.timedelta: schedule for the day as a timedelta
+            datetime.timedelta: Schedule for the day as a timedelta.
         """
         pass
 
@@ -369,7 +389,7 @@ class BaseTimeTracker(ABC):
         Accessible when the `readable` property is `True`.
 
         Returns:
-            datetime.timedelta: balance for the day as a timedelta
+            datetime.timedelta: Balance for the day as a timedelta.
         """
         pass
 
@@ -387,7 +407,7 @@ class BaseTimeTracker(ABC):
         Accessible when the `readable` property is `True`.
         
         Returns:
-            datetime.timedelta: worked time for the day as a timedelta
+            datetime.timedelta: Worked time for the day as a timedelta.
         """
         pass
 
@@ -406,7 +426,7 @@ class BaseTimeTracker(ABC):
         Accessible when the `readable` property is `True`.
 
         Returns:
-            datetime.timedelta: balance for the month as a timedelta
+            datetime.timedelta: Balance for the month as a timedelta.
         """
         pass
 
@@ -423,7 +443,7 @@ class BaseTimeTracker(ABC):
         Accessible when the `readable` property is `True`.
 
         Returns:
-            datetime.timedelta: balance for the year as a timedelta
+            datetime.timedelta: Balance for the year as a timedelta.
         """
         pass
 
@@ -442,7 +462,7 @@ class BaseTimeTracker(ABC):
         Accessible when the `readable` property is `True`.
 
         Returns:
-            datetime.timedelta: balance from the start of the year up to (but excluding) today.
+            datetime.timedelta: Balance from the start of the year up to (but excluding) today.
         """
         return (self.read_year_balance() - self.read_day_balance())
 
@@ -454,7 +474,7 @@ class BaseTimeTracker(ABC):
         Accessible when the `readable` property is `True`.
 
         Returns:
-            float: number of remaining vacation days
+            float: Number of remaining vacation days.
         """
         pass
 
@@ -466,7 +486,7 @@ class BaseTimeTracker(ABC):
         Accessible when the `readable` property is `True`.
 
         Returns:
-            float: number of planned vacation days for the current month.
+            float: Number of planned vacation days for the current month.
         """
         pass
 
@@ -483,7 +503,7 @@ class BaseTimeTracker(ABC):
         Accessible when the `readable` property is `True`.
 
         Returns:
-            float: vacation ratio for the current date.
+            float: Vacation ratio for the current date.
         """
         pass
 
@@ -494,7 +514,7 @@ class BaseTimeTracker(ABC):
         Accessible when the `readable` property is `True`.
 
         Returns:
-            float: number of planned vacation days for the year.
+            float: Number of planned vacation days for the year.
         """
         # Iterate the months and sum the vacation days
         total_days = 0.0
@@ -514,10 +534,10 @@ class BaseTimeTracker(ABC):
         functions are not available until a new evaluation is performed.
 
         Args:
-            event (ClockEvent): clock event to register at current date
+            event (ClockEvent): Clock event to register at current date.
         
         Raises:
-            TimeTrackerWriteException: raised when the registering fails
+            TimeTrackerWriteException: Raised when the registering fails.
             See subclass implementations for more detailed reasons.
         """
         pass
@@ -530,7 +550,7 @@ class BaseTimeTracker(ABC):
         meaning that all 'read_' prefixed methods will be available for use.
 
         Raises:
-            TimeTrackerEvaluationException: raised when the evaluation fails
+            TimeTrackerEvaluationException: Raised when the evaluation fails.
             See subclass implementations for more detailed reasons.
         """
         pass
@@ -544,7 +564,7 @@ class BaseTimeTracker(ABC):
         registered) to save the modifications.
 
         Raises:
-            TimeTrackerSaveException: raised when the saving fails
+            TimeTrackerSaveException: Raised when the saving fails.
             See subclass implementations for more detailed reasons.
         """
         pass
@@ -558,7 +578,7 @@ class BaseTimeTracker(ABC):
         before this.
 
         Raises:
-            TimeTrackerCloseException: raised when the closing fails
+            TimeTrackerCloseException: Raised when the closing fails.
             See subclass implementations for more detailed reasons.
         """
         pass
