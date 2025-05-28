@@ -21,24 +21,9 @@ import datetime as dt
 # Internal libraries
 from tests.test_constants import *
 
-################################################
-#               Tests constants                #
-################################################
-
-# Test date and time
-TEST_DATE = dt.date(year=2025, month=3, day=10) # 10 March 2025 is a monday
-TEST_TIME = dt.time(hour=8, minute=10)
-TEST_DATETIME = dt.datetime.combine(date=TEST_DATE, time=TEST_TIME)
-# Expected values at configured date and time
-# Daily schedule for a day of the week
-TEST_DAILY_SCHEDULE = dt.timedelta(hours=8, minutes=17)
-# Total time the employee should have worked from the beginning of the month
-# Equal to number of working days times daily schedule
-TEST_MONTHLY_BALANCE_NO_WORK = (TEST_DAILY_SCHEDULE * 6)
-
-################################################
-#               Common fixtures                #
-################################################
+########################################################################
+#                          Assets arrangement                          #
+########################################################################
 
 @pytest.fixture
 def arrange_assets():
@@ -63,6 +48,8 @@ def arrange_assets():
         shutil.rmtree(assets_dst, onexc=remove_readonly)
 
     shutil.copytree(assets_src, assets_dst)
+
+
 
 # @pytest.fixture
 # def teambridge_model(arrange_spreadsheet_time_tracker) -> Generator[TeamBridgeScheduler, None, None]:

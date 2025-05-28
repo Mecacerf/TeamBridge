@@ -4,7 +4,7 @@ File: test_constants.py
 Author: Bastian Cerf
 Date: 18/05/2025
 Description: 
-    Declaration of test constants.
+    Declaration of general test constants.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
