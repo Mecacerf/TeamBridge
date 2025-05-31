@@ -3,8 +3,8 @@
 File: sheet_time_tracker_factory.py
 Author: Bastian Cerf
 Date: 17/05/2025
-Description: 
-    Concrete implementation of the abstract factory defined in 
+Description:
+    Concrete implementation of the abstract factory defined in
     `time_tracker_factory.py`. This implementation builds
     `SheetTimeTracker` instances.
 
@@ -21,11 +21,12 @@ from typing import Optional
 from core.time_tracker import BaseTimeTracker
 from core.time_tracker_factory import TimeTrackerFactory
 from .sheet_time_tracker import SheetTimeTracker
-from .sheets_repository import *
+from .sheets_repository import SheetsRepoAccessor
+
 
 class SheetTimeTrackerFactory(TimeTrackerFactory):
     """
-    Concrete implementation of the abstract factory defined in 
+    Concrete implementation of the abstract factory defined in
     `time_tracker_factory.py`. This implementation builds
     `SheetTimeTracker` instances.
     """
@@ -37,11 +38,16 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
         Args:
             repository_path (str): Path to the spreadsheets repository.
         """
-        configure(remote_repository=repository_path)
+        # Create the internal repository accessor
+        self._repo_accessor = SheetsRepoAccessor(
+            remote_repository=repository_path
+        )
 
-    def create(self, employee_id: str, 
-               date: Optional[dt.date] = None) -> BaseTimeTracker:
-        return SheetTimeTracker(employee_id, date)
+    def create(
+        self, employee_id: str, datetime: Optional[dt.datetime] = None
+    ) -> BaseTimeTracker:
+        # Inject the common repository accessor 
+        return SheetTimeTracker(employee_id, datetime, self._repo_accessor)
 
     def list_employee_ids(self) -> list[str]:
-        return list_employee_ids()
+        return self._repo_accessor.list_employee_ids()

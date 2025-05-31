@@ -4,9 +4,10 @@ File: spreadsheet_time_tracker.py
 Author: Bastian Cerf
 Date: 21/02/2025
 Description: 
-    Implementation of the time tracker abstract class using spreadsheet files for 
-    data storage. This implementation works with the `sheets_repository` module
-    to access and manipulate files on a remote repository.
+    Implementation of the time tracker abstract class using spreadsheet 
+    files for data storage. This implementation works with the 
+    `sheets_repository` module to access and manipulate files on a remote 
+    repository.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
