@@ -14,7 +14,8 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Type
+from types import TracebackType
 from dataclasses import dataclass
 from enum import Enum
 import datetime as dt
@@ -27,49 +28,49 @@ import datetime as dt
 class TimeTrackerReadException(Exception):
     """Custom exception for illegal read operation."""
 
-    def __init__(self, message="Illegal read operation attempted"):
+    def __init__(self, message: str = "Illegal read operation attempted"):
         super().__init__(message)
 
 
 class TimeTrackerWriteException(Exception):
     """Custom exception for illegal write operation."""
 
-    def __init__(self, message="Illegal write operation attempted"):
+    def __init__(self, message: str = "Illegal write operation attempted"):
         super().__init__(message)
 
 
 class TimeTrackerOpenException(Exception):
     """Custom exception for time tracker opening errors."""
 
-    def __init__(self, message="Unable to open the time tracker"):
+    def __init__(self, message: str = "Unable to open the time tracker"):
         super().__init__(message)
 
 
 class TimeTrackerDateException(Exception):
     """Custom exception for time tracker date errors."""
 
-    def __init__(self, message="The operation failed due to a date error"):
+    def __init__(self, message: str = "The operation failed due to a date error"):
         super().__init__(message)
 
 
 class TimeTrackerEvaluationException(Exception):
     """Custom exception for time tracker evaluation errors."""
 
-    def __init__(self, message="The data evaluation failed"):
+    def __init__(self, message: str = "The data evaluation failed"):
         super().__init__(message)
 
 
 class TimeTrackerSaveException(Exception):
     """Custom exception for time tracker saving errors."""
 
-    def __init__(self, message="The time tracker hasn't been saved properly"):
+    def __init__(self, message: str = "The time tracker hasn't been saved properly"):
         super().__init__(message)
 
 
 class TimeTrackerCloseException(Exception):
     """Custom exception for time tracker closing errors."""
 
-    def __init__(self, message="The time tracker hasn't been closed properly"):
+    def __init__(self, message: str = "The time tracker hasn't been closed properly"):
         super().__init__(message)
 
 
@@ -285,7 +286,7 @@ class BaseTimeTracker(ABC):
         pass
 
     @property
-    def data_datetime(self) -> dt.datetime:
+    def data_datetime(self) -> Optional[dt.datetime]:
         """Get the reference datetime for data evaluation.
 
         This property defines the date and time to which the employee's data
@@ -293,9 +294,11 @@ class BaseTimeTracker(ABC):
         balances) are considered in computations.
 
         Returns:
-            datetime.datetime: The current evaluation datetime.
+            Optional[datetime.datetime]: The current evaluation datetime.
         """
-        return dt.datetime.combine(self._date, self._time)
+        if self._date and self._time:
+            return dt.datetime.combine(self._date, self._time)
+        return None
 
     @data_datetime.setter
     def data_datetime(self, new_datetime: dt.datetime):
@@ -345,7 +348,9 @@ class BaseTimeTracker(ABC):
         pass
 
     @abstractmethod
-    def get_clock_events(self, date: Optional[dt.date] = None) -> list[ClockEvent]:
+    def get_clock_events(
+        self, date: Optional[dt.date] = None
+    ) -> list[Optional[ClockEvent]]:
         """Retrieve all clock-in and clock-out events on a given
         date.
 
@@ -367,7 +372,7 @@ class BaseTimeTracker(ABC):
                 to `data_datetime.date` if not provided.
 
         Returns:
-            list[ClockEvent]: A list of clock events for the date.
+            list[Optional[ClockEvent]]: A list of clock events for the date.
                 The list may be empty if no events are recorded.
         """
         pass
@@ -387,7 +392,11 @@ class BaseTimeTracker(ABC):
         """
         # Check if the last event is a clock-in action
         events = self.get_clock_events(date)
-        return bool(events) and (events[-1].action == ClockAction.CLOCK_IN)
+        return (
+            bool(events)
+            and events[-1] is not None
+            and (events[-1].action == ClockAction.CLOCK_IN)
+        )
 
     @abstractmethod
     def read_day_schedule(self, date: Optional[dt.date] = None) -> dt.timedelta:
@@ -457,7 +466,7 @@ class BaseTimeTracker(ABC):
         from `data_datetime`.
 
         The balance represents the remaining work time the employee is
-        expected to complete on the specified day. A positive balance 
+        expected to complete on the specified day. A positive balance
         means the employee worked more than the expected daily schedule.
 
         The balance is `00:00` for all days after the `data_datetime.date`,
@@ -501,7 +510,7 @@ class BaseTimeTracker(ABC):
     def read_month_schedule(self, month: Optional[int] = None) -> dt.timedelta:
         """Get employee's schedule on the given month (how many time
         he's supposed to work).
-        
+
         If no month is specified, the method defaults to using the month
         from `data_datetime`.
 
@@ -527,11 +536,11 @@ class BaseTimeTracker(ABC):
         If no month is specified, the method defaults to using the month
         from `data_datetime`.
 
-        This method returns the sum of all day worked times of the month, 
-        as if they were retrieved using `read_day_worked_time()`. 
-        
+        This method returns the sum of all day worked times of the month,
+        as if they were retrieved using `read_day_worked_time()`.
+
         In contrast with the month balance, days worked time does not
-        rely on `data_datetime.date`. That means that worked times after 
+        rely on `data_datetime.date`. That means that worked times after
         `data_datetime.date` are added to the sum. The month worked time
         does not exclude the time worked in future days related to the
         current `data_datetime.date`.
@@ -769,7 +778,7 @@ class BaseTimeTracker(ABC):
 
     @abstractmethod
     def write_clocks(
-        self, events: list[ClockEvent], date: Optional[dt.date] = None
+        self, events: list[Optional[ClockEvent]], date: Optional[dt.date] = None
     ) -> None:
         """Write the given clock events list on the given date, overwriting
         existing entries.
@@ -790,8 +799,8 @@ class BaseTimeTracker(ABC):
         evaluation is performed.
 
         Args:
-            events (list[ClockEvent]): List of clock events to write on 
-                the given date.
+            events (list[Optional[ClockEvent]]): List of clock events to
+                write on the given date.
             date (Optional[datetime.date]): Specify the date to write the
                 clock events. Defaults to `data_datetime.date`.
 
@@ -828,7 +837,12 @@ class BaseTimeTracker(ABC):
         """
         pass
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> Optional[bool]:
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Optional[bool]:
         """Ensures the time tracker is properly closed when exiting the
         context manager.
 
@@ -928,13 +942,17 @@ class AttendanceValidator:
         # No event, no error
         if not events:
             return None
-        # Check 1: day finishes with a clock-out
-        if events[-1].action != ClockAction.CLOCK_OUT:
-            return CLOCK_EVENT_MISSING
-        # Check 2: no missing (None) clock event
+
+        # Check 1: no missing (None) clock event
         if any(evt is None for evt in events):
             return CLOCK_EVENT_MISSING
+
+        # Check 2: day finishes with a clock-out
+        if events[-1] is not None and (events[-1].action != ClockAction.CLOCK_OUT):
+            return CLOCK_EVENT_MISSING
+
         # Check 3: events times are in ascending order
+        events = [evt for evt in events if evt is not None]  # For type checkers
         if any(e1.time >= e2.time for e1, e2 in zip(events, events[1:])):
             return CLOCK_EVENTS_UNORDERED
 
@@ -966,11 +984,13 @@ class AttendanceValidator:
 
         if date is not None:
             end_date = date
-        else:
+        elif self._tracker.data_datetime is not None:
             end_date = self._tracker.data_datetime.date() - day_delta
+        else:
+            raise ValueError("No data datetime available.")
 
         # Dictionary of days with an attendance error
-        errors = {}
+        errors: dict[dt.date, AttendanceError] = {}
         # Iterate all days from the first of January until end_date
         # and search for errors
         date = dt.date(day=1, month=1, year=self._tracker.data_year)

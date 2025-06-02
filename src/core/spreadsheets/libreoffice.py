@@ -3,14 +3,14 @@
 File: libreoffice.py
 Author: Bastian Cerf
 Date: 18/05/2025
-Description: 
-    This module provides functionality to load, evaluate and save a 
-    spreadsheet file using LibreOffice calc in headless mode. 
+Description:
+    This module provides functionality to load, evaluate and save a
+    spreadsheet file using LibreOffice calc in headless mode.
 
     TODO:
-        The automatic detection of LibreOffice in the filesystem 
-        should ideally occur once during program installation, rather 
-        than at every startup. The detected path could then be stored 
+        The automatic detection of LibreOffice in the filesystem
+        should ideally occur once during program installation, rather
+        than at every startup. The detected path could then be stored
         in the configuration file once this feature is implemented.
 
 Company: Mecacerf SA
@@ -39,6 +39,7 @@ LIBREOFFICE_TIMEOUT = 10.0
 # Libre office program path
 _libreoffice_path = None
 
+
 def find_libreoffice() -> Optional[str]:
     """
     Attempts to find the LibreOffice installation path across Windows and Linux.
@@ -54,9 +55,11 @@ def find_libreoffice() -> Optional[str]:
     # Windows: Check registry first, then common paths
     if system == "Windows":
         import winreg
+
         try:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
-                                "SOFTWARE\\LibreOffice\\UNO\\InstallPath") as key:
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE, "SOFTWARE\\LibreOffice\\UNO\\InstallPath"
+            ) as key:
                 path, _ = winreg.QueryValueEx(key, "")
                 exe_path = os.path.join(path, "soffice.exe")
                 if os.path.exists(exe_path):
@@ -67,7 +70,7 @@ def find_libreoffice() -> Optional[str]:
         # Fallback: Check default installation directories
         common_paths = [
             "C:\\Program Files\\LibreOffice\\program\\soffice.exe",
-            "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe"
+            "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe",
         ]
         for path in common_paths:
             if os.path.exists(path):
@@ -83,7 +86,7 @@ def find_libreoffice() -> Optional[str]:
         common_paths = [
             "/usr/bin/soffice",
             "/usr/local/bin/soffice",
-            "/opt/libreoffice/program/soffice"
+            "/opt/libreoffice/program/soffice",
         ]
         for path in common_paths:
             if os.path.exists(path):
@@ -91,6 +94,7 @@ def find_libreoffice() -> Optional[str]:
 
     # LibreOffice not found
     return None
+
 
 # Automatically search for LibreOffice in the filesystem on module initialization
 _libreoffice_path = find_libreoffice()
@@ -100,16 +104,20 @@ if _libreoffice_path:
 else:
     LOGGER.warning(f"'{LIBEOFFICE_PROGRAM}' not automatically found.")
 
+
 def configure(libreoffice_path: str):
     """
-    Manually configure the LibreOffice program path. 
+    Manually configure the LibreOffice program path.
 
     Args:
         libreoffice_path (str): Path to the LibreOffice executable
     """
     global _libreoffice_path
     _libreoffice_path = libreoffice_path
-    LOGGER.info(f"Manually configured Libreoffice program path to '{_libreoffice_path}'.")
+    LOGGER.info(
+        f"Manually configured Libreoffice program path to '{_libreoffice_path}'."
+    )
+
 
 def evaluate_calc(file_path: pathlib.Path):
     """
@@ -120,7 +128,7 @@ def evaluate_calc(file_path: pathlib.Path):
 
     Raises:
         RuntimeError: No LibreOffice installation found
-        FileExistsError: A previous evaluation didn't finish properly and a file is 
+        FileExistsError: A previous evaluation didn't finish properly and a file is
             still existing in the temporary folder
         RuntimeError: The LibreOffice execution returned an error
         TimeoutError: The LibreOffice execution timed out
@@ -131,9 +139,13 @@ def evaluate_calc(file_path: pathlib.Path):
 
     tmp_file = pathlib.Path(LIBREOFFICE_CACHE_FOLDER) / file_path.name
     if tmp_file.exists():
-        raise FileExistsError((f"The temporary file '{tmp_file}' already exists. A "
-                               "previous evaluation may have failed."))
-    
+        raise FileExistsError(
+            (
+                f"The temporary file '{tmp_file}' already exists. A "
+                "previous evaluation may have failed."
+            )
+        )
+
     os.makedirs(LIBREOFFICE_CACHE_FOLDER, exist_ok=True)
 
     # Create and execute the LibreOffice command to evaluate and save a spreadsheet document.
@@ -141,38 +153,44 @@ def evaluate_calc(file_path: pathlib.Path):
     # of directly replacing the original one. This way the original document doesn't get
     # corrupted if an error occurs. The replacement (file move) is done only on success.
     command = [
-        _libreoffice_path,                       # LibreOffice executable path
-        "--headless",                            # Run in headless (no GUI) mode
-        "--calc",                                # Open in spreadsheet mode
-        "--convert-to", "xlsx",                  # Convert to XLSX format
-        "--outdir", str(LIBREOFFICE_CACHE_FOLDER),  # Output to the temp folder
-        str(file_path.resolve())                 # Path to the input spreadsheet
+        _libreoffice_path,  # LibreOffice executable path
+        "--headless",  # Run in headless (no GUI) mode
+        "--calc",  # Open in spreadsheet mode
+        "--convert-to",
+        "xlsx",  # Convert to XLSX format
+        "--outdir",
+        str(LIBREOFFICE_CACHE_FOLDER),  # Output to the temp folder
+        str(file_path.resolve()),  # Path to the input spreadsheet
     ]
 
     # Run the command as a subprocess
     try:
         result = subprocess.run(
             command,
-            check=True,                          # Raise CalledProcessError if returncode != 0
-            capture_output=True,                 # Capture stdout and stderr
-            timeout=LIBREOFFICE_TIMEOUT          # Prevent indefinite hangs
+            check=True,  # Raise CalledProcessError if returncode != 0
+            capture_output=True,  # Capture stdout and stderr
+            timeout=LIBREOFFICE_TIMEOUT,  # Prevent indefinite hangs
         )
     except subprocess.CalledProcessError as e:
-        raise RuntimeError((
-            f"LibreOffice subprocess failed with return code {e.returncode}.\n"
-            f"stdout: {e.stdout.decode(errors='ignore')}\n"
-            f"stderr: {e.stderr.decode(errors='ignore')}"
-        )) from e
+        raise RuntimeError(
+            (
+                f"LibreOffice subprocess failed with return code {e.returncode}.\n"
+                f"stdout: {e.stdout.decode(errors='ignore')}\n"
+                f"stderr: {e.stderr.decode(errors='ignore')}"
+            )
+        ) from e
     except subprocess.TimeoutExpired as e:
         raise TimeoutError("LibreOffice evaluation timed out.") from e
 
     # Check that the evaluated file was actually produced
     if not tmp_file.exists():
-        raise FileNotFoundError((
-            f"LibreOffice did not produce the expected output file.\n"
-            f"stdout: {result.stdout.decode(errors='ignore')}\n"
-            f"stderr: {result.stderr.decode(errors='ignore')}"
-        ))
+        raise FileNotFoundError(
+            (
+                f"LibreOffice did not produce the expected output file.\n"
+                f"stdout: {result.stdout.decode(errors='ignore')}\n"
+                f"stderr: {result.stderr.decode(errors='ignore')}"
+            )
+        )
 
     # Evaluation succeeded without any error: replace original file with evaluated one
     os.replace(tmp_file, file_path)

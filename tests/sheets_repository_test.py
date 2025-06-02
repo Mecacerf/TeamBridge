@@ -30,7 +30,7 @@ TEST_LOCAL_CACHE_FOLDER = str((Path(TEST_ASSETS_DST_FOLDER) / "local_cache").res
 
 
 @pytest.fixture
-def repository(arrange_assets) -> SheetsRepoAccessor:
+def repository(arrange_assets: None) -> SheetsRepoAccessor:
     """
     Pytest fixture that creates and configures the spreadsheets repository
     class instance.
@@ -48,7 +48,7 @@ def repository(arrange_assets) -> SheetsRepoAccessor:
     )
 
 
-def test_acquire_sheet(repository):
+def test_acquire_sheet(repository: SheetsRepoAccessor):
     """
     Test that a spreadsheet file is correctly acquired from the repository.
     Once acquired, the file is present in the local cache folder and a lock
@@ -68,7 +68,7 @@ def test_acquire_sheet(repository):
     assert repo_lock_file.exists()
 
 
-def test_acquire_twice(repository):
+def test_acquire_twice(repository: SheetsRepoAccessor):
     """
     Acquire the same spreadsheet file twice and test that it fails the
     second time, correctly preventing multiple accesses to the same file.
@@ -78,7 +78,7 @@ def test_acquire_twice(repository):
         repository.acquire_spreadsheet_file(TEST_EMPLOYEE_ID)
 
 
-def test_acquire_sequentially(repository):
+def test_acquire_sequentially(repository: SheetsRepoAccessor):
     """
     Start two processes that try to acquire the spreadsheet file concurrently.
     Test that the second process acquire the file only after the first process
@@ -107,7 +107,7 @@ def test_acquire_sequentially(repository):
     assert acquired.is_set()
 
 
-def test_save_sheet(repository):
+def test_save_sheet(repository: SheetsRepoAccessor):
     """
     Acquire a spreadsheet file from the repository, modify it in the local
     cache and test the saving function. The file in the repository shall
@@ -126,7 +126,7 @@ def test_save_sheet(repository):
         assert file.read(len(DUMMY_CONTENT)) == DUMMY_CONTENT
 
 
-def test_release_sheet(repository):
+def test_release_sheet(repository: SheetsRepoAccessor):
     """
     Acquire a spreadsheet file from the repository and release it. Test
     that the lock file doesn't exist, as well as the file in the local
@@ -143,7 +143,7 @@ def test_release_sheet(repository):
     assert not repo_lock_file.exists()
 
 
-def test_list_employee(repository):
+def test_list_employee(repository: SheetsRepoAccessor):
     """
     Test that the test employee ID is the only one listed.
     """

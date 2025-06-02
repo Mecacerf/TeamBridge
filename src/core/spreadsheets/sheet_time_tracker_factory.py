@@ -39,14 +39,12 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
             repository_path (str): Path to the spreadsheets repository.
         """
         # Create the internal repository accessor
-        self._repo_accessor = SheetsRepoAccessor(
-            remote_repository=repository_path
-        )
+        self._repo_accessor = SheetsRepoAccessor(remote_repository=repository_path)
 
     def create(
         self, employee_id: str, datetime: Optional[dt.datetime] = None
     ) -> BaseTimeTracker:
-        # Inject the common repository accessor 
+        # Inject the common repository accessor
         return SheetTimeTracker(employee_id, datetime, self._repo_accessor)
 
     def list_employee_ids(self) -> list[str]:
