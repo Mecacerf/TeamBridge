@@ -19,12 +19,15 @@ from abc import ABC, abstractmethod
 
 # Internal libraries
 from .time_tracker import BaseTimeTracker
+from common.singleton_register import SingletonRegister
 
 
-class TimeTrackerFactory(ABC):
+class TimeTrackerFactory(SingletonRegister, ABC):
     """
     Abstract factory for creating time tracker instances. The concrete
     type of the time tracker is defined by the subclass implementation.
+
+    Each subclass of this factory are singletons.
     """
 
     @abstractmethod

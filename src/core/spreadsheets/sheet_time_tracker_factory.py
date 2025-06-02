@@ -31,7 +31,7 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
     `SheetTimeTracker` instances.
     """
 
-    def __init__(self, repository_path: str):
+    def _setup(self, repository_path: str):
         """
         Initialize the factory.
 
