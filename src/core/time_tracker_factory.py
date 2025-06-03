@@ -13,12 +13,15 @@ Contact: info@mecacerf.ch
 """
 
 # Standard libraries
-import datetime as dt
-from typing import Optional
 from abc import ABC, abstractmethod
+import datetime as dt
 
 # Internal libraries
-from .time_tracker import BaseTimeTracker
+from .time_tracker import (
+    TimeTrackerAnalyzer,
+    TimeTrackerOpenException,
+    TimeTrackerDateException,
+)
 from common.singleton_register import SingletonRegister
 
 
@@ -30,28 +33,45 @@ class TimeTrackerFactory(SingletonRegister, ABC):
     Each subclass of this factory are singletons.
     """
 
-    @abstractmethod
     def create(
-        self, employee_id: str, datetime: Optional[dt.datetime] = None
-    ) -> BaseTimeTracker:
+        self, employee_id: str, year: int | dt.date | dt.datetime
+    ) -> TimeTrackerAnalyzer:
         """
-        Create a time tracker for the given employee ID. An optional date
-        and time can be provided; if omitted, the tracker may fall back
-        to the last evaluated datetime or the reading functions may remain
-        unavailable.
+        Create a time tracker for the given employee ID. The time tracker
+        is opened for the given year. A `TimeTrackerDateException` is
+        raised if no time tracker can be opened for that year.
 
         Args:
             employee_id (str): Unique identifier for the employee.
-            atetime (Optional[datetime]): The reference date and time
-                for evaluating the tracker's data.
+            year (int | dt.date | dt.datetime): Tracked year of the time
+                tracker.
 
         Returns:
-            BaseTimeTracker: An instance of a time tracker for the
+            TimeTrackerAnalyzer: An instance of a time tracker for the
                 specified employee.
 
         Raises:
             TimeTrackerOpenException: Raised if the time tracker cannot
-                be opened. See the underlying exception for details.
+                be opened.
+            TimeTrackerDateException: Raised if no time tracker can be
+                opened for the specified year.
+        """
+        if isinstance(year, dt.date) or isinstance(year, dt.datetime):
+            year = year.year
+
+        try:
+            return self._create(employee_id, year)
+        except Exception as e:
+            if isinstance(e, TimeTrackerOpenException) or isinstance(
+                e, TimeTrackerDateException
+            ):
+                raise e
+            raise TimeTrackerOpenException() from e
+
+    @abstractmethod
+    def _create(self, employee_id: str, year: int) -> TimeTrackerAnalyzer:
+        """
+        Must be implemented by subclasses to create the time tracker.
         """
         pass
 

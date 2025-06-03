@@ -407,7 +407,7 @@ class SheetTimeTracker(BaseTimeTracker):
             evaluate_calc(self._file_path)
             self.__load_workbook()
         except Exception as e:
-            raise TimeTrackerEvaluationException() from e
+            raise TimeTrackerAnalysisException() from e
 
     def save(self) -> None:
         """
