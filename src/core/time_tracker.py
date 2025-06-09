@@ -14,7 +14,7 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 from abc import ABC, abstractmethod
-from typing import Optional, Type
+from typing import Optional, Type, Any
 from types import TracebackType
 from dataclasses import dataclass
 from enum import Enum
@@ -123,12 +123,13 @@ class Employee(ABC):
     used to automatically manage resource lifecycle.
     """
 
-    def __init__(self, employee_id: str) -> None:
+    def __init__(self, employee_id: str, *kargs: Any, **kwargs: Any) -> None:
         """
         Initialize for the specified employee.
 
         Args:
             employee_id (str): The unique identifier of the employee.
+            kwargs (Any): Any argument the subclass may need to setup.
 
         Raises:
             TimeTrackerOpenException: If the time tracker data cannot be
@@ -138,7 +139,7 @@ class Employee(ABC):
         self._employee_id = employee_id
 
         try:
-            self._setup()
+            self._setup(*kargs, **kwargs)
         except Exception as e:
             raise TimeTrackerOpenException() from e
 
@@ -147,7 +148,7 @@ class Employee(ABC):
         return self
 
     @abstractmethod
-    def _setup(self):
+    def _setup(self, *kargs: Any, **kwargs: Any):
         """
         Called during object initialization to setup access to the data
         storage. Any exception can be raised in this method on failure,

@@ -103,6 +103,14 @@ class SheetsRepoAccessor:
         # Check that the system has access to the remote repository
         self.__acquire_repository_path()
 
+    @property
+    def remote_repository(self) -> str:
+        """
+        Returns:
+            str: Remote repository path.
+        """
+        return self._remote_repository
+
     def acquire_spreadsheet_file(self, employee_id: str) -> pathlib.Path:
         """
         Acquire the employee's spreadsheet file from the remote repository.

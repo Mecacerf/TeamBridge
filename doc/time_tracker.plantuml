@@ -5,7 +5,7 @@ class "Employee" {
   {abstract}name: str
   {abstract}firstname: str
 
-  Employee(employee_id: str)
+  Employee(employee_id: str, *kargs: Any, **kwargs: Any)
   {abstract}close() -> None
 }
 

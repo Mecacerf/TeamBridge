@@ -4,10 +4,10 @@ File: spreadsheet_time_tracker.py
 Author: Bastian Cerf
 Date: 21/02/2025
 Description:
-    Implementation of the time tracker abstract class using spreadsheet
-    files for data storage. This implementation works with the
-    `sheets_repository` module to access and manipulate files on a remote
-    repository.
+    Implementation of the time tracker analyzer abstract class using 
+    spreadsheet files for data storage and data analysis. This 
+    implementation works with the `sheets_repository` module to access 
+    and manipulate files on a remote repository.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -102,7 +102,7 @@ class SheetTimeTrackerError(Exception):
     Custom exception for general spreadsheet exceptions.
     """
 
-    def __init__(self, message="An error occurred while manipulating the spreadsheet"):
+    def __init__(self, message: str="An error occurred while manipulating the spreadsheet"):
         super().__init__(message)
 
 
@@ -111,14 +111,14 @@ class SheetTimeTrackerError(Exception):
 ################################################
 
 
-class SheetTimeTracker(BaseTimeTracker):
+class SheetTimeTracker(TimeTrackerAnalyzer):
     """
     Implementation of the time tracker abstract class using spreadsheet files for
     data storage. This implementation works with the `sheets_repository` module
     to access and manipulate files on a remote repository.
     """
 
-    def _setup(self):
+    def _setup(self, accessor: SheetsRepoAccessor):
         """
         Acquire and load the spreadsheet file. Time tracker properties are available
         after this call. Note that even though the spreadsheet file may have evaluated
@@ -126,7 +126,7 @@ class SheetTimeTracker(BaseTimeTracker):
         access to potentially outdated data and ensure the time tracker is always
         created in the same state; i.e. the `read_` methods are unavalaible.
         """
-        self._file_path = acquire_spreadsheet_file(self._employee_id)
+        self._file_path = accessor.acquire_spreadsheet_file(self._employee_id)
 
         self.__load_workbook()
         self.__invalidate_eval_wb()  # Prevent access to outdated data

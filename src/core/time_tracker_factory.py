@@ -37,35 +37,32 @@ class TimeTrackerFactory(SingletonRegister, ABC):
         self, employee_id: str, year: int | dt.date | dt.datetime
     ) -> TimeTrackerAnalyzer:
         """
-        Create a time tracker for the given employee ID. The time tracker
-        is opened for the given year. A `TimeTrackerDateException` is
-        raised if no time tracker can be opened for that year.
+        Create a time tracker for the given employee ID and year.
+
+        If a `date` or `datetime` object is passed, only the year component
+        is considered. A `TimeTrackerDateException` is raised if no tracker 
+        exists for that year.
 
         Args:
             employee_id (str): Unique identifier for the employee.
-            year (int | dt.date | dt.datetime): Tracked year of the time
-                tracker.
+            year (int | date | datetime): Year to open the time tracker for.
 
         Returns:
-            TimeTrackerAnalyzer: An instance of a time tracker for the
-                specified employee.
+            TimeTrackerAnalyzer: The time tracker instance for the employee.
 
         Raises:
-            TimeTrackerOpenException: Raised if the time tracker cannot
-                be opened.
-            TimeTrackerDateException: Raised if no time tracker can be
-                opened for the specified year.
+            TimeTrackerOpenException: If the time tracker fails to open.
+            TimeTrackerDateException: If no time tracker is found for the year.
+            See chained exceptions for specific failure reasons.
         """
-        if isinstance(year, dt.date) or isinstance(year, dt.datetime):
+        if isinstance(year, (dt.date, dt.datetime)):
             year = year.year
 
         try:
             return self._create(employee_id, year)
+        except (TimeTrackerOpenException, TimeTrackerDateException):
+            raise
         except Exception as e:
-            if isinstance(e, TimeTrackerOpenException) or isinstance(
-                e, TimeTrackerDateException
-            ):
-                raise e
             raise TimeTrackerOpenException() from e
 
     @abstractmethod
