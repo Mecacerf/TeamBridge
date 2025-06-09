@@ -11,8 +11,10 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-# Test employee ID
+# Test employee identifiers
 TEST_EMPLOYEE_ID = "777"
+TEST_EMPLOYEE_NAME = "Cerf"
+TEST_EMPLOYEE_FIRSTNAME = "Meca"
 # Spreadsheet file under test
 TEST_SPREADSHEET_FILE = f"{TEST_EMPLOYEE_ID}-unit-test.xlsx"
 

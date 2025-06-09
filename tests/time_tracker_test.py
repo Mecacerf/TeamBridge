@@ -28,11 +28,13 @@ from pytest import approx  # pyright: ignore[reportUnknownVariableType]
 from pytest import FixtureRequest
 import logging
 from dataclasses import dataclass
+import datetime as dt
+from typing import Optional
 
 # Internal libraries
 from .test_constants import *
-from core.time_tracker_factory import *
-from core.time_tracker import *
+from core.time_tracker_factory import TimeTrackerFactory
+from core.time_tracker import ClockEvent, ClockAction
 
 # Time tracker factories
 from core.spreadsheets.sheet_time_tracker_factory import *
@@ -196,33 +198,30 @@ def test_open(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
     """
     with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
         assert tracker.employee_id == TEST_EMPLOYEE_ID
-        assert tracker.data_datetime == tc_first_work_day.datetime
+        assert tracker.name == TEST_EMPLOYEE_NAME       
+        assert tracker.firstname == TEST_EMPLOYEE_FIRSTNAME
 
 
 def test_basic_info(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
     """
     Open the time tracker and check basic employee information.
     """
-    with factory.create(TEST_EMPLOYEE_ID) as tracker:
-        assert tracker.firstname == "Meca"
-        assert tracker.name == "Cerf"
-        assert tracker.data_year == tc_first_work_day.datetime.year
-        assert tracker.day_schedule == dt.timedelta(hours=8, minutes=17)
-        assert tracker.initial_vacation_days == 22
-        assert tracker.initial_balance == dt.timedelta(hours=2)
+    with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
+        assert tracker.tracked_year == tc_first_work_day.datetime.year
+        assert tracker.opening_day_schedule == dt.timedelta(hours=8, minutes=17)
+        assert tracker.opening_vacation_days == 22
+        assert tracker.opening_balance == dt.timedelta(hours=2)
 
 
-def test_evaluate(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
     """
-    Verifies that the data evaluation allows to access the reading
+    Verifies that the data analysis allows to access the reading
     functions.
     """
-    with factory.create(TEST_EMPLOYEE_ID) as tracker:
-        # The readable flag is cleared after a data datetime change
-        tracker.data_datetime = tc_first_work_day.datetime
-        assert tracker.readable is False
-        tracker.evaluate()
-        assert tracker.readable is True
+    with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
+        assert tracker.analyzed is False
+        tracker.analyze(tc_first_work_day.datetime)
+        assert tracker.analyzed is True
 
 
 @pytest.mark.parametrize(
@@ -236,7 +235,7 @@ def test_get_clock_events(factory: TimeTrackerFactory, testcase: TestCaseData):
     expected ones.
     """
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime) as tracker:
-        evt_times = [evt.time if evt else None for evt in tracker.get_clock_events()]
+        evt_times = [evt.time if evt else None for evt in tracker.get_clocks(testcase.datetime)]
         assert evt_times == testcase.date_evt_times
 
 
@@ -247,8 +246,8 @@ def test_is_clocked_in(factory: TimeTrackerFactory, tc_clocked_in: TestCaseData,
     employee is clocked out on a past day.
     """
     with factory.create(TEST_EMPLOYEE_ID, tc_clocked_in.datetime) as tracker:
-        assert tracker.is_clocked_in()  # Default to current day
-        assert not tracker.is_clocked_in(date=tc_first_work_day.datetime.date())
+        assert tracker.is_clocked_in(tc_clocked_in.datetime)
+        assert not tracker.is_clocked_in(tc_first_work_day.datetime)
 
 
 @pytest.mark.parametrize(
@@ -258,21 +257,22 @@ def test_is_clocked_in(factory: TimeTrackerFactory, tc_clocked_in: TestCaseData,
 )
 def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
     """
-    Evaluate the time tracker for the given date and read the day
+    Analyze the time tracker for the given date and read the day
     information. Verifies the read values are equal to the expected ones
     from the dataset.
     """
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime) as tracker:
-        tracker.evaluate()
+        tracker.analyze(testcase.datetime)
 
-        day_schedule = tracker.read_day_schedule()
-        day_balance = tracker.read_day_balance()
-        day_worked_time = tracker.read_day_worked_time()
+        day_schedule = tracker.read_day_schedule(testcase.datetime)
+        day_balance = tracker.read_day_balance(testcase.datetime)
+        day_worked_time = tracker.read_day_worked_time(testcase.datetime)
+        day_vacation = tracker.get_vacation(testcase.datetime)
 
         assert day_schedule == testcase.date_schedule
         assert day_balance == testcase.date_balance
         assert day_worked_time == testcase.date_worked
-        assert tracker.read_day_vacation() == approx(testcase.date_vacation)
+        assert day_vacation == approx(testcase.date_vacation)
 
         # Check that the relation between scheduled time, worked time and
         # balance is respected
@@ -286,21 +286,22 @@ def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
 )
 def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
     """
-    Evaluate the time tracker for the given date and read the month
+    Analyze the time tracker for the given date and read the month
     information. Verifies the read values are equal to the expected ones
     from the dataset.
     """
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime) as tracker:
-        tracker.evaluate()
+        tracker.analyze(testcase.datetime)
 
-        month_schedule = tracker.read_month_schedule()
-        month_balance = tracker.read_month_balance()
-        month_worked_time = tracker.read_month_worked_time()
+        month_schedule = tracker.read_month_schedule(testcase.datetime.month)
+        month_balance = tracker.read_month_balance(testcase.datetime.month)
+        month_worked_time = tracker.read_month_worked_time(testcase.datetime.month)
+        month_vacation = tracker.read_month_vacation(testcase.datetime.month)
 
         assert month_schedule == testcase.month_schedule
         assert month_balance == testcase.month_balance
         assert month_worked_time == testcase.month_worked
-        assert tracker.read_month_vacation() == approx(testcase.month_vacation)
+        assert month_vacation == approx(testcase.month_vacation)
 
         # Check that the relation between scheduled time, worked time and
         # balance is respected
@@ -314,12 +315,12 @@ def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
 )
 def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: TestCaseData):
     """
-    Evaluate the time tracker for the given date and read the year-to-
+    Analyze the time tracker for the given date and read the year-to-
     date and year-to-yesterday balances. Verifies that they are equal
     to the expected ones.
     """
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime) as tracker:
-        tracker.evaluate()
+        tracker.analyze(testcase.datetime)
         assert tracker.read_year_to_date_balance() == testcase.ytd_balance
         assert tracker.read_year_to_yesterday_balance() == testcase.yty_balance
 
@@ -331,12 +332,12 @@ def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: TestCaseDat
 )
 def test_year_vacation(factory: TimeTrackerFactory, testcase: TestCaseData):
     """
-    Evaluate the time tracker for the given date and read the total
+    Analyze the time tracker for the given date and read the total
     year vacation and the remaining vacation. Verifies that they are
     equal to the expected ones.
     """
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime) as tracker:
-        tracker.evaluate()
+        tracker.analyze(testcase.datetime)
 
         year_vacation = tracker.read_year_vacation()
         rem_vacation = tracker.read_remaining_vacation()
@@ -346,7 +347,7 @@ def test_year_vacation(factory: TimeTrackerFactory, testcase: TestCaseData):
 
         # Check that the relation between total vacation, remaining vacation
         # and initial vacation is respected
-        assert year_vacation + rem_vacation == approx(tracker.initial_vacation_days)
+        assert year_vacation + rem_vacation == approx(tracker.opening_vacation_days)
 
 
 def test_register_evt(factory: TimeTrackerFactory, tc_clocked_in: TestCaseData):
@@ -357,8 +358,8 @@ def test_register_evt(factory: TimeTrackerFactory, tc_clocked_in: TestCaseData):
     event = ClockEvent(dt.time(hour=12, minute=40), ClockAction.CLOCK_OUT)
 
     with factory.create(TEST_EMPLOYEE_ID, tc_clocked_in.datetime) as tracker:
-        tracker.register_clock(event)
-        assert tracker.get_clock_events()[-1] == event
+        tracker.register_clock(tc_clocked_in.datetime, event)
+        assert tracker.get_clocks(tc_clocked_in.datetime)[-1] == event
 
 
 def test_write_evts(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
@@ -376,8 +377,8 @@ def test_write_evts(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData
     ]
 
     with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
-        tracker.write_clocks(evts)
-        assert tracker.get_clock_events() == evts
+        tracker.write_clocks(tc_first_work_day.datetime, evts)
+        assert tracker.get_clocks(tc_first_work_day.datetime) == evts
 
 
 def test_save(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
@@ -388,63 +389,63 @@ def test_save(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
     event = ClockEvent(dt.time(hour=18, minute=40), ClockAction.CLOCK_IN)
 
     with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
-        tracker.register_clock(event)
+        tracker.register_clock(tc_first_work_day.datetime, event)
         tracker.save()
 
     with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
-        assert tracker.get_clock_events()[-1] == event
+        assert tracker.get_clocks(tc_first_work_day.datetime)[-1] == event
 
 
 # TODO: integration tests / edge case tests
 
 
-@pytest.mark.skip(reason="Not implemented")
-def test_clock_event_register_and_evaluate(factory: TimeTrackerFactory):
-    with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
-        event = ClockEvent(time=dt.time(9, 0), action=ClockAction.CLOCK_IN)
-        tracker.register_clock(event)
-        tracker.evaluate()
-        assert tracker.readable
-        events = tracker.get_clock_events()
-        assert events[0] == event
+# @pytest.mark.skip(reason="Not implemented")
+# def test_clock_event_register_and_evaluate(factory: TimeTrackerFactory):
+#     with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
+#         event = ClockEvent(time=dt.time(9, 0), action=ClockAction.CLOCK_IN)
+#         tracker.register_clock(event)
+#         tracker.evaluate()
+#         assert tracker.readable
+#         events = tracker.get_clock_events()
+#         assert events[0] == event
 
 
-@pytest.mark.skip(reason="Not implemented")
-def test_day_schedule_and_balance(factory: TimeTrackerFactory):
-    with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
-        tracker.evaluate()
-        schedule = tracker.read_day_schedule()
-        worked = tracker.read_day_worked_time()
-        balance = tracker.read_day_balance()
-        assert isinstance(schedule, dt.timedelta)
-        assert isinstance(worked, dt.timedelta)
-        assert isinstance(balance, dt.timedelta)
+# @pytest.mark.skip(reason="Not implemented")
+# def test_day_schedule_and_balance(factory: TimeTrackerFactory):
+#     with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
+#         tracker.evaluate()
+#         schedule = tracker.read_day_schedule()
+#         worked = tracker.read_day_worked_time()
+#         balance = tracker.read_day_balance()
+#         assert isinstance(schedule, dt.timedelta)
+#         assert isinstance(worked, dt.timedelta)
+#         assert isinstance(balance, dt.timedelta)
 
 
-@pytest.mark.skip(reason="Not implemented")
-def test_day_vacation(factory: TimeTrackerFactory):
-    with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
-        tracker.evaluate()
-        vacation = tracker.read_day_vacation()
-        assert 0.0 <= vacation <= 1.0
+# @pytest.mark.skip(reason="Not implemented")
+# def test_day_vacation(factory: TimeTrackerFactory):
+#     with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
+#         tracker.evaluate()
+#         vacation = tracker.read_day_vacation()
+#         assert 0.0 <= vacation <= 1.0
 
 
-@pytest.mark.skip(reason="Not implemented")
-def test_year_to_yesterday_balance(factory: TimeTrackerFactory):
-    with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
-        tracker.evaluate()
-        ytd = tracker.read_year_to_date_balance()
-        yty = tracker.read_year_to_yesterday_balance()
-        assert ytd >= yty
+# @pytest.mark.skip(reason="Not implemented")
+# def test_year_to_yesterday_balance(factory: TimeTrackerFactory):
+#     with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
+#         tracker.evaluate()
+#         ytd = tracker.read_year_to_date_balance()
+#         yty = tracker.read_year_to_yesterday_balance()
+#         assert ytd >= yty
 
 
-@pytest.mark.skip(reason="Not implemented")
-def test_attendance_validator_basic(factory: TimeTrackerFactory):
-    with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
-        tracker.evaluate()
-        validator = AttendanceValidator(tracker)
-        err = validator.check_date(None)
-        assert err in (None, CLOCK_EVENT_MISSING, CLOCK_EVENTS_UNORDERED)
+# @pytest.mark.skip(reason="Not implemented")
+# def test_attendance_validator_basic(factory: TimeTrackerFactory):
+#     with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
+#         tracker.evaluate()
+#         validator = AttendanceValidator(tracker)
+#         err = validator.check_date(None)
+#         assert err in (None, CLOCK_EVENT_MISSING, CLOCK_EVENTS_UNORDERED)
 
 
 # --- Edge case stubs below ---
