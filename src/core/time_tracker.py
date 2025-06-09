@@ -25,49 +25,62 @@ import datetime as dt
 ########################################################################
 
 
-class TimeTrackerReadException(Exception):
+class TimeTrackerException(Exception):
+    """Base type for all exceptions related to the time tracker."""
+
+    pass
+
+
+class TimeTrackerReadException(TimeTrackerException):
     """Custom exception for illegal read operation."""
 
     def __init__(self, message: str = "Illegal read operation attempted"):
         super().__init__(message)
 
 
-class TimeTrackerWriteException(Exception):
+class TimeTrackerWriteException(TimeTrackerException):
     """Custom exception for illegal write operation."""
 
     def __init__(self, message: str = "Illegal write operation attempted"):
         super().__init__(message)
 
 
-class TimeTrackerOpenException(Exception):
+class TimeTrackerValueException(TimeTrackerException):
+    """Custom exception for value errors."""
+
+    def __init__(self, message: str = "Got an unexpected value"):
+        super().__init__(message)
+
+
+class TimeTrackerOpenException(TimeTrackerException):
     """Custom exception for time tracker opening errors."""
 
     def __init__(self, message: str = "Unable to open the time tracker"):
         super().__init__(message)
 
 
-class TimeTrackerDateException(Exception):
+class TimeTrackerDateException(TimeTrackerException):
     """Custom exception for time tracker date errors."""
 
     def __init__(self, message: str = "The operation failed due to a date error"):
         super().__init__(message)
 
 
-class TimeTrackerAnalysisException(Exception):
+class TimeTrackerAnalysisException(TimeTrackerException):
     """Custom exception for time tracker analysis errors."""
 
     def __init__(self, message: str = "The data analysis failed"):
         super().__init__(message)
 
 
-class TimeTrackerSaveException(Exception):
+class TimeTrackerSaveException(TimeTrackerException):
     """Custom exception for time tracker saving errors."""
 
     def __init__(self, message: str = "The time tracker hasn't been saved properly"):
         super().__init__(message)
 
 
-class TimeTrackerCloseException(Exception):
+class TimeTrackerCloseException(TimeTrackerException):
     """Custom exception for time tracker closing errors."""
 
     def __init__(self, message: str = "The time tracker hasn't been closed properly"):
@@ -360,7 +373,7 @@ class TimeTracker(Employee, ABC):
         Raises:
             TimeTrackerDateException: Raised if the given date doesn't
                 relate to the `tracked_year`.
-            TimeTrackerWriteException: Raised when the registering fails.
+            TimeTrackerWriteException: Raised on writing error.
             See chained exceptions for specific failure reasons.
         """
         pass
@@ -389,7 +402,7 @@ class TimeTracker(Employee, ABC):
         Raises:
             TimeTrackerDateException: Raised if the given date doesn't
                 relate to the `tracked_year`.
-            TimeTrackerWriteException: Raised when the registering fails.
+            TimeTrackerWriteException: Raised on writing error.
             See chained exceptions for specific failure reasons.
         """
         pass
@@ -431,6 +444,8 @@ class TimeTracker(Employee, ABC):
         Raises:
             TimeTrackerDateException: Raised if the given date doesn't
                 relate to the `tracked_year`.
+            TimeTrackerWriteException: Raised on writing error.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -470,6 +485,8 @@ class TimeTracker(Employee, ABC):
         Raises:
             TimeTrackerDateException: Raised if the given date doesn't
                 relate to the `tracked_year`.
+            TimeTrackerWriteException: Raised on writing error.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -971,25 +988,3 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         year_to_date = self.read_year_to_date_balance()
         day_balance = self.read_day_balance(self.target_datetime.date())
         return year_to_date - day_balance
-
-    def register_clock(self, date: dt.date | dt.datetime, event: ClockEvent):
-        """
-        After a clock event is registered, the `analyzed` property gets
-        `False` and the reading functions are not available until a new
-        analysis is performed. This is because registering an event may
-        change different calculations results.
-        """
-        super().register_clock(date, event)
-        self._target_dt = None
-
-    def write_clocks(
-        self, date: dt.date | dt.datetime, events: list[Optional[ClockEvent]]
-    ):
-        """
-        After new clock events are written, the `analyzed` property gets
-        `False` and the reading functions are not available until a new
-        analysis is performed. This is because writing events may
-        change different calculations results.
-        """
-        super().write_clocks(date, events)
-        self._target_dt = None
