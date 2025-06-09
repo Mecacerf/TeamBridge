@@ -535,26 +535,25 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
     define or retrieve custom errors.
     """
 
-    def __init__(self, employee_id: str) -> None:
+    def __init__(self, employee_id: str, *kargs: Any, **kwargs: Any) -> None:
         """
         Initialize the `TimeTracker`.
         """
-        super().__init__(employee_id)
         self._target_dt = None  # Implementation may set another default value
+        super().__init__(employee_id, *kargs, **kwargs)
 
     def __enter__(self) -> "TimeTrackerAnalyzer":
         # Enter function when using a context manager
         return self
 
     @property
-    @abstractmethod
     def target_datetime(self) -> Optional[dt.datetime]:
         """
         Returns:
             Optional[datetime.datetime]: The point in time the analysis
                 is based on or `None` if not analyzed.
         """
-        pass
+        return self._target_dt
 
     @property
     def analyzed(self) -> bool:

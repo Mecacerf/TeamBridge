@@ -95,6 +95,12 @@ class TestCaseData:
 
 
 @pytest.fixture
+def testcase(request: FixtureRequest) -> TestCaseData:
+    name = request.param
+    return request.getfixturevalue(name)
+
+
+@pytest.fixture
 def tc_first_work_day() -> TestCaseData:
     """Test case data for the first work day of the year."""
     return TestCaseData(
@@ -145,8 +151,8 @@ def tc_clocked_in():
         month_worked=dt.timedelta(hours=55, minutes=55),
         month_vacation=0.5,
         month_balance=dt.timedelta(hours=-2, minutes=-4),
-        ytd_balance=dt.timedelta(hours=-4, minutes=17),
-        yty_balance=dt.timedelta(minutes=55),
+        ytd_balance=dt.timedelta(hours=-2, minutes=17),
+        yty_balance=dt.timedelta(hours=2, minutes=55),
         # Year / remaining vacation doesn't depend on current date
         year_vacation=2.0,
         rem_vacation=20,

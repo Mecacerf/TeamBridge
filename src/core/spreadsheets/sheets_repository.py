@@ -38,7 +38,7 @@ import time
 import re
 from typing import Optional
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Default local test repository
 SHEETS_LOCAL_REPO = "samples"
@@ -163,7 +163,7 @@ class SheetsRepoAccessor:
         local_file = pathlib.Path(self._local_cache) / repo_file.name
         shutil.copy2(repo_file, local_file)
 
-        LOGGER.debug(f"Acquired '{repo_file}' in local cache as '{local_file}'.")
+        logger.debug(f"Acquired '{repo_file}' in local cache as '{local_file}'.")
         return local_file
 
     def save_spreadsheet_file(self, local_file: pathlib.Path):
@@ -210,7 +210,7 @@ class SheetsRepoAccessor:
                 # Step 2: Atomically move to final repository location
                 os.replace(repo_cache_file, repo_file)
 
-                LOGGER.debug(f"Saved '{repo_file}'.")
+                logger.debug(f"Saved '{repo_file}'.")
                 return
             except OSError as e:
                 oserror = e
@@ -252,7 +252,7 @@ class SheetsRepoAccessor:
         repo_file = repo_path / local_file.name
         local_file.unlink()
         self.__release_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
-        LOGGER.debug(f"Released '{repo_file}'.")
+        logger.debug(f"Released '{repo_file}'.")
 
     def list_employee_ids(self) -> list[str]:
         """

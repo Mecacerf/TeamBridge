@@ -27,7 +27,7 @@ import shutil
 import os
 from typing import Optional
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Libre office program name
 LIBEOFFICE_PROGRAM = "soffice"
@@ -100,9 +100,9 @@ def find_libreoffice() -> Optional[str]:
 _libreoffice_path = find_libreoffice()
 
 if _libreoffice_path:
-    LOGGER.info(f"'{LIBEOFFICE_PROGRAM}' program found under '{_libreoffice_path}'.")
+    logger.info(f"'{LIBEOFFICE_PROGRAM}' program found under '{_libreoffice_path}'.")
 else:
-    LOGGER.warning(f"'{LIBEOFFICE_PROGRAM}' not automatically found.")
+    logger.warning(f"'{LIBEOFFICE_PROGRAM}' not automatically found.")
 
 
 def configure(libreoffice_path: str):
@@ -114,7 +114,7 @@ def configure(libreoffice_path: str):
     """
     global _libreoffice_path
     _libreoffice_path = libreoffice_path
-    LOGGER.info(
+    logger.info(
         f"Manually configured Libreoffice program path to '{_libreoffice_path}'."
     )
 
