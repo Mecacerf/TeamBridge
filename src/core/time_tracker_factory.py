@@ -40,7 +40,7 @@ class TimeTrackerFactory(SingletonRegister, ABC):
         Create a time tracker for the given employee ID and year.
 
         If a `date` or `datetime` object is passed, only the year component
-        is considered. A `TimeTrackerDateException` is raised if no tracker 
+        is considered. A `TimeTrackerDateException` is raised if no tracker
         exists for that year.
 
         Args:

@@ -4,8 +4,19 @@ File: time_tracker.py
 Author: Bastian Cerf
 Date: 17/02/2025
 Description:
-    Base abstract classes for accessing and managing an employee's
-    attendance data over the course of the year.
+    Base abstract classes for accessing and managing an employee's data.
+    Three interfaces that inherit from each other are provided:
+    - The `Employee` just give access to basic information that aren't
+        related to a specific date and time (such as name, id).
+    - The `TimeTracker` offers simple access to raw attendance data. It
+        allows to read and write clock events, vacation and attendance
+        errors.
+    - The `TimeTrackerAnalyzer` goes one step further by analyzing and
+        computing the attendance data to provide different information,
+        such as total of scheduled work, worked time, vacation and so
+        on. The computing engine is implementation dependent and may not
+        be Python. For this reason the access to these data is restricted
+        by a flag `analyzed`. The data must be analyzed before access.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -34,56 +45,56 @@ class TimeTrackerException(Exception):
 class TimeTrackerReadException(TimeTrackerException):
     """Custom exception for illegal read operation."""
 
-    def __init__(self, message: str = "Illegal read operation attempted"):
+    def __init__(self, message: str = "Illegal read operation attempted."):
         super().__init__(message)
 
 
 class TimeTrackerWriteException(TimeTrackerException):
     """Custom exception for illegal write operation."""
 
-    def __init__(self, message: str = "Illegal write operation attempted"):
+    def __init__(self, message: str = "Illegal write operation attempted."):
         super().__init__(message)
 
 
 class TimeTrackerValueException(TimeTrackerException):
     """Custom exception for value errors."""
 
-    def __init__(self, message: str = "Got an unexpected value"):
+    def __init__(self, message: str = "Got an unexpected value."):
         super().__init__(message)
 
 
 class TimeTrackerOpenException(TimeTrackerException):
     """Custom exception for time tracker opening errors."""
 
-    def __init__(self, message: str = "Unable to open the time tracker"):
+    def __init__(self, message: str = "Unable to open the time tracker."):
         super().__init__(message)
 
 
 class TimeTrackerDateException(TimeTrackerException):
     """Custom exception for time tracker date errors."""
 
-    def __init__(self, message: str = "The operation failed due to a date error"):
+    def __init__(self, message: str = "Date is outside accepted range."):
         super().__init__(message)
 
 
 class TimeTrackerAnalysisException(TimeTrackerException):
     """Custom exception for time tracker analysis errors."""
 
-    def __init__(self, message: str = "The data analysis failed"):
+    def __init__(self, message: str = "Data analysis failed."):
         super().__init__(message)
 
 
 class TimeTrackerSaveException(TimeTrackerException):
     """Custom exception for time tracker saving errors."""
 
-    def __init__(self, message: str = "The time tracker hasn't been saved properly"):
+    def __init__(self, message: str = "Failed to save."):
         super().__init__(message)
 
 
 class TimeTrackerCloseException(TimeTrackerException):
     """Custom exception for time tracker closing errors."""
 
-    def __init__(self, message: str = "The time tracker hasn't been closed properly"):
+    def __init__(self, message: str = "Failed to close."):
         super().__init__(message)
 
 
@@ -239,6 +250,9 @@ class Employee(ABC):
             # No prior exception: just raise the close failure
             raise close_ex
         return False  # Propagate any exception from the context block
+    
+    def __str__(self) -> str:
+        return f"Employee['{self.employee_id}' {self.firstname} {self.name}]"
 
 
 ########################################################################
@@ -272,6 +286,10 @@ class TimeTracker(Employee, ABC):
 
         Returns:
             int: Tracked year.
+
+        Raises:
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
         """
         pass
 
@@ -288,11 +306,16 @@ class TimeTracker(Employee, ABC):
 
         This value is the reference time set at year beginning. It
         may change during the year, for example after a work load
-        modification. See `read_standard_day_schedule()` and
-        `read_day_schedule()` for a value dependent to the date.
+        modification. See `read_month_expected_daily_schedule()` and
+        `read_day_schedule()` from the `TimeTrackerAnalyzer` for a value
+        dependent to the date.
 
         Returns:
             datetime.timedelta: Working day schedule at year beginning.
+
+        Raises:
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
         """
         pass
 
@@ -302,6 +325,10 @@ class TimeTracker(Employee, ABC):
         """
         Returns:
             datetime.timedelta: Initial balance at year beginning.
+
+        Raises:
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
         """
         pass
 
@@ -312,6 +339,10 @@ class TimeTracker(Employee, ABC):
         Returns:
             float: Initial number of available vacation days at year
                 beginning.
+
+        Raises:
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
         """
         pass
 
@@ -352,8 +383,9 @@ class TimeTracker(Employee, ABC):
                 The list may be empty if no events are recorded.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
         """
         pass
 
@@ -371,9 +403,10 @@ class TimeTracker(Employee, ABC):
             date (datetime.date): The date to register the clock event.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
+            TimeTrackerDateException: Date is outside the `tracked_year`.
             TimeTrackerWriteException: Raised on writing error.
+            TimeTrackerSaveException: Unable to save the tracker in the
+                local cache.
             See chained exceptions for specific failure reasons.
         """
         pass
@@ -400,9 +433,10 @@ class TimeTracker(Employee, ABC):
             date (datetime.date): The date to write the clock events.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
+            TimeTrackerDateException: Date is outside the `tracked_year`.
             TimeTrackerWriteException: Raised on writing error.
+            TimeTrackerSaveException: Unable to save the tracker in the
+                local cache.
             See chained exceptions for specific failure reasons.
         """
         pass
@@ -421,8 +455,9 @@ class TimeTracker(Employee, ABC):
             bool: True if clocked in.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
         """
         events = self.get_clocks(date)
         return (
@@ -442,9 +477,10 @@ class TimeTracker(Employee, ABC):
             day_ratio (float): Vacation ratio for the day.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
+            TimeTrackerDateException: Date is outside the `tracked_year`.
             TimeTrackerWriteException: Raised on writing error.
+            TimeTrackerSaveException: Unable to save the tracker in the
+                local cache.
             See chained exceptions for specific failure reasons.
         """
         pass
@@ -462,8 +498,9 @@ class TimeTracker(Employee, ABC):
             float: Vacation ratio for the current date.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
         """
         pass
 
@@ -483,9 +520,10 @@ class TimeTracker(Employee, ABC):
                 reset.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
+            TimeTrackerDateException: Date is outside the `tracked_year`.
             TimeTrackerWriteException: Raised on writing error.
+            TimeTrackerSaveException: Unable to save the tracker in the
+                local cache.
             See chained exceptions for specific failure reasons.
         """
         pass
@@ -503,21 +541,19 @@ class TimeTracker(Employee, ABC):
                 exists.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
         """
         pass
 
     @abstractmethod
     def save(self):
         """
-        Save changes.
-
-        This must be called after changes have been done to save the
-        modifications.
+        Save the modifications on the time trackers repository.
 
         Raises:
-            TimeTrackerSaveException: Raised when the saving fails.
+            TimeTrackerSaveException: Failed to save.
             See chained exceptions for specific failure reasons.
         """
         pass
@@ -540,7 +576,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
     This datetime defines the point in time the analysis is based on.
     For example, if the tracker is analyzed at 10:00 on a given day and
     the employee clocked in at 08:00, the worked time will be 2 hours.
-    If analyzed at 11:00, it will be 3 hours. Once the data are analyzed,
+    If analyzed at 11:00, it will be 3 hours. Once the data is analyzed,
     the `analyzed` property is `True`. Note that trying to access the
     `read_` prefixed methods while the tracker is not analyzed will
     result in a `TimeTrackerReadException`.
@@ -556,7 +592,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         """
         Initialize the `TimeTracker`.
         """
-        self._target_dt = None  # Implementation may set another default value
+        self._target_dt: Optional[dt.datetime] = None
         super().__init__(employee_id, *kargs, **kwargs)
 
     def __enter__(self) -> "TimeTrackerAnalyzer":
@@ -600,15 +636,22 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
                 to analyze the data.
 
         Raises:
-            TimeTrackerAnalysisException: If the analysis fails.
+            TimeTrackerAnalysisException: The analysis failed.
+            TimeTrackerDateException: Target datetime is outside the
+                `tracked_year`.
             See chained exceptions for specific failure reasons.
         """
+        if target_datetime.year != self.tracked_year:
+            raise TimeTrackerDateException(
+                f"'{target_datetime}' is outside of tracked year {self.tracked_year}."
+            )
+
         self._target_dt = target_datetime
 
         try:
             self._analyze_internal()
         except Exception as e:
-            self._target_dt = None  # Reset on failure, `analyzed` stays `False`
+            self._target_dt = None  # `analyzed` stays `False` on failure
             raise TimeTrackerAnalysisException() from e
 
     @abstractmethod
@@ -636,10 +679,12 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             datetime.timedelta: Schedule for the day as a timedelta.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -679,10 +724,12 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             datetime.timedelta: Worked time for the day as a timedelta.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -716,10 +763,12 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             datetime.timedelta: The time balance for the specified date.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -751,10 +800,12 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
                 `None` if no error is found.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -774,10 +825,12 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             datetime.timedelta: The standard daily work schedule.
 
         Raises:
-            TimeTrackerDateException: Raised if the given date doesn't
-                relate to the `tracked_year`.
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -797,8 +850,13 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             datetime.timedelta: Scheduled work time for the given month.
 
         Raises:
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerDateException: Date is outside the `tracked_year`
+                (not raised when month is given directly).
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -828,8 +886,13 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             datetime.timedelta: Worked time for the month.
 
         Raises:
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerDateException: Date is outside the `tracked_year`
+                (not raised when month is given directly).
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -857,8 +920,13 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             datetime.timedelta: Balance for the month.
 
         Raises:
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerDateException: Date is outside the `tracked_year`
+                (not raised when month is given directly).
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -877,8 +945,13 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             float: Number of planned vacation days on the given month.
 
         Raises:
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerDateException: Date is outside the `tracked_year`
+                (not raised when month is given directly).
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -891,7 +964,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         disregarding to the `target_datetime.date()`.
 
         This value can be thought as:
-            initial_vacation_days - remaining_vacation
+            opening_vacation_days - remaining_vacation
 
         This method is only available when the `analyzed` property is
         `True`.
@@ -900,8 +973,11 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             float: Number of planned vacation days for the year.
 
         Raises:
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -915,7 +991,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         still has for the year, disregarding to the `target_datetime.date()`.
 
         This value can be thought as:
-            initial_vacation_days - year_vacation
+            opening_vacation_days - year_vacation
 
         This method is only available when the `analyzed` property is
         `True`.
@@ -924,8 +1000,11 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             float: Number of remaining vacation days.
 
         Raises:
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -950,8 +1029,11 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             datetime.timedelta: Year-to-date balance as a timedelta.
 
         Raises:
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         pass
 
@@ -977,8 +1059,11 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             datetime.timedelta: Year-to-yesterday balance as a timedelta.
 
         Raises:
-            TimeTrackerReadException: Raised if the reading methods are
-                unavailable (see `analyzed` property).
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
         """
         if not self.target_datetime:
             raise TimeTrackerReadException()

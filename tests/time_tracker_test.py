@@ -127,8 +127,8 @@ def tc_first_work_day() -> TestCaseData:
         ytd_balance=dt.timedelta(hours=2, minutes=13),
         yty_balance=dt.timedelta(hours=2),
         # Year / remaining vacation doesn't depend on current date
-        year_vacation=2.0,
-        rem_vacation=20,
+        year_vacation=2.0,  # Planned
+        rem_vacation=20,    # Remaining
     )
 
 
@@ -299,10 +299,10 @@ def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime) as tracker:
         tracker.analyze(testcase.datetime)
 
-        month_schedule = tracker.read_month_schedule(testcase.datetime.month)
-        month_balance = tracker.read_month_balance(testcase.datetime.month)
-        month_worked_time = tracker.read_month_worked_time(testcase.datetime.month)
-        month_vacation = tracker.read_month_vacation(testcase.datetime.month)
+        month_schedule = tracker.read_month_schedule(testcase.datetime)
+        month_balance = tracker.read_month_balance(testcase.datetime)
+        month_worked_time = tracker.read_month_worked_time(testcase.datetime)
+        month_vacation = tracker.read_month_vacation(testcase.datetime)
 
         assert month_schedule == testcase.month_schedule
         assert month_balance == testcase.month_balance

@@ -48,7 +48,7 @@ def find_libreoffice() -> Optional[str]:
     Warning: the Linux implementation is not tested yet.
 
     Returns:
-        Optional[str]: LibreOffice program path is found or None
+        Optional[str]: LibreOffice program path is found or None.
     """
     system = platform.system()
 
@@ -110,7 +110,7 @@ def configure(libreoffice_path: str):
     Manually configure the LibreOffice program path.
 
     Args:
-        libreoffice_path (str): Path to the LibreOffice executable
+        libreoffice_path (str): Path to the LibreOffice executable.
     """
     global _libreoffice_path
     _libreoffice_path = libreoffice_path
@@ -127,12 +127,12 @@ def evaluate_calc(file_path: pathlib.Path):
         file_path (str): Path to the spreadsheet file
 
     Raises:
-        RuntimeError: No LibreOffice installation found
-        FileExistsError: A previous evaluation didn't finish properly and a file is
-            still existing in the temporary folder
-        RuntimeError: The LibreOffice execution returned an error
-        TimeoutError: The LibreOffice execution timed out
-        FileNotFoundError: LibreOffice didn't produce the expected output
+        RuntimeError: No LibreOffice installation found.
+        FileExistsError: A previous evaluation didn't finish properly and
+            a file is still existing in the temporary folder.
+        RuntimeError: The LibreOffice execution returned an error.
+        TimeoutError: The LibreOffice execution timed out.
+        FileNotFoundError: LibreOffice didn't produce the expected output.
     """
     if _libreoffice_path is None:
         raise RuntimeError("No LibreOffice installation found in the filesystem.")
@@ -140,10 +140,8 @@ def evaluate_calc(file_path: pathlib.Path):
     tmp_file = pathlib.Path(LIBREOFFICE_CACHE_FOLDER) / file_path.name
     if tmp_file.exists():
         raise FileExistsError(
-            (
-                f"The temporary file '{tmp_file}' already exists. A "
-                "previous evaluation may have failed."
-            )
+            f"The temporary file '{tmp_file}' already exists. A "
+            "previous evaluation may have failed."
         )
 
     os.makedirs(LIBREOFFICE_CACHE_FOLDER, exist_ok=True)
@@ -173,11 +171,9 @@ def evaluate_calc(file_path: pathlib.Path):
         )
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
-            (
-                f"LibreOffice subprocess failed with return code {e.returncode}.\n"
-                f"stdout: {e.stdout.decode(errors='ignore')}\n"
-                f"stderr: {e.stderr.decode(errors='ignore')}"
-            )
+            f"LibreOffice subprocess failed with return code {e.returncode}.\n"
+            f"stdout: {e.stdout.decode(errors='ignore')}\n"
+            f"stderr: {e.stderr.decode(errors='ignore')}"
         ) from e
     except subprocess.TimeoutExpired as e:
         raise TimeoutError("LibreOffice evaluation timed out.") from e
@@ -185,11 +181,9 @@ def evaluate_calc(file_path: pathlib.Path):
     # Check that the evaluated file was actually produced
     if not tmp_file.exists():
         raise FileNotFoundError(
-            (
-                f"LibreOffice did not produce the expected output file.\n"
-                f"stdout: {result.stdout.decode(errors='ignore')}\n"
-                f"stderr: {result.stderr.decode(errors='ignore')}"
-            )
+            f"LibreOffice did not produce the expected output file.\n"
+            f"stdout: {result.stdout.decode(errors='ignore')}\n"
+            f"stderr: {result.stderr.decode(errors='ignore')}"
         )
 
     # Evaluation succeeded without any error: replace original file with evaluated one

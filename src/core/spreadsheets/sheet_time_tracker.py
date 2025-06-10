@@ -17,7 +17,7 @@ Contact: info@mecacerf.ch
 # Standard libraries
 import logging
 import datetime as dt
-from typing import TypeVar, Type, Callable
+from typing import TypeVar, Callable
 
 # Third-party libraries
 import openpyxl
@@ -82,41 +82,26 @@ LOC_DAY_SCHEDULE_COL = "A26"
 LOC_DAY_WORKED_TIME_COL = "A27"
 LOC_DAY_BALANCE_COL = "A28"
 LOC_DAY_VACATION_COL = "A33"
-LOC_DAY_SHEET_ERROR_COL = ""  # Error detected by the spreadsheet
-LOC_DAY_SOFT_ERROR_COL = ""  # Custom error set by the software
+LOC_DAY_SHEET_ERROR_COL = "A33"  # TODO  # Error detected by the spreadsheet
+LOC_DAY_SOFT_ERROR_COL = "A33"  # TODO  # Custom error set by the software
 
 # Month related information
-LOC_MONTH_SCHEDULE = ""
-LOC_MONTH_WORKED_TIME = ""
+LOC_MONTH_SCHEDULE = "A36"  # TODO
+LOC_MONTH_WORKED_TIME = "A37"  # TODO
 LOC_MONTH_BALANCE = "A29"
 LOC_MONTH_VACATION = "A32"
 
 # General information in the month sheets
-LOC_EXPECTED_DAY_SCHEDULE = ""
+LOC_EXPECTED_DAY_SCHEDULE = "A36"  # TODO
 LOC_REMAINING_VACATION = "A31"
 LOC_YTD_BALANCE = "A30"  # Year-to-date balance
-
-########################################################################
-#         Spreadsheet time tracker custom error definition             #
-########################################################################
-
-
-class SheetTimeTrackerError(Exception):
-    """
-    Custom exception for general spreadsheet exceptions.
-    """
-
-    def __init__(
-        self, message: str = "Error occurred while manipulating the spreadsheet"
-    ):
-        super().__init__(message)
-
 
 ################################################
 #   Spreadsheets time tracker implementation   #
 ################################################
 
 T = TypeVar("T")  # For generic methods
+
 
 class SheetTimeTracker(TimeTrackerAnalyzer):
     """
@@ -145,14 +130,14 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         if version is None or not str(version).lower().startswith(
             EXPECTED_MAJOR_VERSION.lower()
         ):
-            raise SheetTimeTrackerError(
+            raise TimeTrackerValueException(
                 f"Cannot load workbook '{self._file_path}' that uses version "
                 f"'{version}'. The expected major version is "
                 f"'{EXPECTED_MAJOR_VERSION}'."
             )
 
         sheet = init_sheet
-        # Read in the init sheet the locations of cells in the month sheets
+        # Read in the init sheet the locations of the cells in the month sheets
         self._sheet_january = int(sheet[LOC_JANUARY_SHEET].value)
         self._row_first_month_date = int(sheet[LOC_FIRST_MONTH_DATE_ROW].value)
         self._col_first_clock_in = col_idx(sheet[LOC_FIRST_CLOCK_IN_COL].value)
@@ -171,10 +156,16 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         self._cell_remaining_vacation = str(sheet[LOC_REMAINING_VACATION].value)
         self._cell_ytd_balance = str(sheet[LOC_YTD_BALANCE].value)
 
+        # Verify that all month sheets are available
+        for month in range(13):
+            self._workbook_raw.worksheets[self.__get_month_sheet_idx(month)]
+
         logger.debug(
             f"[Employee '{self._employee_id}'] Finished spreadsheet time "
             "tracker setup."
         )
+
+    ## Utility methods to (re)load the two workbooks ##
 
     def __load_workbook(self):
         """
@@ -222,8 +213,6 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             )
         )
 
-    ## General internal utility methods ##
-
     def __invalidate_analysis(self):
         """
         Invalidate the analysis. It resets the eval workbook and the
@@ -233,46 +222,62 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         self._workbook_eval = None
         self._target_dt = None
 
+    def __save_workbook(self):
+        """
+        Save the raw workbook safely.
+
+        Raises:
+            TimeTrackerWriteException: Time tracker is closed.
+            TimeTrackerSaveException: General saving error.
+        """
+        if self._file_path is None:
+            raise TimeTrackerWriteException(
+                "Attempted an operation on a closed tracker."
+            )
+
+        try:
+            self._workbook_raw.save(self._file_path)
+        except Exception as e:
+            raise TimeTrackerSaveException() from e
+
+    ## Utility methods to find sheet or row indexes ##
+
     def __get_date_row(self, date: dt.date | dt.datetime) -> int:
         """
         Args:
-            date (datetime.date | datetime.datetime): Input date.
+            date (date | datetime): Input date.
 
         Returns:
-            int: The row index for the given day in the month sheet.
+            int: The row index for the given date in any month sheet.
 
         Raises:
-            TimeTrackerDateException: Given date doesn't relate to
-                `tracked_year`.
+            TimeTrackerDateException: Date is outside `tracked_year`.
         """
         if date.year != self.tracked_year:
             raise TimeTrackerDateException(
-                f"Attempted operation on year {date.year} while tracked year "
-                f"is {self.tracked_year}."
+                f"Date '{date}' is outside of tracked year {self.tracked_year}."
             )
+
         return date.day - 1 + self._row_first_month_date
 
     def __get_month_sheet_idx(self, month: int | dt.date | dt.datetime) -> int:
         """
         Args:
-            month (int | dt.date | dt.datetime): Input month.
+            month (int | date | datetime): Input month.
 
         Returns:
-            int: The sheet index corresponding to the given month.
+            int: The sheet index for to the given month.
 
         Raises:
-            TimeTrackerDateException: Given date doesn't relate to
-                `tracked_year`.
+            TimeTrackerDateException: Date is outside `tracked_year`.
         """
         if isinstance(month, (dt.date, dt.datetime)):
             if month.year != self.tracked_year:
                 raise TimeTrackerDateException(
-                    f"Attempted operation on year {month.year} while tracked "
-                    f"year is {self.tracked_year}."
+                    f"Date '{month}' is outside of tracked year {self.tracked_year}."
                 )
             month = month.month
 
-        # Convert month number to sheet index
         return month - 1 + self._sheet_january
 
     def __get_clock_action_for_cell(self, cell: Any) -> ClockAction:
@@ -285,16 +290,19 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         `self._col_last_clock_out`
 
         Args:
-            cell (Any): Must be of type openpyxl.cell.Cell
+            cell (Any): Openpyxl cell
 
         Returns:
             ClockAction: Clock action for the cell
+
+        Raises:
+            TimeTrackerValueException: Given cell out of expected range.
         """
         if (
             cell.column < self._col_first_clock_in
             or cell.column > self._col_last_clock_out
         ):
-            raise ValueError(
+            raise TimeTrackerValueException(
                 f"Cell column {cell.column} is out of the range "
                 f"[{self._col_first_clock_in}; {self._col_last_clock_out}]."
             )
@@ -303,100 +311,179 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         even = ((cell.column - self._col_first_clock_in) % 2) == 0
         return ClockAction.CLOCK_IN if even else ClockAction.CLOCK_OUT
 
-    def __cast(self, value: Any, cast_func: Callable[[Any], T]) -> T:
+    ## Utility methods to get cell values ##
+
+    def __get_init_cell_val(self, cell: str, cast_func: Callable[[Any], T]) -> T:
         """
-        Ensure the given value is of the expected type(s), normalize it
-        using the provided casting function (if provided) and return the 
-        typed value.
-        
+        Get a cell value from the init sheet with type checking.
+
         Args:
-            value (Any): The value to check type and convert.
-            val_type (type | tuple[type]): Expected type or tuple 
-                of types.
-            cast_func (Optional[Callable[[Any], T]]): Optional casting
-                function.
+            cell (str): Cell coordinate (such as 'A8').
+            cast_func (Callable[[Any], T]): Type casting function.
 
         Returns:
-            T: The casted value.
-                
+            T: Value of expected type.
+
         Raises:
-            TimeTrackerReadException: If the value is not of the expected 
-                type(s).
+            TimeTrackerValueException: Conversion unsupported for the
+                given value.
+        """
+        value = self._workbook_raw.worksheets[SHEET_INIT][cell].value
+        return self.__cast(value, cast_func)
+
+    def __get_month_cell_value(
+        self,
+        workbook: openpyxl.Workbook,
+        month: int | dt.date | dt.datetime,
+        cell: str,
+        cast_func: Callable[[Any], T],
+    ) -> T:
+        """
+        Get a cell value from a month sheet with type checking.
+
+        Args:
+            workbook (openpyxl.Workbook): The workbook to read.
+            month (int | date | datetime): Month information.
+            cell (str): Cell coordinate (such as 'A8').
+            cast_func (Callable[[Any], T]): Type casting function.
+
+        Returns:
+            T: Value of expected type.
+
+        Raises:
+            TimeTrackerValueException: Conversion unsupported for the
+                given value.
+            TimeTrackerDateException: Date is outside `tracked_year`.
+        """
+        sheet = workbook.worksheets[self.__get_month_sheet_idx(month)]
+        return self.__cast(sheet[cell].value, cast_func)
+
+    def __get_month_day_cell_value(
+        self,
+        workbook: openpyxl.Workbook,
+        date: dt.date | dt.datetime,
+        col: int,
+        cast_func: Callable[[Any], T],
+    ) -> T:
+        """
+        Get a cell value from a month sheet with type checking. The cell
+        row is calculated based on the given date.
+
+        Args:
+            workbook (openpyxl.Workbook): The workbook to read.
+            date (date | datetime): Day and month information.
+            col (int): Data column.
+            cast_func (Callable[[Any], T]): Type casting function.
+
+        Returns:
+            T: Value of expected type.
+
+        Raises:
+            TimeTrackerValueException: Conversion unsupported for the
+                given value.
+            TimeTrackerDateException: Date is outside `tracked_year`.
+        """
+        day_row = self.__get_date_row(date)
+        sheet = workbook.worksheets[self.__get_month_sheet_idx(date)]
+        value = sheet.cell(row=day_row, column=col).value
+        return self.__cast(value, cast_func)
+
+    def __read_month_cell_value(
+        self,
+        month: int | dt.date | dt.datetime | None,
+        cell: str,
+        cast_func: Callable[[Any], T],
+    ) -> T:
+        """
+        Same as `self.__get_month_cell_value()` but the value is read in
+        the evaluated workbook, if available.
+
+        Raises:
+            TimeTrackerReadException: Time tracker not analyzed.
+            TimeTrackerValueException: Conversion unsupported for the
+                given value.
+            TimeTrackerDateException: Date is outside `tracked_year`.
+        """
+        if self._workbook_eval is None or month is None:
+            raise TimeTrackerReadException("The time tracker must be analyzed.")
+
+        return self.__get_month_cell_value(self._workbook_eval, month, cell, cast_func)
+
+    def __read_month_day_cell_value(
+        self,
+        date: dt.date | dt.datetime | None,
+        col: int,
+        cast_func: Callable[[Any], T],
+    ) -> T:
+        """
+        Same as `self.__get_month_day_cell_value()` but the value is read
+        in the evaluated workbook, if available.
+
+        Raises:
+            TimeTrackerReadException: Time tracker not analyzed.
+            TimeTrackerValueException: Conversion unsupported for the
+                given value.
+            TimeTrackerDateException: Date is outside `tracked_year`.
+        """
+        if self._workbook_eval is None or date is None:
+            raise TimeTrackerReadException("The time tracker must be analyzed.")
+
+        return self.__get_month_day_cell_value(
+            self._workbook_eval, date, col, cast_func
+        )
+
+    ## Utility methods to set cell values ##
+
+    def __set_month_day_cell_value(
+        self, date: dt.date | dt.datetime, col: int, value: Any
+    ):
+        """
+        Set a cell value in the month sheet. The cell row is calculated
+        based on the given date.
+
+        Args:
+            date (date | datetime): Day and month information.
+            col (int): Data column.
+            value (Any): Value to set.
+
+        Raises:
+            TimeTrackerDateException: Date is outside `tracked_year`.
+            TimeTrackerWriteException: Time tracker is closed.
+            TimeTrackerSaveException: General saving error.
+        """
+        date_row = self.__get_date_row(date)
+        sheet_idx = self.__get_month_sheet_idx(date)
+        month_sheet = self._workbook_raw.worksheets[sheet_idx]
+
+        cell = month_sheet.cell(row=date_row, column=col)
+        cell.value = value
+        self.__invalidate_analysis()
+
+        self.__save_workbook()
+
+    ## Utility method for type safety ##
+
+    def __cast(self, value: Any, cast_func: Callable[[Any], T]) -> T:
+        """
+        Cast / convert the given value to the expected type.
+
+        Args:
+            value (Any): The value to cast / convert.
+            cast_func (Callable[[Any], T]): Casting function.
+
+        Returns:
+            T: The casted / converted value.
+
+        Raises:
+            TimeTrackerValueException: Conversion unsupported for the
+                given value.
         """
         try:
             value = cast_func(value)
         except (TypeError, ValueError) as e:
             raise TimeTrackerValueException() from e
-        
+
         return value
-
-    def __get_init_sheet_val(self, cell: str, cast_func: Callable[[Any], T]) -> T:
-        """
-        Retrieve a property from the init sheet.
-
-        Args:
-            cell (str): Cell coordinates (ex. 'A1', 'B36', etc.)
-
-        Returns:
-            Any: Value stored in the given cell of the init sheet.
-        """
-        value = self._workbook_raw.worksheets[SHEET_INIT][cell].value
-        return self.__cast(value, cast_func)
-
-    def __read_month_cell(self, month: int | dt.date | dt.datetime, cell: str, cast_func: Callable[[Any], T]) -> T:
-        """
-        Read and validate the value of a cell in the evaluated workbook.
-
-        The cell is identified by its coordinate string (e.g., 'A1', 'B26').
-
-        Args:
-            month (int | datetime.date | datetime.datetime): Input month.
-            cell (str): Cell coordinate.
-            val_type (Type[T] | tuple[Type[T]]): Expected type or tuple 
-                of types.
-
-        Returns:
-            T: The value of the evaluated cell.
-
-        Raises:
-            TimeTrackerReadException: If the spreadsheet is not analyzed.
-            TimeTrackerDateException: If the date is outside the tracked year.
-        """
-        if self._workbook_eval is None:
-            raise TimeTrackerReadException()
-
-        sheet = self._workbook_eval.worksheets[self.__get_month_sheet_idx(month)]
-        return self.__cast(sheet[cell].value, cast_func)
-
-    def __read_month_day_cell(self, date: dt.date | dt.datetime, col: int, cast_func: Callable[[Any], T]) -> T:
-        """
-        Read and validate the value of a cell in the evaluated workbook.
-        
-        The cell row is found depending on the given date.
-
-        The row is computed from the date (e.g., 1st = base row, 
-        2nd = base row + 1, etc.), and the column is provided as an index.
-
-        Args:
-            date (datetime.date | datetime.datetime): Date to determine the row.
-            col (int): 1-based column index (Excel-style).
-            val_type (Type[T] | tuple[Type[T]]): Expected type or tuple 
-                of types.
-
-        Returns:
-            T: The value of the evaluated cell.
-
-        Raises:
-            TimeTrackerReadException: If the workbook has not been analyzed.
-            TimeTrackerDateException: If the date is outside the tracked year.
-        """
-        if self._workbook_eval is None:
-            raise TimeTrackerReadException()
-
-        day_row = self.__get_date_row(date)
-        sheet = self._workbook_eval.worksheets[self.__get_month_sheet_idx(date)]
-        value = sheet.cell(row=day_row, column=col).value
-        return self.__cast(value, cast_func)
 
     def __to_timedelta(self, value: Any) -> dt.timedelta:
         """
@@ -415,9 +502,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             return dt.timedelta(
                 hours=value.hour, minutes=value.minute, seconds=value.second
             )
-        
+
         raise ValueError(f"Cannot convert {type(value).__name__} to timedelta.")
-    
+
     def __to_time(self, value: Any) -> dt.time:
         """
         Convert the given value to a `datetime.time` if necessary.
@@ -432,39 +519,37 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             # Passthrough
             return value
         if isinstance(value, dt.datetime):
-            return dt.time(
-                hour=value.hour, minute=value.minute, second=value.second
-            )
-        
+            return dt.time(hour=value.hour, minute=value.minute, second=value.second)
+
         raise ValueError(f"Cannot convert {type(value).__name__} to time.")
 
     ## General employee's properties access ##
 
     @property
     def firstname(self) -> str:
-        return self.__get_init_sheet_val(CELL_FIRSTNAME, str)
+        return self.__get_init_cell_val(CELL_FIRSTNAME, str)
 
     @property
     def name(self) -> str:
-        return self.__get_init_sheet_val(CELL_NAME, str)
+        return self.__get_init_cell_val(CELL_NAME, str)
 
     ## General time tracker's properties access ##
 
     @property
     def tracked_year(self) -> int:
-        return self.__get_init_sheet_val(CELL_YEAR, int)
+        return self.__get_init_cell_val(CELL_YEAR, int)
 
     @property
     def opening_day_schedule(self) -> dt.timedelta:
-        return self.__get_init_sheet_val(CELL_OPENING_DAY_SCHEDULE, self.__to_timedelta)
+        return self.__get_init_cell_val(CELL_OPENING_DAY_SCHEDULE, self.__to_timedelta)
 
     @property
     def opening_balance(self) -> dt.timedelta:
-        return self.__get_init_sheet_val(CELL_OPENING_BALANCE, self.__to_timedelta)
+        return self.__get_init_cell_val(CELL_OPENING_BALANCE, self.__to_timedelta)
 
     @property
     def opening_vacation_days(self) -> float:
-        return self.__get_init_sheet_val(CELL_OPENING_VACATION, float)
+        return self.__get_init_cell_val(CELL_OPENING_VACATION, float)
 
     @property
     def max_clock_events_per_day(self) -> int:
@@ -480,9 +565,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         corresponding row of the month's sheet.
 
         Raises:
-            TimeTrackerDateException: If the opened file doesn't contain
-                the month (i.e. wrong year)
-            SheetTimeTrackerError: The spreadsheet file might be corrupted
+            TimeTrackerDateException: Date is outside `tracked_year`.
+            TimeTrackerValueException: Read an unexpected value in the row.
         """
         date_row = self.__get_date_row(date)
         sheet_idx = self.__get_month_sheet_idx(date)
@@ -526,17 +610,12 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         available, raises a TimeTrackerWriteException.
 
         Raises:
-            TimeTrackerDateException: If the opened file doesn't contain
-                the month (i.e. wrong year)
-            TimeTrackerWriteException: If no available slot is found for
-                the clock event
-            TimeTrackerWriteException: writing failed.
+            TimeTrackerDateException: Date is outside `tracked_year`.
+            TimeTrackerWriteException: No available slot found to write
+                the clock event or the tracker is closed.
+            TimeTrackerSaveException: Unable to save the tracker in the
+                local cache.
         """
-        if self._file_path is None:
-            raise RuntimeError(
-                "Attempted to register a clock event in a closed SheetTimeTracker."
-            )
-
         date_row = self.__get_date_row(date)
         sheet_idx = self.__get_month_sheet_idx(date)
         month_sheet = self._workbook_raw.worksheets[sheet_idx]
@@ -546,32 +625,28 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             1 if event.action == ClockAction.CLOCK_OUT else 0
         )
 
-        try:
-            for col_idx in range(start_idx, self._col_last_clock_out + 1, 2):
-                cell = month_sheet.cell(row=date_row, column=col_idx)
+        for col_idx in range(start_idx, self._col_last_clock_out + 1, 2):
+            cell = month_sheet.cell(row=date_row, column=col_idx)
 
-                if cell.value is None:
-                    # The slot is available, write the clock time in HH:MM format
-                    cell.number_format = "HH:MM"
-                    cell.value = dt.time(
-                        hour=event.time.hour, minute=event.time.minute, second=0
-                    )  # type: ignore
+            if cell.value is None:
+                # The slot is available, write the clock time in HH:MM format
+                cell.number_format = "HH:MM"
+                cell.value = dt.time(
+                    hour=event.time.hour, minute=event.time.minute, second=0
+                )  # type: ignore
 
-                    # The workbook is saved upon modification, and the reading
-                    # methods become inaccessible to prevent access to values that
-                    # may have changed
-                    self._workbook_raw.save(self._file_path)
-                    self.__invalidate_analysis()
+                # The workbook is saved upon modification, and the reading
+                # methods become inaccessible to prevent access to values that
+                # may have changed
+                self.__save_workbook()
+                self.__invalidate_analysis()
 
-                    logger.debug(
-                        f"[Employee '{self._employee_id}'] Registered clock event "
-                        f"in sheet {sheet_idx} : "
-                        f"'{event}' in '{cell.coordinate}'."
-                    )
-                    return
-
-        except Exception as e:
-            raise TimeTrackerWriteException() from e
+                logger.debug(
+                    f"[Employee '{self._employee_id}'] Registered clock event "
+                    f"in sheet '{sheet_idx}' : "
+                    f"'{event}' in '{cell.coordinate}'."
+                )
+                return
 
         raise TimeTrackerWriteException(
             f"No available time slot to write the clock event '{event}'."
@@ -584,99 +659,64 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         Implementation of `TimeTracker.write_clocks()`.
 
         Raises:
-            TimeTrackerDateException: If the opened file doesn't contain
-                the month (i.e. wrong year)
-            TimeTrackerWriteException: writing failed.
+            TimeTrackerDateException: Date is outside `tracked_year`.
+            TimeTrackerWriteException: Too many events / tracker is closed.
+            TimeTrackerSaveException: Unable to save the tracker in the
+                local cache.
         """
-        if self._file_path is None:
-            raise RuntimeError(
-                "Attempted to write clock events in a closed SheetTimeTracker."
-            )
-
         date_row = self.__get_date_row(date)
         sheet_idx = self.__get_month_sheet_idx(date)
         month_sheet = self._workbook_raw.worksheets[sheet_idx]
+
+        if len(events) > self.max_clock_events_per_day:
+            raise TimeTrackerWriteException(
+                f"List exceeds {self.max_clock_events_per_day} events."
+            )
 
         msgs: list[str] = []
 
-        try:
-            for col_idx, evt in enumerate(events, self._col_first_clock_in):
-                cell = month_sheet.cell(row=date_row, column=col_idx)
-                cell.number_format = "HH:MM"
+        for col_idx, evt in enumerate(events, self._col_first_clock_in):
+            cell = month_sheet.cell(row=date_row, column=col_idx)
+            cell.number_format = "HH:MM"
 
-                if evt:
-                    cell.value = dt.time(
-                        hour=evt.time.hour, minute=evt.time.minute, second=0
-                    )  # type: ignore
-                else:
-                    cell.value = None
+            if evt:
+                cell.value = dt.time(
+                    hour=evt.time.hour, minute=evt.time.minute, second=0
+                )  # type: ignore
+            else:
+                cell.value = None
 
-                msgs += f"'{evt}' in '{cell.coordinate}'"
+            msgs.append(f"'{evt}' in '{cell.coordinate}'")
 
-            # The workbook is saved upon modification, and the reading
-            # methods become inaccessible to prevent access to values that
-            # may have changed
-            self._workbook_raw.save(self._file_path)
-            self.__invalidate_analysis()
-
-        except Exception as e:
-            raise TimeTrackerWriteException() from e
+        # The workbook is saved upon modification, and the reading
+        # methods become inaccessible to prevent access to values that
+        # may have changed
+        self.__save_workbook()
+        self.__invalidate_analysis()
 
         logger.debug(
             f"[Employee '{self._employee_id}'] Written clock events "
-            f"in sheet {sheet_idx} : "
-            f"{", ".join(msgs)}"
+            f"in sheet '{sheet_idx}' : "
+            f"{" | ".join(msgs)}"
         )
 
     def set_vacation(self, date: dt.date | dt.datetime, day_ratio: float):
-        """
-        Implementation of `TimeTracker.set_vacation()`.
-
-        Raises:
-            TimeTrackerDateException: If the opened file doesn't contain
-                the month (i.e. wrong year)
-            TimeTrackerWriteException: writing failed.
-        """
-        if self._file_path is None:
-            raise RuntimeError(
-                "Attempted to set vacation in a closed SheetTimeTracker."
-            )
-
-        date_row = self.__get_date_row(date)
-        sheet_idx = self.__get_month_sheet_idx(date)
-        month_sheet = self._workbook_raw.worksheets[sheet_idx]
-
-        try:
-            vac_cell = month_sheet.cell(row=date_row, column=self._col_day_vacation)
-            vac_cell.value = day_ratio
-
-            self._workbook_raw.save(self._file_path)
-            self.__invalidate_analysis()
-
-        except Exception as e:
-            raise TimeTrackerWriteException() from e
+        self.__set_month_day_cell_value(date, self._col_day_vacation, day_ratio)
 
     def get_vacation(self, date: dt.date | dt.datetime) -> float:
-        """
-        Implementation of `TimeTracker.get_vacation()`.
-
-        Raises:
-            TimeTrackerDateException: If the opened file doesn't contain
-                the month (i.e. wrong year)
-        """
-        date_row = self.__get_date_row(date)
-        sheet_idx = self.__get_month_sheet_idx(date)
-        month_sheet = self._workbook_raw.worksheets[sheet_idx]
-        value = month_sheet.cell(row=date_row, column=self._col_day_vacation).value
-        return self.__cast(value, float)
+        return self.__get_month_day_cell_value(
+            self._workbook_raw, date, self._col_day_vacation, float
+        )
 
     def set_attendance_error(
         self, date: dt.date | dt.datetime, error_id: Optional[int]
     ):
-        pass
+        self.__set_month_day_cell_value(date, self._col_day_soft_error, error_id)
 
     def get_attendance_error(self, date: dt.date | dt.datetime) -> Optional[int]:
-        pass
+        return self.__get_month_day_cell_value(
+            self._workbook_raw, date, self._col_day_soft_error, int
+        )
 
     ## Time Tracker Analyzer methods ##
 
@@ -688,11 +728,22 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         using the LibreOffice module.
         On failure, invalidates analysis and may prevent future saves by
         nullifying _file_path.
-        """
-        assert self._target_dt is not None
 
-        if self._file_path is None:
-            raise RuntimeError("Attempted to use a closed SheetTimeTracker.")
+        Raises:
+            RuntimeError: No LibreOffice installation found.
+            FileExistsError: A previous evaluation didn't finish properly and
+                a file is still existing in the temporary folder.
+            RuntimeError: The LibreOffice execution returned an error.
+            TimeoutError: The LibreOffice execution timed out.
+            FileNotFoundError: LibreOffice didn't produce the expected output.
+            TimeTrackerWriteException: The tracker is closed.
+            TimeTrackerSaveException: Unable to save the tracker in the
+                local cache.
+
+        Exceptions are chained to the more general `TimeTrackerAnalysisException`
+        by the `analyze()` method.
+        """
+        assert self._target_dt is not None  # Set by analyze()
 
         init_sheet = self._workbook_raw.worksheets[SHEET_INIT]
         tmp_date_formula = init_sheet[CELL_DATE].value
@@ -703,10 +754,10 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             # target values
             init_sheet[CELL_DATE].value = self._target_dt.date()
             init_sheet[CELL_TIME].value = self._target_dt.time()
-            self._workbook_raw.save(self._file_path)
+            self.__save_workbook()
 
             # Evaluate the file and reload it
-            evaluate_calc(self._file_path)
+            evaluate_calc(self._file_path)  # type: ignore path cannot be None
             self.__load_workbook()
 
         except Exception:
@@ -719,7 +770,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
                 # Always restore the formulas in the init sheet
                 init_sheet[CELL_DATE].value = tmp_date_formula
                 init_sheet[CELL_TIME].value = tmp_time_formula
-                self._workbook_raw.save(self._file_path)
+                self.__save_workbook()
+
             except Exception:
                 # Failed to restore the date and time formula: this is
                 # a critical error. Prevent the file from being saved to
@@ -735,61 +787,83 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
                 raise
 
     def read_day_schedule(self, date: dt.date | dt.datetime) -> dt.timedelta:
-        return self.__read_month_day_cell(date, self._col_day_schedule, self.__to_timedelta)
+        return self.__read_month_day_cell_value(
+            date, self._col_day_schedule, self.__to_timedelta
+        )
 
     def read_day_worked_time(self, date: dt.date | dt.datetime) -> dt.timedelta:
-        return self.__read_month_day_cell(date, self._col_day_worked_time, self.__to_timedelta)
+        return self.__read_month_day_cell_value(
+            date, self._col_day_worked_time, self.__to_timedelta
+        )
 
     def read_day_balance(self, date: dt.date | dt.datetime) -> dt.timedelta:
-        return self.__read_month_day_cell(date, self._col_day_balance, self.__to_timedelta)
+        return self.__read_month_day_cell_value(
+            date, self._col_day_balance, self.__to_timedelta
+        )
 
     def read_day_attendance_error(self, date: dt.date | dt.datetime) -> Optional[int]:
-        pass
+        return self.__read_month_day_cell_value(date, self._col_day_sheet_error, int)
 
     def read_month_expected_daily_schedule(
         self, month: int | dt.date | dt.datetime
     ) -> dt.timedelta:
-        pass
+        return self.__read_month_cell_value(
+            month, self._cell_exp_day_schedule, self.__to_timedelta
+        )
 
     def read_month_schedule(self, month: int | dt.date | dt.datetime) -> dt.timedelta:
-        pass
+        return self.__read_month_cell_value(
+            month, self._cell_month_schedule, self.__to_timedelta
+        )
 
     def read_month_worked_time(
         self, month: int | dt.date | dt.datetime
     ) -> dt.timedelta:
-        pass
+        return self.__read_month_cell_value(
+            month, self._cell_month_worked_time, self.__to_timedelta
+        )
 
     def read_month_balance(self, month: int | dt.date | dt.datetime) -> dt.timedelta:
-        return self.__read_month_cell(month, self._cell_month_balance, self.__to_timedelta)
+        return self.__read_month_cell_value(
+            month, self._cell_month_balance, self.__to_timedelta
+        )
 
     def read_month_vacation(self, month: int | dt.date | dt.datetime) -> float:
-        return self.__read_month_cell(month, self._cell_month_vacation, float)
+        return self.__read_month_cell_value(month, self._cell_month_vacation, float)
 
     def read_year_vacation(self) -> float:
-        pass
+        return self.opening_vacation_days - self.read_remaining_vacation()
 
     def read_remaining_vacation(self) -> float:
-        pass
+        # Warning: to get the remaining vacation days for the whole year, read
+        # the value from the December sheet. This way the value is updated
+        # even if vacations are planned for future months.
+        return self.__read_month_cell_value(12, self._cell_remaining_vacation, float)
 
     def read_year_to_date_balance(self) -> dt.timedelta:
-        if self._target_dt is None:
-            raise TimeTrackerReadException()
-        return self.__read_month_cell(self._target_dt, self._cell_ytd_balance, self.__to_timedelta)
+        return self.__read_month_cell_value(
+            self._target_dt, self._cell_ytd_balance, self.__to_timedelta
+        )
 
     def save(self):
         """
         Implementation of `TimeTracker.save()`.
 
         Try to save the file on the spreadsheets repository.
+
+        Raises:
+            TimeTrackerSaveException: General saving error.
+            See chained exception for details.
         """
         if self._file_path is None:
-            raise RuntimeError("Attempted to save a closed SheetTimeTracker.")
+            raise TimeTrackerSaveException("Cannot save a closed tracker.")
 
         try:
             self._accessor.save_spreadsheet_file(self._file_path)
-            logger.debug(f"[Employee '{self._employee_id}'] Spreadsheet file saved.")
         except Exception as e:
             raise TimeTrackerSaveException() from e
+
+        logger.debug(f"[Employee '{self._employee_id}'] Spreadsheet file saved.")
 
     def close(self):
         """
@@ -797,15 +871,22 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         Release the file lock from the spreadsheets repository, allowing
         other processes to access the employee's file.
+
+        Raises:
+            TimeTrackerCloseException: General error while closing.
+            See chained exception for details.
         """
         if self._file_path is None:
-            raise RuntimeError("Cannot close a SheetTimeTracker twice.")
+            raise TimeTrackerCloseException("Cannot close a tracker twice.")
 
         try:
             self._accessor.release_spreadsheet_file(self._file_path)
-            self._file_path = None
         except Exception as e:
             raise TimeTrackerCloseException() from e
+        finally:
+            # Even if an error occurs, prevent any further access because the
+            # file is in an unknown state.
+            self._file_path = None
 
         logger.debug(
             f"[Employee '{self._employee_id}'] Spreadsheet time tracker closed."
