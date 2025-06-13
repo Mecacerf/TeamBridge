@@ -3,7 +3,7 @@
 File: teambridge_scheduler.py
 Author: Bastian Cerf
 Date: 02/03/2025
-Description: 
+Description:
     Provides an asynchronous way to manipulate employee time trackers.
     The scheduler allows to execute different I/O bound tasks and get
     their result when they are finished.
@@ -13,137 +13,157 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+# Standard libraries
 import logging
-
-# Import model dataclasses
-from .data import *
-# Import the time tracker generic interface
-from src.core.time_tracker import *
-
 import threading
 from concurrent.futures import ThreadPoolExecutor, Future
-from typing import Callable
 import datetime as dt
 
-LOGGER = logging.getLogger(__name__)
+# Internal imports
+from .data import *
+from core.time_tracker import *
+from core.time_tracker_factory import TimeTrackerFactory
 
-# Maximal number of asynchronous tasks that can be handled simultaneously by the scheduler
+logger = logging.getLogger(__name__)
+
+# Maximal number of asynchronous tasks that can be handled simultaneously by
+# the scheduler
 MAX_TASK_WORKERS = 4
+
 
 class TeamBridgeScheduler:
     """
-    The scheduler holds a thread pool executor and can be used to perform various I/O bound 
-    tasks, such as clocking in/out an employee, performing a balance query, and so on. The 
-    model can be polled to retrieve task results via the defined message containers.
-    Note that this class is not thread safe, meaning that a single thread must post tasks
-    and read results. Tasks are however executed in parallel using the thread pool executor.
+    The scheduler holds a thread pool executor and can be used to perform
+    various I/O bound tasks, such as clocking in/out an employee,
+    performing a balance query, and so on. The model can be polled to
+    retrieve task results via the defined message containers. Note that
+    this class is not thread safe, meaning that a single thread must post
+    tasks and read results. Tasks are however executed in parallel using
+    the thread pool executor.
     """
 
-    def __init__(self, time_tracker_provider: Callable[[dt.date, str], BaseTimeTracker]):
+    def __init__(self, tracker_factory: TimeTrackerFactory):
         """
         Create the tasks scheduler.
 
         Args:
-            time_tracker_provider: `Callable[[dt.date, str], ITodayTimeTracker]` the time 
-                tracker provider as a callable object
+            tracker_factory (TimeTrackerFactory): The factory to use to
+                create the time trackers.
         """
-        # Save the provider method and create a lock for concurrent access
-        self._provider = time_tracker_provider
-        self._lock = threading.Lock()
-        # Create the threads pool
-        self._pool = ThreadPoolExecutor(max_workers=MAX_TASK_WORKERS, thread_name_prefix="Task-")
-        # Create the tasks dictionary
-        self._pending_tasks: dict[int, Future] = {}
-        # Task handle counter
-        self._task_handle = -1
+        self._factory = tracker_factory
+        self._factory_lock = threading.Lock()
 
-    def start_clock_action_task(self, id: str, 
-                                datetime: dt.datetime, 
-                                action: ClockAction=None) -> int:
+        self._pool = ThreadPoolExecutor(
+            max_workers=MAX_TASK_WORKERS, thread_name_prefix="Task-"
+        )
+        # Keep track of the tasks in a dictionary
+        self._pending_tasks: dict[int, Future[IModelMessage]] = {}
+        self._task_handle = -1  #  Attribute a unique handle per task
+
+    def start_clock_action_task(
+        self,
+        employee_id: str,
+        datetime: dt.datetime,
+        action: Optional[ClockAction] = None,
+    ) -> int:
         """
         Start a clock action task for the employee with given identifier.
-        It will post an EmployeeEvent on success or a ModelError on failure.  
-        The action (clock in or out) can be specified or left None. In this case, 
-        the task automatically clocks in an employee who's clocked out and clocks
-        out an employee who's clocked in at given datetime.
+
+        It will post an EmployeeEvent on success or a ModelError on failure.
+        The action (clock in or out) can be specified or left None. In
+        this case, the task automatically clocks in an employee who's
+        clocked out and clocks out an employee who's clocked in at given
+        datetime.
 
         Args:
-            id: `str` employee's identifier
-            datetime: `datetime` time and date for the clock action
-            action: `action` clock action to register or None to let the task choose
+            employee_id (str): Employee's identifier.
+            datetime (datetime.datetime): Date and time of clock action.
+            action (Optional[ClockAction]): Clock action to register or
+                None to leave the task choose.
+
         Returns:
-            int: task handle
+            int: Task handle.
         """
-        # Increment tasks counter
+        # Submit a task on the executor and return its unique handle.
         self._task_handle += 1
-        # Submit the task to the executor and save the future object
-        self._pending_tasks[self._task_handle] = self._pool.submit(self.__clock_action_task, id, datetime, action)
-        # Return the task handle
+        self._pending_tasks[self._task_handle] = self._pool.submit(
+            self.__clock_action_task, employee_id, datetime, action
+        )
         return self._task_handle
 
-    def start_consultation_task(self, id: str, datetime: dt.datetime) -> int:
+    def start_consultation_task(self, employee_id: str, datetime: dt.datetime) -> int:
         """
-        Start a consultation task for the employee with given identifier at given date.
+        Start a consultation task for the employee with given identifier.
+
         It will post an EmployeeData on success or a ModelError on failure.
+        The employee's data is analyzed for the given date and time.
 
         Args:
-            id: `str` employee's identifier
-            datetime: `datetime` consultation date
+            employee_id (str): Employee's identifier.
+            datetime (datetime.datetime): Analysis date and time.
+
         Returns:
-            int: task handle
+            int: Task handle.
         """
-        # Increment tasks counter
+        # Submit a task on the executor and return its unique handle.
         self._task_handle += 1
-        # Submit the task to the executor and save the future object
-        self._pending_tasks[self._task_handle] = self._pool.submit(self.__consultation_task, id, datetime)
-        # Return the task handle
+        self._pending_tasks[self._task_handle] = self._pool.submit(
+            self.__consultation_task, employee_id, datetime
+        )
         return self._task_handle
 
     def available(self, handle: int) -> bool:
         """
-        Check if the task identified by given handle has finished.
+        Check if the task identified by the given handle has finished.
+
+        `False` is returned wether the task is pending or doesn't exist.
 
         Returns:
-            bool: True if the task result is available 
+            bool: `True` if the task result is available, False otherwise.
         """
-        return (handle in self._pending_tasks and self._pending_tasks[handle].done())
+        return handle in self._pending_tasks and self._pending_tasks[handle].done()
 
-    def get_result(self, handle: int) -> IModelMessage:
+    def get_result(self, handle: int) -> Optional[IModelMessage]:
         """
-        Get task result. 
+        Get a task result.
+
+        The result may be `None` if the task didn't finished properly
+        and raised an exception.
 
         Args:
-            handle: `int` task handle
+            handle (int): Task handle.
+
         Returns:
-            IModelMessage: task result or None if unavailable
+            Optional[IModelMessage]: Task result or `None` if unavailable.
         """
-        # Check that the task is available
         if not self.available(handle):
             return None
-        
-        # Pop the future object from the dictionary
+
+        # Pop the future object from the task dictionary, since one is
+        # available for the given handle.
         future = self._pending_tasks.pop(handle)
-        
+
         try:
-            # Try to read the task result
-            message = future.result()
-            # A task must return a valid message
-            if message is None:
-                raise RuntimeError("The task didn't return a message.")
-            # Return the task message
-            return message
-        except:
-            # Log the error and return None 
-            LOGGER.error("An asynchronous task didn't finished properly.", exc_info=True)
+            # The task must return a valid message
+            # However this line may raise a few exceptions, especially
+            # if an exception occurred in the task. In this case the
+            # returned message is None.
+            return future.result()
+
+        except Exception:
+            logger.error(
+                "An asynchronous task didn't finished properly.", exc_info=True
+            )
             return None
-        
+
     def drop(self, handle: int):
         """
-        Drop a task. This can be used when the task owner is finally not interested in getting 
-        its result. The task is removed, and will never get available.
-        It is safe to call this method with a non available handle.
+        Drop a task.
+
+        This can be used when the task owner is finally not interested
+        in getting its result. The task is removed, and will never get
+        available. It is safe to call this method with any handle.
         """
-        # Just remove from the dictionary
         if handle in self._pending_tasks:
             self._pending_tasks.pop(handle)
 
@@ -151,119 +171,94 @@ class TeamBridgeScheduler:
         """
         Close the model. Can take some time if tasks are currently running.
         """
-        # Shutdown the thread pool executor, wait for the running tasks to finish and
-        # cancel pending ones.
+        # Shutdown the thread pool executor, wait for the running tasks to
+        # finish and cancel pending ones.
         self._pool.shutdown(wait=True, cancel_futures=True)
 
-    def __clock_action_task(self, id: str, 
-                            datetime: dt.datetime, 
-                            action: ClockAction) -> IModelMessage:
+    def __clock_action_task(
+        self, employee_id: str, datetime: dt.datetime, action: Optional[ClockAction]
+    ) -> IModelMessage:
         """
         Clock in/out the employee at given datetime.
         """
-        # Employee and result message are initially None
-        employee = None
-        message = None
+        tracker = None
         try:
-            # Open the employee time tracker, acquire the lock since other tasks might be 
-            # using the provider concurrently.
-            with self._lock:
-                employee = self._provider(datetime.date(), id)
+            with self._factory_lock:
+                tracker = self._factory.create(employee_id, datetime)
 
-            # Get employee name and firstname
-            name = employee.get_name()
-            firstname = employee.get_firstname()
-
-            # Log that time tracker is open
-            LOGGER.info(f"Opened time tracker for employee '{firstname} {name}' with id '{id}'.")
-
-            # If no action is specified, clock out if clocked in and clock in if clocked out.
+            # No action specified: clock-out if clocked in and clock-in
+            # if clocked out
             if action is None:
-                action = ClockAction.CLOCK_OUT if employee.is_clocked_in_today() else ClockAction.CLOCK_IN
+                action = (
+                    ClockAction.CLOCK_OUT
+                    if tracker.is_clocked_in(datetime)
+                    else ClockAction.CLOCK_IN
+                )
 
-            # Create and register the clock event
+            # Create, register and save the clock event
             clock_evt = ClockEvent(time=datetime.time(), action=action)
-            employee.register_clock(clock_evt)
-            # Commit changes
-            employee.commit()
-            # Close the time tracker
-            # If this operation fails the data might not be correctly saved
-            employee.close()
-            # Nullify to prevent closing it again
-            employee = None
+            tracker.register_clock(datetime, clock_evt)
+            tracker.save()
 
-            LOGGER.info(f"{action} saved for employee ['{firstname} {name}' with id '{id}'].")
+            logger.info(f"Registered a {clock_evt!s} for {tracker!s}.")
 
-            # Everything went fine
-            # Create the employee event
-            message = EmployeeEvent(name=name, 
-                                    firstname=firstname, 
-                                    id=id, 
-                                    clock_evt=clock_evt)
-
-        # Catch the exceptions that may occur during the process and create the ModelError message
-        except Exception as e:
-            message = ModelError(error_code=0, message=str(e))
-            LOGGER.error(f"Error occurred operating time tracker of employee '{id}'.", exc_info=True)
-        finally:
-            # Always close the time tracker once operations are finished
-            try:
-                if employee:
-                    employee.close()
-            except:
-                LOGGER.error(f"Error occurred closing time tracker of employee '{id}'.", exc_info=True)
-            
-        # Return the resulting message
-        return message
-
-    def __consultation_task(self, id: str, datetime: dt.datetime) -> IModelMessage:
-        """
-        Consultation of employee's information.
-        """        
-        # Employee and result message are initially None
-        employee = None
-        message = None
-        try:
-            # Open the employee time tracker, acquire the lock since other tasks might be 
-            # using the provider concurrently.
-            with self._lock:
-                employee = self._provider(datetime.date(), id)
-
-            # Get employee name and firstname
-            name = employee.get_name()
-            firstname = employee.get_firstname()
-
-            # Log that time tracker is open
-            LOGGER.info(f"Opened time tracker for employee '{firstname} {name}' with id '{id}'.")
-
-            # If the time tracker is not readable, evaluate it
-            if not employee.is_readable():
-                employee.evaluate()
-            
-            # Read methods are available, build an EmployeeData container
-            message = EmployeeData(
-                name=name, firstname=firstname, id=id,
-                daily_worked_time=employee.get_daily_worked_time(),
-                daily_balance=employee.get_daily_balance(),
-                daily_scheduled_time=employee.get_daily_schedule(),
-                monthly_balance=employee.get_monthly_balance()
+            return EmployeeEvent(
+                name=tracker.name,
+                firstname=tracker.firstname,
+                id=tracker.employee_id,
+                clock_evt=clock_evt,
             )
 
-            # Close and nullify the time tracker
-            employee.close()
-            employee = None
+        except TimeTrackerException as e:
+            logger.error(
+                f"An exception occurred with employee '{employee_id}'", exc_info=True
+            )
+            return ModelError(error_code=0, message=str(e))
 
-        # Catch the exceptions that may occur during the process and create the ModelError message
-        except Exception as e:
-            message = ModelError(error_code=0, message=str(e))
-            LOGGER.error(f"Error occurred operating time tracker of employee '{id}'.", exc_info=True)
         finally:
-            # Always close the time tracker once operations are finished
+            # The time tracker must always be closed
             try:
-                if employee:
-                    employee.close()
-            except:
-                LOGGER.error(f"Error occurred closing time tracker of employee '{id}'.", exc_info=True)
-            
-        # Return the resulting message
-        return message
+                if tracker:
+                    tracker.close()
+            except TimeTrackerCloseException:
+                logger.error(f"Cannot close tracker '{id}'.", exc_info=True)
+                raise
+
+    def __consultation_task(
+        self, employee_id: str, datetime: dt.datetime
+    ) -> IModelMessage:
+        """
+        Consultation of employee's information.
+        """
+        tracker = None
+        try:
+            with self._factory_lock:
+                tracker = self._factory.create(employee_id, datetime)
+
+            # The tracker must be analyzed at provided date and time
+            tracker.analyze(datetime)
+
+            return EmployeeData(
+                name=tracker.name,
+                firstname=tracker.firstname,
+                id=employee_id,
+                daily_worked_time=tracker.read_day_worked_time(datetime),
+                daily_balance=tracker.read_day_balance(datetime),
+                daily_scheduled_time=tracker.read_day_schedule(datetime),
+                monthly_balance=tracker.read_month_balance(datetime),
+            )
+
+        except TimeTrackerException as e:
+            logger.error(
+                f"An exception occurred with employee '{employee_id}'", exc_info=True
+            )
+            return ModelError(error_code=0, message=str(e))
+
+        finally:
+            # The time tracker must always be closed
+            try:
+                if tracker:
+                    tracker.close()
+            except TimeTrackerCloseException:
+                logger.error(f"Cannot close tracker '{id}'.", exc_info=True)
+                raise

@@ -22,7 +22,7 @@ import logging
 #               Tests constants                #
 ################################################
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 TEST_EMPLOYEE_ID = "unit-test"
 TEST_DATE = dt.date(year=2025, month=3, day=10) # 10 March 2025 is a monday
@@ -48,7 +48,7 @@ def test_clock_action(teambridge_model):
             time.sleep(0.1)
         # Return the task message
         message = teambridge_model.get_result(handle)
-        LOGGER.info(f"Got model message: {message}")
+        logger.info(f"Got model message: {message}")
         return message
     
     # Register a clock in at 8h12

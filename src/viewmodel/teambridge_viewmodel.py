@@ -25,7 +25,7 @@ from common.state_machine import *
 from common.live_data import LiveData             # For view communication
 from model import *                               # Task scheduling
 from platform_io.barcode_scanner import BarcodeScanner  # Employee ID detection
-from src.core.time_tracker import ClockAction     # Domain model enums
+from core.time_tracker import ClockAction     # Domain model enums
 
 LOGGER = logging.getLogger(__name__)
 
@@ -411,7 +411,7 @@ class _ClockActionState(_IViewModelState):
         # Reset next action
         self._fsm.next_action = ViewModelAction.DEFAULT_ACTION
         # Start a clock action task and save the task handle
-        self._handle = self._fsm._model.start_clock_action_task(id=self._id, datetime=dt.datetime.now())
+        self._handle = self._fsm._model.start_clock_action_task(self._id, dt.datetime.now())
 
     def do(self) -> IStateBehavior:
         # Get the task result if available
@@ -520,7 +520,7 @@ class _ConsultationActionState(_IViewModelState):
         # Reset next action
         self._fsm.next_action = ViewModelAction.DEFAULT_ACTION
         # Start a consultation task
-        self._handle = self._fsm._model.start_consultation_task(id=self._id, datetime=dt.datetime.now())
+        self._handle = self._fsm._model.start_consultation_task(self._id, dt.datetime.now())
 
     def do(self) -> IStateBehavior:
         # Get the task result if available

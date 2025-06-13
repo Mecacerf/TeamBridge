@@ -15,6 +15,7 @@ Contact: info@mecacerf.ch
 import sys
 import argparse
 import logging, logging.handlers
+from typing import Any
 
 def main() -> int:
     """
@@ -23,11 +24,10 @@ def main() -> int:
     # Configure logging and get module logger
     configure_logging()
     logger = logging.getLogger("Main")
-    # Log a welcome message
     logger.info("-- Mecacerf TeamBridge Application --")
 
     # Custom function to parse positive integer.
-    def positive_int(value):
+    def positive_int(value: Any):
         ivalue = int(value)
         if ivalue < 0:
             raise argparse.ArgumentTypeError("The value must be a positive integer")
@@ -53,20 +53,16 @@ def main() -> int:
                 f"sleep_timeout={args.sleep_timeout if hasattr(args, 'sleep_timeout') else 'disabled'}, debug={args.debug}]")
 
     # Import program backend modules
-    from core.spreadsheets_repository import SpreadsheetsRepository
-    from core.spreadsheet_time_tracker import SpreadsheetTimeTracker
+    from core.spreadsheets.sheet_time_tracker_factory import SheetTimeTrackerFactory
     from platform_io.barcode_scanner import BarcodeScanner
     from platform_io.sleep_manager import SleepManager
     from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
     from model.teambridge_scheduler import TeamBridgeScheduler
 
     # Configure application
-    # Use a spreadsheet repository
-    repository = SpreadsheetsRepository(args.repository)
-    # Create the time trackers provider
-    provider = lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date)
+    factory = SheetTimeTrackerFactory(args.repository)
     # Create the application model
-    model = TeamBridgeScheduler(time_tracker_provider=provider)
+    model = TeamBridgeScheduler(tracker_factory=factory)
     # Create the barcode scanner
     scanner = BarcodeScanner()
     # Create the application viewmodel
