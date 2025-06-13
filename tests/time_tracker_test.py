@@ -510,7 +510,9 @@ def test_read_month_data(factory: TimeTrackerFactory, testcase: CaseData):
         tracker.analyze(testcase.datetime)
 
         month_schedule = tracker.read_month_schedule(testcase.datetime)
-        month_daily_schedule = tracker.read_month_expected_daily_schedule(testcase.datetime)
+        month_daily_schedule = tracker.read_month_expected_daily_schedule(
+            testcase.datetime
+        )
         month_balance = tracker.read_month_balance(testcase.datetime)
         month_worked_time = tracker.read_month_worked_time(testcase.datetime)
         month_vacation = tracker.read_month_vacation(testcase.datetime)
@@ -673,7 +675,7 @@ def test_error_employee(factory: TimeTrackerFactory):
 
         tracker.analyze(DT_02_01_25)
         assert tracker.read_day_attendance_error(DT_01_01_25) == ERROR_ENTRY
-        
+
         pytest.xfail("Waiting for vacation and paid absence to be input checked")
         assert tracker.read_day_attendance_error(DT_03_01_25) == ERROR_ENTRY
 
@@ -692,7 +694,7 @@ def test_error_employee(factory: TimeTrackerFactory):
 
         with pytest.raises(TimeTrackerValueException):
             tracker.get_clocks(DT_01_01_25)
-        
+
         with pytest.raises(TimeTrackerValueException):
             tracker.get_vacation(DT_03_01_25)
         with pytest.raises(TimeTrackerValueException):
