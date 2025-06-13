@@ -140,16 +140,22 @@ class SheetsRepoAccessor:
         repo_path = self.__acquire_repository_path()
 
         # Search the employee's file in the remote files repository
-        try:
-            repo_file = next(
-                file
-                for file in repo_path.glob(SPREADSHEETS_FILE_PATTERN)
-                if file.is_file() and file.name.startswith(employee_id)
-            )
-        except StopIteration:
+        matches = [
+            file
+            for file in repo_path.glob(SPREADSHEETS_FILE_PATTERN)
+            if file.is_file() and file.name.startswith(employee_id)
+        ]
+
+        if len(matches) == 0:
             raise FileNotFoundError(
                 f"The spreadsheet file for employee '{employee_id}' doesn't exist."
             )
+        elif len(matches) > 1:
+            raise FileNotFoundError(
+                f"There is more than one file for employee '{employee_id}'."
+            )
+
+        repo_file = matches[0]
 
         # Acquire the file lock
         self.__acquire_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
