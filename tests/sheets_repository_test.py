@@ -44,7 +44,7 @@ def repository(arrange_assets: None) -> SheetsRepoAccessor:
 
     # Use the test assets folder as remote repository
     return SheetsRepoAccessor(
-        remote_repository=TEST_ASSETS_DST_FOLDER, local_cache=TEST_LOCAL_CACHE_FOLDER
+        remote_repository=TEST_REPOSITORY_ROOT, local_cache=TEST_LOCAL_CACHE_FOLDER
     )
 
 
@@ -57,7 +57,7 @@ def test_acquire_sheet(repository: SheetsRepoAccessor):
     sheet_path = repository.acquire_spreadsheet_file(TEST_EMPLOYEE_ID)
 
     local_cache_file = Path(TEST_LOCAL_CACHE_FOLDER) / TEST_SPREADSHEET_FILE
-    repo_lock_file = Path(TEST_ASSETS_DST_FOLDER) / (
+    repo_lock_file = Path(TEST_REPOSITORY_ROOT) / (
         TEST_SPREADSHEET_FILE + LOCK_FILE_EXTENSION
     )
 
@@ -121,7 +121,7 @@ def test_save_sheet(repository: SheetsRepoAccessor):
         file.write(DUMMY_CONTENT)
     repository.save_spreadsheet_file(sheet_file)
 
-    repo_file = Path(TEST_ASSETS_DST_FOLDER) / TEST_SPREADSHEET_FILE
+    repo_file = Path(TEST_REPOSITORY_ROOT) / TEST_SPREADSHEET_FILE
     with open(repo_file, "r") as file:
         assert file.read(len(DUMMY_CONTENT)) == DUMMY_CONTENT
 

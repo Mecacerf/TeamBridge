@@ -11,6 +11,8 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+from pathlib import Path
+
 # Test employee identifiers
 TEST_EMPLOYEE_ID = "777"
 TEST_EMPLOYEE_NAME = "Cerf"
@@ -22,3 +24,6 @@ TEST_SPREADSHEET_FILE = f"{TEST_EMPLOYEE_ID}-unit-test.xlsx"
 TEST_ASSETS_SRC_FOLDER = "tests/assets/"
 # Tests assets destination folder
 TEST_ASSETS_DST_FOLDER = ".test-cache/assets/"
+
+# Test sheets repository folder
+TEST_REPOSITORY_ROOT = str(Path(TEST_ASSETS_DST_FOLDER) / "repository")

@@ -49,7 +49,7 @@ LOGGER = logging.getLogger(__name__)
 @pytest.fixture(
     params=[
         # New factories can be added here
-        SheetTimeTrackerFactory(TEST_ASSETS_DST_FOLDER)
+        SheetTimeTrackerFactory(TEST_REPOSITORY_ROOT)
     ]
 )
 def factory(request: FixtureRequest, arrange_assets: None) -> TimeTrackerFactory:

@@ -107,7 +107,9 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
         """
         # Discover all folders at the first level
         subfolders: list[Path] = [
-            sub for sub in self._repo_root.iterdir() if sub.is_dir()
+            sub
+            for sub in self._repo_root.iterdir()
+            if sub.is_dir() and not sub.name.startswith((".", ".."))
         ]
 
         # Match subfolders by year regex
