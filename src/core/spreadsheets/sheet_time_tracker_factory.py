@@ -63,7 +63,9 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
         # Placeholder for the sorted accessors: year -> accessor
         self._sorted_accessors: dict[int, SheetsRepoAccessor] = {}
 
-    def _create(self, employee_id: str, year: int) -> TimeTrackerAnalyzer:
+    def _create(
+        self, employee_id: str, year: int, readonly: bool
+    ) -> TimeTrackerAnalyzer:
         """
         Search, create, and return the time tracker for the specified
         employee and year.
@@ -80,7 +82,9 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
         if year in self._sorted_accessors:
             accessor = self._sorted_accessors[year]
             try:
-                tracker = SheetTimeTracker(employee_id, accessor=accessor)
+                tracker = SheetTimeTracker(
+                    employee_id, accessor=accessor, readonly=readonly
+                )
             except FileNotFoundError:
                 raise TimeTrackerDateException(
                     f"No file found for employee '{employee_id}'"
@@ -98,7 +102,9 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
         for accessor in self._unsorted_accessors:
             if employee_id in accessor.list_employee_ids():
                 try:
-                    tracker = SheetTimeTracker(employee_id, accessor=accessor)
+                    tracker = SheetTimeTracker(
+                        employee_id, accessor=accessor, readonly=readonly
+                    )
                 except FileNotFoundError:
                     continue  # Maybe listed but file is missing; keep trying others
                 if tracker.tracked_year == year:

@@ -250,7 +250,7 @@ class Employee(ABC):
             # No prior exception: just raise the close failure
             raise close_ex
         return False  # Propagate any exception from the context block
-    
+
     def __str__(self) -> str:
         return f"Employee['{self.employee_id}' {self.firstname} {self.name}]"
 

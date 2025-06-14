@@ -137,7 +137,7 @@ TimeTracker --o AttendanceValidator : time_tracker
 AttendanceError .> AttendanceValidator
 
 class "TimeTrackerAnalyzerFactory" <<Singleton>> {
-  {abstract}create(employee_id: str, year: int) -> TimeTrackerAnalyzer
+  {abstract}create(employee_id: str, year: int, readonly: bool) -> TimeTrackerAnalyzer
   {abstract}list_employee_ids() -> list[str]
 }
 
@@ -151,6 +151,8 @@ note left
   specific time tracker implementation in use.
   The factory also provides a utility method to retrieve all 
   employee IDs registered in the system.
+  The `readonly` flag can be specified. If supported by the
+  implementation, a read-only time tracker will be created.
 end note
 
 TimeTrackerAnalyzerFactory <.. TimeTrackerAnalyzer

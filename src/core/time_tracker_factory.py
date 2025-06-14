@@ -34,7 +34,10 @@ class TimeTrackerFactory(SingletonRegister, ABC):
     """
 
     def create(
-        self, employee_id: str, year: int | dt.date | dt.datetime
+        self,
+        employee_id: str,
+        year: int | dt.date | dt.datetime,
+        readonly: bool = False,
     ) -> TimeTrackerAnalyzer:
         """
         Create a time tracker for the given employee ID and year.
@@ -43,9 +46,14 @@ class TimeTrackerFactory(SingletonRegister, ABC):
         is considered. A `TimeTrackerDateException` is raised if no tracker
         exists for that year.
 
+        The `readonly` argument can optionally be specified. Depending on
+        the implementation in use, it may return a time tracker with only
+        reading capabilities.
+
         Args:
             employee_id (str): Unique identifier for the employee.
             year (int | date | datetime): Year to open the time tracker for.
+            readonly (bool): Optionally specify a read-only flag.
 
         Returns:
             TimeTrackerAnalyzer: The time tracker instance for the employee.
@@ -59,14 +67,16 @@ class TimeTrackerFactory(SingletonRegister, ABC):
             year = year.year
 
         try:
-            return self._create(employee_id, year)
+            return self._create(employee_id, year, readonly)
         except (TimeTrackerOpenException, TimeTrackerDateException):
             raise
         except Exception as e:
             raise TimeTrackerOpenException() from e
 
     @abstractmethod
-    def _create(self, employee_id: str, year: int) -> TimeTrackerAnalyzer:
+    def _create(
+        self, employee_id: str, year: int, readonly: bool
+    ) -> TimeTrackerAnalyzer:
         """
         Must be implemented by subclasses to create the time tracker.
         """

@@ -109,7 +109,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
     files for data storage.
     """
 
-    def _setup(self, accessor: SheetsRepoAccessor):
+    def _setup(self, accessor: SheetsRepoAccessor, readonly: bool):
         """
         Acquire and load the spreadsheet file. Time tracker properties
         are available after this call. The analysis is intentionally
@@ -117,11 +117,16 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         ensure the time tracker is always created in the same state; i.e.
         the `read_` methods are unavalaible.
         """
-        self._accessor = accessor
-        self._file_path = accessor.acquire_spreadsheet_file(self._employee_id)
+        start_ts = time.time()
 
-        self.__load_workbook()
-        self.__invalidate_analysis()  # Prevent access to outdated data
+        self._accessor = accessor
+        self._readonly = readonly
+        self._file_path = accessor.acquire_spreadsheet_file(
+            self._employee_id, readonly=readonly
+        )
+
+        self.__setup_workbooks()
+        self.__invalidate_analysis()
 
         init_sheet = self._workbook_raw.worksheets[SHEET_INIT]
 
@@ -160,21 +165,40 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         for month in range(13):
             self._workbook_raw.worksheets[self.__get_month_sheet_idx(month)]
 
+        delta_ts = time.time() - start_ts
+
         logger.debug(
-            f"[Employee '{self._employee_id}'] Finished spreadsheet time "
-            "tracker setup."
+            f"[Employee '{self._employee_id}'] Spreadsheet time "
+            f"tracker setup in {delta_ts*1000.0:.0f}ms "
+            f"(read-only={self._readonly})."
         )
 
     ## Utility methods to (re)load the two workbooks ##
 
-    def __load_workbook(self):
+    def __setup_workbooks(self):
         """
-        Load the employee's spreadsheet file (workbook) in two modes:
+        Load the employee's spreadsheet file (workbooks) in two modes:
 
         - `self._workbook_raw` is loaded with `data_only=False`, allowing
         access to raw cell values. In this mode, formula cells contain
         the actual formula text rather than the evaluated result.
         This workbook is always available and can be safely saved.
+
+        - `self._workbook_eval` placeholder is just created.
+        See `__load_eval_workbook()`.
+        """
+        if self._file_path is None:
+            raise RuntimeError("Attempted to setup a closed SheetTimeTracker.")
+
+        self._workbook_raw: openpyxl.Workbook = openpyxl.load_workbook(
+            self._file_path, data_only=False
+        )
+
+        self._workbook_eval: Optional[openpyxl.Workbook] = None
+
+    def __load_eval_workbook(self):
+        """
+        Load the employee's spreadsheet file in `data_only` mode.
 
         - `self._workbook_eval` is loaded with `data_only=True`, enabling
         access to evaluated formula values. This workbook is available
@@ -183,29 +207,28 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         **not** be saved, as doing so would overwrite the formula cells
         with their last evaluated values.
 
-        After loading both workbooks, a check is performed on the evaluated
-        one to determine whether formula cells have actually been evaluated.
-        If not, `self._workbook_eval` is reset to `None` to prevent
+        After loading the workbook, a check is performed to determine
+        whether formula cells have actually been evaluated. If not,
+        `self._workbook_eval` is reset to `None` to prevent
         accidental use. See `__invalidate_analysis()`.
         """
         if self._file_path is None:
-            raise RuntimeError("Attempted to re(load) a closed SheetTimeTracker.")
+            raise RuntimeError("Attempted to load a closed SheetTimeTracker.")
 
-        self._workbook_raw: openpyxl.Workbook = openpyxl.load_workbook(
-            self._file_path, data_only=False
-        )
-        self._workbook_eval: Optional[openpyxl.Workbook] = openpyxl.load_workbook(
-            self._file_path, data_only=True
-        )
+        start_ts = time.time()
+
+        self._workbook_eval = openpyxl.load_workbook(self._file_path, data_only=True)
 
         # Check the "evaluated" cell from the init sheet to know if the formula
         # values are available. If unavailable, invalidate the analysis.
         if self._workbook_eval.worksheets[SHEET_INIT][CELL_EVALUATED].value is None:
             self.__invalidate_analysis()
 
+        delta_ts = time.time() - start_ts
+
         logger.debug(
-            f"[Employee '{self._employee_id}'] (Re)loaded spreadsheet "
-            f"'{self._file_path.name}' "
+            f"[Employee '{self._employee_id}'] Loaded spreadsheet "
+            f"'{self._file_path.name}' in data mode in {delta_ts*1000.0:.0f}ms "
             + (
                 f"(analyzed for '{self._target_dt}')."
                 if self.analyzed
@@ -234,6 +257,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             raise TimeTrackerWriteException(
                 "Attempted an operation on a closed tracker."
             )
+
+        if self._readonly:
+            raise TimeTrackerWriteException("Cannot save a read-only tracker.")
 
         try:
             self._workbook_raw.save(self._file_path)
@@ -745,6 +771,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         """
         assert self._target_dt is not None  # Set by analyze()
 
+        start_ts = time.time()
+
         init_sheet = self._workbook_raw.worksheets[SHEET_INIT]
         tmp_date_formula = init_sheet[CELL_DATE].value
         tmp_time_formula = init_sheet[CELL_TIME].value
@@ -758,7 +786,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
             # Evaluate the file and reload it
             evaluate_calc(self._file_path)  # type: ignore path cannot be None
-            self.__load_workbook()
+            self.__load_eval_workbook()
 
         except Exception:
             # Analysis result cannot be trust on exception
@@ -771,6 +799,16 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
                 init_sheet[CELL_DATE].value = tmp_date_formula
                 init_sheet[CELL_TIME].value = tmp_time_formula
                 self.__save_workbook()
+
+                delta_ts = (time.time() - start_ts) * 1000.0
+                logger.debug(
+                    f"[Employee '{self._employee_id}'] "
+                    + (
+                        f"Data analysis failed after {delta_ts:.0f}ms."
+                        if self._workbook_eval is None
+                        else f"Data analyzed in {delta_ts:.0f}ms."
+                    )
+                )
 
             except Exception:
                 # Failed to restore the date and time formula: this is
@@ -858,6 +896,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         if self._file_path is None:
             raise TimeTrackerSaveException("Cannot save a closed tracker.")
 
+        if self._readonly:
+            raise TimeTrackerSaveException("Cannot save a read-only tracker.")
+
         try:
             self._accessor.save_spreadsheet_file(self._file_path)
         except Exception as e:
@@ -880,7 +921,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             raise TimeTrackerCloseException("Cannot close a tracker twice.")
 
         try:
-            self._accessor.release_spreadsheet_file(self._file_path)
+            if not self._readonly:
+                self._accessor.release_spreadsheet_file(self._file_path)
         except Exception as e:
             raise TimeTrackerCloseException() from e
         finally:

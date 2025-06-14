@@ -111,11 +111,21 @@ class SheetsRepoAccessor:
         """
         return self._remote_repository
 
-    def acquire_spreadsheet_file(self, employee_id: str) -> pathlib.Path:
+    @property
+    def repository_available(self) -> bool:
+        """
+        Returns:
+            bool: `True` if the remote repository is available.
+        """
+        return pathlib.Path(self._remote_repository).exists()
+
+    def acquire_spreadsheet_file(
+        self, employee_id: str, readonly: bool = False
+    ) -> pathlib.Path:
         """
         Acquire the employee's spreadsheet file from the remote repository.
 
-        This function performs the following steps:
+        This function performs the following steps (readonly is `False`):
         - Acquire the path to the remote repository
         - Ensure the employee's spreadsheet file exists
         - Acquire a lock on the remote file to prevent concurrent access
@@ -123,8 +133,20 @@ class SheetsRepoAccessor:
         - Copy the remote file to the local cache
         - Return a `Path` object pointing to the cached file
 
+        This function performs the following steps (readonly is `True`):
+        - Acquire the path to the remote repository
+        - Ensure the employee's spreadsheet file exists
+        - Return a `Path` object pointing to the file on the remote
+            repository
+
+        A read-only path must not be saved or released.
+
         This function always returns a valid path or raises an exception
         on failure.
+
+        Args:
+            employee_id (str): Employee's unique identifier.
+            readonly (bool): `True` to acquire in read-only mode.
 
         Returns:
             pathlib.Path: Path to the local cached spreadsheet file.
@@ -156,6 +178,10 @@ class SheetsRepoAccessor:
             )
 
         repo_file = matches[0]
+
+        # In read-only mode, just return the file on the repository
+        if readonly:
+            return repo_file
 
         # Acquire the file lock
         self.__acquire_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
