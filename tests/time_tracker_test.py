@@ -34,7 +34,7 @@ from typing import Optional
 # Internal libraries
 from .test_constants import *
 from core.time_tracker_factory import TimeTrackerFactory
-from core.time_tracker import ClockEvent, ClockAction
+from core.time_tracker import ClockEvent, ClockAction, TimeTrackerAnalysisException, TimeTrackerWriteException, TimeTrackerReadException
 
 # Time tracker factories
 from core.spreadsheets.sheet_time_tracker_factory import *
@@ -402,6 +402,41 @@ def test_save(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
 
     with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
         assert tracker.get_clocks(tc_first_work_day.datetime)[-1] == event
+
+
+@pytest.mark.parametrize(
+    "testcase",
+    ["tc_first_work_day", "tc_clocked_in"],
+    indirect=True,
+)
+def test_get_read_only(factory: TimeTrackerFactory, testcase: TestCaseData):
+    """
+    Open the time tracker in read-only mode and check getters work. 
+    """
+    with factory.create(TEST_EMPLOYEE_ID, testcase.datetime, readonly=True) as tracker:
+        # Employee interface
+        assert tracker.firstname == TEST_EMPLOYEE_FIRSTNAME
+        # Time Tracker interface
+        assert tracker.opening_vacation_days == 22
+        
+        evt_times = [evt.time if evt else None for evt in tracker.get_clocks(testcase.datetime)]
+        assert evt_times == testcase.date_evt_times
+
+        assert tracker.get_vacation(testcase.datetime) == testcase.date_vacation
+        # TODO: tracker.get_attendance_error()
+
+        with pytest.raises(TimeTrackerWriteException):
+            tracker.set_vacation(testcase.datetime, 0.5)
+        with pytest.raises(TimeTrackerWriteException):
+            tracker.register_clock(testcase.datetime, ClockEvent(testcase.datetime.time(), ClockAction.CLOCK_IN))
+        with pytest.raises(TimeTrackerWriteException):
+            tracker.write_clocks(testcase.datetime, tracker.get_clocks(testcase.datetime))
+
+        # TimeTrackerAnalyzer interface
+        with pytest.raises(TimeTrackerAnalysisException):
+            tracker.analyze(testcase.datetime)
+        with pytest.raises(TimeTrackerReadException):
+            tracker.read_day_schedule(testcase.datetime)
 
 
 # TODO: integration tests / edge case tests

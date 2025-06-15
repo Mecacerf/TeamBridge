@@ -141,7 +141,7 @@ class SheetsRepoAccessor:
         - Copy the remote file in the local cache
         - Return a `Path` object pointing to the cached file
 
-        A read-only path must not be saved or released.
+        A read-only path must never be saved. However it must be released.
 
         This function always returns a valid path or raises an exception
         on failure.
@@ -283,19 +283,30 @@ class SheetsRepoAccessor:
             f"Unable to save '{repo_file}' after {SAVE_FILE_TIMEOUT} seconds."
         ) from oserror
 
-    def release_spreadsheet_file(self, local_file: pathlib.Path):
+    def release_spreadsheet_file(
+        self, local_file: pathlib.Path, readonly: bool = False
+    ):
         """
         Release the employee's spreadsheet file, allowing other processes
         to access it again.
 
-        The releasing process follows these steps:
+        The releasing process follows these steps (not read-only):
         - Acquire the path to the remote repository
         - Delete the spreadsheet file from the local cache
         - Delete the lock file in the repository
 
+        If read-only is set:
+        - Delete the spreadsheet file from the local cache
+
+        Note: Not setting the read-only flag for a file acquired in read-
+        only mode is not critical, however setting it for a read/write
+        file won't delete the lock file on the remote, which is critical.
+
         Args:
             local_file (pathlib.Path): Path to the spreadsheet file in
                 the local cache.
+            readonly (bool): `True` if the file was acquired in read-only
+                mode.
 
         Raises:
             TimeoutError: Raised if the remote folder cannot be accessed
@@ -304,11 +315,13 @@ class SheetsRepoAccessor:
                 the timeout.
             OSError: For general I/O or file system-related issues.
         """
-        repo_path = self.__acquire_repository_path()
-        repo_file = repo_path / local_file.name
+        if not readonly:
+            repo_path = self.__acquire_repository_path()
+            repo_file = repo_path / local_file.name
+            self.__release_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
+            logger.debug(f"Released '{repo_file}'.")
+
         local_file.unlink()
-        self.__release_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
-        logger.debug(f"Released '{repo_file}'.")
 
     def list_employee_ids(self) -> list[str]:
         """
