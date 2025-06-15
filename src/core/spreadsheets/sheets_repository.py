@@ -130,14 +130,16 @@ class SheetsRepoAccessor:
         - Ensure the employee's spreadsheet file exists
         - Acquire a lock on the remote file to prevent concurrent access
         - Create a local cache directory if it doesn't already exist
-        - Copy the remote file to the local cache
+        - Copy the remote file in the local cache
         - Return a `Path` object pointing to the cached file
 
         This function performs the following steps (readonly is `True`):
-        - Acquire the path to the remote repository
         - Ensure the employee's spreadsheet file exists
-        - Return a `Path` object pointing to the file on the remote
-            repository
+        - Create a local cache directory if it doesn't already exist
+        - Check the file doesn't already exist in the local cache, which
+            would mean it is already open
+        - Copy the remote file in the local cache
+        - Return a `Path` object pointing to the cached file
 
         A read-only path must not be saved or released.
 
@@ -146,7 +148,8 @@ class SheetsRepoAccessor:
 
         Args:
             employee_id (str): Employee's unique identifier.
-            readonly (bool): `True` to acquire in read-only mode.
+            readonly (bool): `True` to acquire in read-only mode (no lock
+                file created on remote repository).
 
         Returns:
             pathlib.Path: Path to the local cached spreadsheet file.
@@ -156,6 +159,7 @@ class SheetsRepoAccessor:
                 the file lock times out.
             FileNotFoundError: If no spreadsheet file exists for the given
                 employee's id.
+            FileExistsError: The file is already opened in read-only mode.
             OSError: For general operating system-related errors
                 (e.g., I/O issues).
         """
@@ -179,23 +183,43 @@ class SheetsRepoAccessor:
 
         repo_file = matches[0]
 
-        # In read-only mode, just return the file on the repository
-        if readonly:
-            return repo_file
-
-        # Acquire the file lock
-        self.__acquire_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
+        if not readonly:
+            self.__acquire_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
 
         # Make sure the local cache exists
         os.makedirs(self._local_cache, exist_ok=True)
-        # Copy the repository file in the local cache with copy2() to keep
-        # metadata. Note that if a previous operation failed and the lock file
-        # has been manually deleted, this copy may overwrite an old temporary
-        # file.
-        local_file = pathlib.Path(self._local_cache) / repo_file.name
+
+        if readonly:
+            # If the file is opened in read-only mode, add a prefix to make the
+            # difference with read/write files.
+            local_file = pathlib.Path(self._local_cache) / (
+                "readonly_" + repo_file.name
+            )
+
+            # Unlike read/write files, the lock doesn't protect a read-only
+            # file to be opened multiple times by the same program instance.
+            # A check is required to catch programming errors.
+            if local_file.exists():
+                raise FileExistsError(
+                    f"'{repo_file.name}' is already open "
+                    f"('{local_file.name}' exists in local cache)."
+                )
+        else:
+            # When opening in read/write mode, the lock file in the remote
+            # repository protects the file from being opened multiple times.
+            # The file may already exists in the local cache if a previous
+            # operation failed and the lock file wasn't deleted, which is
+            # intended. If the lock file has been acquired, that means a user
+            # manually solved the issue and deleted the lock file. It is now
+            # legal to overwrite an old file in the local cache.
+            local_file = pathlib.Path(self._local_cache) / repo_file.name
+
         shutil.copy2(repo_file, local_file)
 
-        logger.debug(f"Acquired '{repo_file}' in local cache as '{local_file}'.")
+        logger.debug(
+            f"Acquired '{repo_file}' in local cache as '{local_file}' "
+            f"(read-only={readonly})."
+        )
         return local_file
 
     def save_spreadsheet_file(self, local_file: pathlib.Path):

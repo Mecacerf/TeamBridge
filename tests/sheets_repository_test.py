@@ -68,6 +68,25 @@ def test_acquire_sheet(repository: SheetsRepoAccessor):
     assert repo_lock_file.exists()
 
 
+def test_acquire_read_only(repository: SheetsRepoAccessor):
+    """
+    This is the same test as `test_acquire_sheet` but the file should not
+    be locked on the remote repository.
+    """
+    sheet_path = repository.acquire_spreadsheet_file(TEST_EMPLOYEE_ID, readonly=True)
+
+    local_cache_file = Path(TEST_LOCAL_CACHE_FOLDER) / (
+        "readonly_" + TEST_SPREADSHEET_FILE
+    )
+
+    # Assert that acquired file is at the expected place
+    assert str(local_cache_file.resolve()) == str(sheet_path.resolve())
+    # Assert that file exists in local cache and is locked on repository
+    assert sheet_path.exists()
+    # Assert no lock file exists
+    assert len(list(Path(TEST_LOCAL_CACHE_FOLDER).glob("*.lock"))) == 0
+
+
 def test_acquire_twice(repository: SheetsRepoAccessor):
     """
     Acquire the same spreadsheet file twice and test that it fails the
@@ -76,6 +95,17 @@ def test_acquire_twice(repository: SheetsRepoAccessor):
     repository.acquire_spreadsheet_file(TEST_EMPLOYEE_ID)
     with pytest.raises(TimeoutError):
         repository.acquire_spreadsheet_file(TEST_EMPLOYEE_ID)
+
+
+def test_acquire_twice_read_only(repository: SheetsRepoAccessor):
+    """
+    Acquire the same spreadsheet file twice in read-only mode and test
+    that it fails the second time, correctly preventing multiple accesses
+    to the same file (by one program instance).
+    """
+    repository.acquire_spreadsheet_file(TEST_EMPLOYEE_ID, readonly=True)
+    with pytest.raises(FileExistsError):
+        repository.acquire_spreadsheet_file(TEST_EMPLOYEE_ID, readonly=True)
 
 
 def test_acquire_sequentially(repository: SheetsRepoAccessor):
