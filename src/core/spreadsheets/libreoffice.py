@@ -42,7 +42,8 @@ _libreoffice_path = None
 
 def find_libreoffice() -> Optional[str]:
     """
-    Attempts to find the LibreOffice installation path across Windows and Linux.
+    Attempts to find the LibreOffice installation path across Windows
+    and Linux.
     Returns the path to soffice if found, otherwise None.
 
     Warning: the Linux implementation is not tested yet.
@@ -146,10 +147,11 @@ def evaluate_calc(file_path: pathlib.Path):
 
     os.makedirs(LIBREOFFICE_CACHE_FOLDER, exist_ok=True)
 
-    # Create and execute the LibreOffice command to evaluate and save a spreadsheet document.
-    # The evaluated copy of the original document is placed in the cache folder, instead
-    # of directly replacing the original one. This way the original document doesn't get
-    # corrupted if an error occurs. The replacement (file move) is done only on success.
+    # Create and execute the LibreOffice command to evaluate and save a
+    # spreadsheet document. The evaluated copy of the original document is
+    # placed in the cache folder, instead of directly replacing the original
+    # one. This way the original document doesn't get corrupted if an error
+    # occurs. The replacement (file move) is done only on success.
     command = [
         _libreoffice_path,  # LibreOffice executable path
         "--headless",  # Run in headless (no GUI) mode
@@ -186,5 +188,6 @@ def evaluate_calc(file_path: pathlib.Path):
             f"stderr: {result.stderr.decode(errors='ignore')}"
         )
 
-    # Evaluation succeeded without any error: replace original file with evaluated one
+    # Evaluation succeeded without any error: replace original file with
+    # evaluated one
     os.replace(tmp_file, file_path)

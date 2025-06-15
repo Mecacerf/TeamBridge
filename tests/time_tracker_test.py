@@ -228,6 +228,8 @@ def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
         assert tracker.analyzed is False
         tracker.analyze(tc_first_work_day.datetime)
         assert tracker.analyzed is True
+        # This read doesn't raise
+        tracker.read_day_worked_time(tc_first_work_day.datetime)
 
 
 @pytest.mark.parametrize(
