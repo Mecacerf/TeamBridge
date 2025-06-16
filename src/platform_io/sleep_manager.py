@@ -3,11 +3,11 @@
 File: sleep_management.py
 Author: Bastian Cerf
 Date: 09/05/2025
-Description: 
+Description:
     This module allows to enable / disable the program sleep mode.
     It is used to prevent the computer from going to sleep while the program is running.
     Currently, it only works on Windows.
-    
+
 Company: Mecacerf SA
 Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
@@ -21,29 +21,28 @@ import screen_brightness_control as sbc
 # Import thread pool executor to asynchronously set the screen brightness.
 from concurrent.futures import ThreadPoolExecutor
 
-__all__ = ['SleepManager']
+__all__ = ["SleepManager"]
 
 LOGGER = logging.getLogger(__name__)
 
 # Windows constants
-ES_CONTINUOUS       = 0x80000000 # Tells the system to keep applying the setting.
-ES_SYSTEM_REQUIRED  = 0x00000001 # Prevents sleep.
-ES_DISPLAY_REQUIRED = 0x00000002 # Keeps the screen from turning off.
+ES_CONTINUOUS = 0x80000000  # Tells the system to keep applying the setting.
+ES_SYSTEM_REQUIRED = 0x00000001  # Prevents sleep.
+ES_DISPLAY_REQUIRED = 0x00000002  # Keeps the screen from turning off.
 
 # Display ID to control
 DISPLAY = 0
+
 
 class SleepManager:
     """
     The class manages different computer parameters such as sleep mode and screen
     brightness. It basically disable the OS sleep mode that would prevent the user
-    from interacting with the application and provides a soft sleep mode, that 
+    from interacting with the application and provides a soft sleep mode, that
     typically involves reducing the screen brightness.
     """
 
-    def __init__(self, 
-                 low_brightness_lvl: int, 
-                 high_brightness_lvl: int = None):
+    def __init__(self, low_brightness_lvl: int, high_brightness_lvl: int = None):
         """
         Initialize the sleep manager.
         If the high brightness level is not set, it will use the current value.
@@ -63,7 +62,9 @@ class SleepManager:
             try:
                 self._high_brightness_lvl = sbc.get_brightness(display=DISPLAY)[0]
             except sbc.ScreenBrightnessError:
-                LOGGER.error("Unable to retrieve current screen brightness.", exc_info=True)
+                LOGGER.error(
+                    "Unable to retrieve current screen brightness.", exc_info=True
+                )
                 # Use a default value.
                 self._high_brightness_lvl = 100
 
@@ -71,8 +72,12 @@ class SleepManager:
         self._executor = ThreadPoolExecutor(max_workers=1)
 
         # Log the sleep manager initialization.
-        LOGGER.info(("Initialized the sleep manager "
-                    f"[low_brightness={self._low_brightness_lvl}, high_brightness={self._high_brightness_lvl}]"))
+        LOGGER.info(
+            (
+                "Initialized the sleep manager "
+                f"[low_brightness={self._low_brightness_lvl}, high_brightness={self._high_brightness_lvl}]"
+            )
+        )
 
     def enable(self):
         """
@@ -85,7 +90,8 @@ class SleepManager:
         try:
             # Call the thread execution state of win32 by using ctypes.
             import ctypes
-            FLAGS = (ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)
+
+            FLAGS = ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
             ctypes.windll.kernel32.SetThreadExecutionState(FLAGS)
         except:
             LOGGER.error("Unable to disable Windows sleep mode.")
@@ -100,10 +106,11 @@ class SleepManager:
         # Do not disable twice.
         if not self._enabled:
             return
-        
-        try:    
+
+        try:
             # Call the thread execution state of win32 by using ctypes.
             import ctypes
+
             # Remove system and display flags.
             ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
         except:
@@ -123,7 +130,7 @@ class SleepManager:
             bool: soft sleep mode status
         """
         return self._soft_sleep
-    
+
     @soft_sleep.setter
     def soft_sleep(self, status: bool):
         """
@@ -145,7 +152,9 @@ class SleepManager:
             LOGGER.info("Entered sleep mode.")
         else:
             # Set the brightness level to high value.
-            self._executor.submit(self.__set_brightness_async, self._high_brightness_lvl)
+            self._executor.submit(
+                self.__set_brightness_async, self._high_brightness_lvl
+            )
             LOGGER.info("Exited sleep mode.")
 
     def __set_brightness_async(self, brightness: int):

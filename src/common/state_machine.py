@@ -12,14 +12,9 @@ Contact: info@mecacerf.ch
 """
 
 from abc import ABC
-from typing import Generic, TypeVar, Optional, cast
+from typing import Optional
 
-
-# Define generic state machine class
-T = TypeVar("T", bound="IStateMachine")
-
-
-class IStateBehavior(ABC, Generic[T]):
+class IStateBehavior(ABC):
     """
     Base interface that defines how a state behaves.
 
@@ -30,16 +25,8 @@ class IStateBehavior(ABC, Generic[T]):
     type of `fsm`.
     """
 
-    @property
-    def fsm(self) -> T:
-        """
-        Returns:
-            T: The state machine the state belongs to.
-        """
-        return self._fsm
-
-    @fsm.setter
-    def fsm(self, value: T):
+    def _set_fsm(self, value: "IStateMachine"):
+        """Internal use only: set the state machine reference"""
         self._fsm = value
 
     def entry(self):
@@ -48,7 +35,7 @@ class IStateBehavior(ABC, Generic[T]):
         """
         pass
 
-    def do(self) -> Optional["IStateBehavior[T]"]:
+    def do(self) -> Optional["IStateBehavior"]:
         """
         State running method.
 
@@ -79,7 +66,7 @@ class IStateMachine(ABC):
     entry(), do() and exit() methods of the states.
     """
 
-    def __init__(self, init_state: "IStateBehavior[T]"):
+    def __init__(self, init_state: IStateBehavior):
         """
         Create the state machine and enter the given state.
 
@@ -89,7 +76,7 @@ class IStateMachine(ABC):
         self._init_state = init_state
         self._state = None
 
-    def __make_transition(self, state: "IStateBehavior[T]"):
+    def __make_transition(self, state: IStateBehavior):
         """
         Internal method to change state. Exit the previous state and
         enter the new one.
@@ -99,7 +86,7 @@ class IStateMachine(ABC):
             self._state.exit()
 
         self._state = state
-        self._state.fsm = cast(T, self)  # T is a subtype of IStateMachine
+        self._state._set_fsm(self)  # type: ignore friend class
         self._state.entry()
 
         self.on_state_changed(old_state, self._state)
@@ -118,7 +105,7 @@ class IStateMachine(ABC):
             self.__make_transition(next_state)
 
     def on_state_changed(
-        self, old_state: Optional["IStateBehavior[T]"], new_state: "IStateBehavior[T]"
+        self, old_state: Optional[IStateBehavior], new_state: IStateBehavior
     ):
         """
         This method can be overriden to be notified on state transition.
