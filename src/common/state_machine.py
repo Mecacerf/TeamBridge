@@ -3,8 +3,8 @@
 File: state_machine.py
 Author: Bastian Cerf
 Date: 17/04/2025
-Description: 
-    Define the base interfaces to build a finite state machine. 
+Description:
+    Define the base interfaces to build a finite state machine.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -12,83 +12,35 @@ Contact: info@mecacerf.ch
 """
 
 from abc import ABC
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, Optional, cast
 
-class IStateMachine(ABC):
-    """
-    Base class that runs a finite state machine.
-    Provide the base interface to make state transitions and call the
-    entry(), do() and exit() methods of the states.
-    """
-
-    def __init__(self, init_state: "IStateBehavior"):
-        """
-        Create the state machine and enter the given state.
-
-        Args:
-            init_state: `StateBehavior` initial state
-        """
-        # Set init state
-        self._init_state = init_state
-        # Current state is initially None
-        self._state = None
-
-    def __make_transition(self, state: "IStateBehavior"):
-        """
-        Internal method to change state. Exit the previous state and enter the new one.
-        """
-        # Exit current state
-        old_state = self._state
-        if self._state:
-            self._state.exit()
-        # Set the new state
-        self._state = state
-        # Give the reference to the state machine to the new state
-        self._state._fsm = self
-        # Call the state entry method
-        self._state.entry()
-
-        # Notify of the state transition
-        self.on_state_changed(old_state)
-        
-    def run(self):
-        """
-        Run the state machine. Perform state transition if necessary.
-        """
-        # Check if initializing
-        if self._state is None:
-            self.__make_transition(self._init_state)
-        # Call the do method of the current state 
-        next_state = self._state.do()
-        # Check if a state transition should be performed
-        if next_state:
-            self.__make_transition(next_state)
-
-    def on_state_changed(self, old_state: "IStateBehavior"):
-        """
-        This method can be overriden to be notified on state transition.
-
-        Args:
-            old_state: `IStateBehavior` reference to old state
-        """
-        pass
 
 # Define generic state machine class
-T = TypeVar('T', bound=IStateMachine)
+T = TypeVar("T", bound="IStateMachine")
+
 
 class IStateBehavior(ABC, Generic[T]):
     """
     Base interface that defines how a state behaves.
-    The type T is defined by the inheritor of the state. It allows to work
-    with a known subclass of IStateMachine, which is great to get better 
-    static code analysis and autocompletion.
+
+    A state always holds a reference to its parent state machine object
+    that is retrievable by the `fsm` property. The type of `fsm` is `T`
+    and is defined by the subclass. It must be bound to `IStateMachine`
+    (i.e. inherits it). It allows to tell the type checker the exact
+    type of `fsm`.
     """
 
-    def __init__(self):
+    @property
+    def fsm(self) -> T:
         """
-        Create a state behavior object.
+        Returns:
+            T: The state machine the state belongs to.
         """
-        self._fsm: T = None
+        return self._fsm
+
+    @fsm.setter
+    def fsm(self, value: T):
+        self._fsm = value
 
     def entry(self):
         """
@@ -96,12 +48,13 @@ class IStateBehavior(ABC, Generic[T]):
         """
         pass
 
-    def do(self) -> "IStateBehavior":
+    def do(self) -> Optional["IStateBehavior[T]"]:
         """
         State running method.
 
         Returns:
-            IStateBehavior: a new state object if a transition should be performed
+            Optional[IStateBehavior]: A new state object if a transition
+                should be performed.
         """
         pass
 
@@ -111,8 +64,67 @@ class IStateBehavior(ABC, Generic[T]):
         """
         pass
 
-    def __repr__(self):
+    def __str__(self):
         """
-        Provide a default representation of the state.
+        Provide a default state description.
         """
         return self.__class__.__name__
+
+
+class IStateMachine(ABC):
+    """
+    Base class that runs a finite state machine.
+
+    Provide the base interface to make state transitions and call the
+    entry(), do() and exit() methods of the states.
+    """
+
+    def __init__(self, init_state: "IStateBehavior[T]"):
+        """
+        Create the state machine and enter the given state.
+
+        Args:
+            init_state (IStateBehavior): Initial state.
+        """
+        self._init_state = init_state
+        self._state = None
+
+    def __make_transition(self, state: "IStateBehavior[T]"):
+        """
+        Internal method to change state. Exit the previous state and
+        enter the new one.
+        """
+        old_state = self._state
+        if self._state:
+            self._state.exit()
+
+        self._state = state
+        self._state.fsm = cast(T, self)  # T is a subtype of IStateMachine
+        self._state.entry()
+
+        self.on_state_changed(old_state, self._state)
+
+    def run(self):
+        """
+        Run the state machine. Perform state transition if necessary.
+        """
+        if self._state is None:  # Transition to initial state
+            self.__make_transition(self._init_state)
+
+        # The do() method may return a transition
+        assert self._state is not None
+        next_state = self._state.do()
+        if next_state:
+            self.__make_transition(next_state)
+
+    def on_state_changed(
+        self, old_state: Optional["IStateBehavior[T]"], new_state: "IStateBehavior[T]"
+    ):
+        """
+        This method can be overriden to be notified on state transition.
+
+        Args:
+            old_state (IStateBehavior): Old state.
+            new_state (IStateBehavior): New state (= self._state).
+        """
+        pass
