@@ -3,7 +3,7 @@
 File: time_tracker_test.py
 Author: Bastian Cerf
 Date: 17/02/2025
-Description: 
+Description:
     Unit test the ITodayTimeTracker interface implementations to validate expected behaviors.
 Usage:
     Use pytest to execute the tests. You can run it by executing the command below in the TeamBridge/ folder.
@@ -19,9 +19,16 @@ import pytest
 import datetime as dt
 from typing import Callable
 from collections.abc import Generator
+
 # Specific implementation imports
 from src.core.time_tracker import *
-from src.core.spreadsheet_time_tracker import SpreadsheetTimeTracker, CELL_DATE, CELL_HOUR, SHEET_INIT, SHEET_JANUARY
+from src.core.spreadsheet_time_tracker import (
+    SpreadsheetTimeTracker,
+    CELL_DATE,
+    CELL_HOUR,
+    SHEET_INIT,
+    SHEET_JANUARY,
+)
 from src.core.spreadsheets_repository import SpreadsheetsRepository
 
 ################################################
@@ -31,7 +38,7 @@ from src.core.spreadsheets_repository import SpreadsheetsRepository
 # General tests configuration
 TEST_EMPLOYEE_ID = "unit-test"
 # Test date and time
-TEST_DATE = dt.date(year=2025, month=3, day=10) # 10 March 2025 is a monday
+TEST_DATE = dt.date(year=2025, month=3, day=10)  # 10 March 2025 is a monday
 TEST_TIME = dt.time(hour=8, minute=10)
 TEST_DATETIME = dt.datetime.combine(date=TEST_DATE, time=TEST_TIME)
 # Expected values at configured date and time
@@ -39,7 +46,7 @@ TEST_DATETIME = dt.datetime.combine(date=TEST_DATE, time=TEST_TIME)
 TEST_DAILY_SCHEDULE = dt.timedelta(hours=8, minutes=17)
 # Total time the employee should have worked from the beginning of the month
 # Equal to number of working days times daily schedule
-TEST_MONTHLY_BALANCE_NO_WORK = (TEST_DAILY_SCHEDULE * 6)
+TEST_MONTHLY_BALANCE_NO_WORK = TEST_DAILY_SCHEDULE * 6
 
 # Spreadsheet Time Tracker
 SPREADSHEET_SAMPLES_FOLDER = "tests/assets/"
@@ -51,6 +58,7 @@ SPREADSHEET_TEST_FILE_NAME = f"{TEST_EMPLOYEE_ID}-template.xlsx"
 #      Spreadsheet Time Tracker provider       #
 ################################################
 
+
 def build_spreadsheet_time_tracker(employee_id: str, date: dt.date) -> BaseTimeTracker:
     """
     Build an ITodayTimeTracker that uses spreadsheet files for data storage.
@@ -58,19 +66,24 @@ def build_spreadsheet_time_tracker(employee_id: str, date: dt.date) -> BaseTimeT
     Returns:
         ITodayTimeTracker: specific implementation
     """
-    # Ensure the 
-    # Create the database provider 
-    database = SpreadsheetsRepository(repository_path=SPREADSHEET_SAMPLES_TEST_FOLDER, 
-                                    local_cache=SPREADSHEET_LOCAL_CACHE_TEST_FOLDER)
+    # Ensure the
+    # Create the database provider
+    database = SpreadsheetsRepository(
+        repository_path=SPREADSHEET_SAMPLES_TEST_FOLDER,
+        local_cache=SPREADSHEET_LOCAL_CACHE_TEST_FOLDER,
+    )
     # Create and return instance
     return SpreadsheetTimeTracker(database, employee_id, date)
 
-def evaluate_spreadsheet_time_tracker(time_tracker: SpreadsheetTimeTracker, date: dt.datetime):
+
+def evaluate_spreadsheet_time_tracker(
+    time_tracker: SpreadsheetTimeTracker, date: dt.datetime
+):
     """
     Evaluate the spreadsheet time tracker at given date and time.
     """
     # For test purpose, access private attributes
-    # Get the raw init sheet 
+    # Get the raw init sheet
     init_sheet = time_tracker._workbook_raw.worksheets[SHEET_INIT]
     # Overwrite the TODAY() function by the test date and time
     # Write the date
@@ -84,47 +97,55 @@ def evaluate_spreadsheet_time_tracker(time_tracker: SpreadsheetTimeTracker, date
     time_tracker.commit()
     time_tracker.evaluate()
 
+
 @pytest.fixture
 def arrange_spreadsheet_time_tracker():
     """
     Prepare the cache folder that will be used to store temporary spreadsheet file(s) for the tests.
     """
     import shutil, pathlib
+
     # Get source samples and cache folder
     samples = pathlib.Path(SPREADSHEET_SAMPLES_FOLDER)
     samples_cache = pathlib.Path(SPREADSHEET_SAMPLES_TEST_FOLDER)
     local_cache = pathlib.Path(SPREADSHEET_LOCAL_CACHE_TEST_FOLDER)
-    # Check samples folder exists 
+    # Check samples folder exists
     if not samples.exists():
         raise FileNotFoundError(f"Samples folder not found at {samples.resolve()}")
-    
+
     # Remove with privileges
     def remove_readonly(func, path, exc_info):
-            """Changes the file attribute and retries deletion if permission is denied."""
-            import os
-            os.chmod(path, 0o777) # Grant full permissions
-            func(path) # Retry the function
+        """Changes the file attribute and retries deletion if permission is denied."""
+        import os
+
+        os.chmod(path, 0o777)  # Grant full permissions
+        func(path)  # Retry the function
 
     # Delete old cache folder if existing
     if samples_cache.exists():
         shutil.rmtree(samples_cache, onexc=remove_readonly)
     # Delete local cache folder if last time tracker wasn't correctly closed
     if local_cache.exists():
-        shutil.rmtree(local_cache, onexc=remove_readonly)   
+        shutil.rmtree(local_cache, onexc=remove_readonly)
     # Copy samples to test samples cache
     shutil.copytree(samples, samples_cache)
+
 
 #################################################
 # Time tracker implementation provider fixtures #
 #################################################
 
-@pytest.fixture(params=[
-    # List of (implementation provider methods, evaluate method)
-    (build_spreadsheet_time_tracker, evaluate_spreadsheet_time_tracker)
-])
-def time_tracker_provider(request, 
-                          arrange_spreadsheet_time_tracker
-                          ) -> tuple[Callable[[str, dt.date], BaseTimeTracker], Callable[[BaseTimeTracker, dt.datetime], None]]:
+
+@pytest.fixture(
+    params=[
+        # List of (implementation provider methods, evaluate method)
+        (build_spreadsheet_time_tracker, evaluate_spreadsheet_time_tracker)
+    ]
+)
+def time_tracker_provider(request, arrange_spreadsheet_time_tracker) -> tuple[
+    Callable[[str, dt.date], BaseTimeTracker],
+    Callable[[BaseTimeTracker, dt.datetime], None],
+]:
     """
     Parametrized fixture for retrieving instances of time tracker implementations.
 
@@ -135,8 +156,13 @@ def time_tracker_provider(request,
     """
     return request.param
 
+
 @pytest.fixture
-def default_time_tracker_provider(time_tracker_provider) -> Generator[tuple[BaseTimeTracker, Callable[[BaseTimeTracker, dt.datetime], None]], None, None]:
+def default_time_tracker_provider(
+    time_tracker_provider,
+) -> Generator[
+    tuple[BaseTimeTracker, Callable[[BaseTimeTracker, dt.datetime], None]], None, None
+]:
     """
     Get a default time tracker opened for default test employee at default test date.
     Automatically manages opening and closing.
@@ -148,16 +174,18 @@ def default_time_tracker_provider(time_tracker_provider) -> Generator[tuple[Base
     """
     # Unpack the provider methods
     provider, evaluate = time_tracker_provider
-    # Create the time tracker for the default employee 
+    # Create the time tracker for the default employee
     employee = provider(TEST_EMPLOYEE_ID, TEST_DATE)
     # Give the time tracker and the evaluation method to the test
     yield (employee, evaluate)
     # Close the time tracker
     employee.close()
 
+
 ################################################
 #           Time tracker unit tests            #
 ################################################
+
 
 def test_open_employee(default_time_tracker_provider):
     """
@@ -170,6 +198,7 @@ def test_open_employee(default_time_tracker_provider):
     # Check expected firstname and name
     assert employee.get_firstname() == "Meca"
     assert employee.get_name() == "Cerf"
+
 
 def test_read_unavailable(default_time_tracker_provider):
     """
@@ -192,6 +221,7 @@ def test_read_unavailable(default_time_tracker_provider):
     with pytest.raises(TimeTrackerReadException):
         employee.get_daily_balance()
 
+
 def test_evaluation(default_time_tracker_provider):
     """
     Evaluate the employee's time tracker and check initial state.
@@ -200,8 +230,8 @@ def test_evaluation(default_time_tracker_provider):
     employee, evaluate = default_time_tracker_provider
 
     # Always accessible
-    assert employee.is_clocked_in_today() is False # Not clocked in
-    assert not employee.get_clock_events_today() # No event today
+    assert employee.is_clocked_in_today() is False  # Not clocked in
+    assert not employee.get_clock_events_today()  # No event today
 
     # Evaluation is required before accessing employee's evaluated data
     assert employee.is_readable() is False
@@ -209,7 +239,7 @@ def test_evaluation(default_time_tracker_provider):
     assert employee.is_readable() is True
 
     # Check initial state
-    # Check daily schedule 
+    # Check daily schedule
     assert employee.get_daily_schedule() == TEST_DAILY_SCHEDULE
     # No work today
     assert employee.get_daily_worked_time().total_seconds() == 0
@@ -218,13 +248,14 @@ def test_evaluation(default_time_tracker_provider):
     # No work this month, complete month until the date is due
     assert employee.get_monthly_balance() == -TEST_MONTHLY_BALANCE_NO_WORK
 
+
 def test_clock_in(default_time_tracker_provider):
     """
     Clock in the employee and verify the registration.
     """
     # Unpack the provider
     employee, evaluate = default_time_tracker_provider
-    
+
     # Act
     # The write functions shall be accessible even though the time tracker is not readable
     # Create clock in event at 7h35
@@ -235,12 +266,12 @@ def test_clock_in(default_time_tracker_provider):
     employee.commit()
 
     # Assert
-    assert employee.is_clocked_in_today() is True # Now the employee is clocked in
-    assert len(employee.get_clock_events_today()) == 1 # One clock event today
+    assert employee.is_clocked_in_today() is True  # Now the employee is clocked in
+    assert len(employee.get_clock_events_today()) == 1  # One clock event today
 
-    event = employee.get_clock_events_today()[0] # Get clock event
-    assert event.action == ClockAction.CLOCK_IN # Clock in event
-    assert event.time == clock_in_time # At expected time
+    event = employee.get_clock_events_today()[0]  # Get clock event
+    assert event.action == ClockAction.CLOCK_IN  # Clock in event
+    assert event.time == clock_in_time  # At expected time
 
     # Evaluate before accessing next values
     # Evaluate at clock in time: no worked time for now
@@ -251,14 +282,19 @@ def test_clock_in(default_time_tracker_provider):
     assert employee.get_daily_balance() == -TEST_DAILY_SCHEDULE
 
     # Evaluate at 8h10
-    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=8, minute=10)))
+    evaluate(
+        employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=8, minute=10))
+    )
 
     # Check worked time from 7h35 to 8h10 is 35 minutes
     worked_time = dt.timedelta(minutes=35)
     assert employee.get_daily_worked_time() == worked_time
     # Daily balance has lost 35 minutes on the daily schedule, as well as monthly balance
     assert employee.get_daily_balance() == (worked_time - employee.get_daily_schedule())
-    assert employee.get_monthly_balance() == (worked_time - TEST_MONTHLY_BALANCE_NO_WORK)
+    assert employee.get_monthly_balance() == (
+        worked_time - TEST_MONTHLY_BALANCE_NO_WORK
+    )
+
 
 def test_clock_out(default_time_tracker_provider):
     """
@@ -266,9 +302,9 @@ def test_clock_out(default_time_tracker_provider):
     """
     # Unpack the provider
     employee, evaluate = default_time_tracker_provider
-    
+
     # Act
-    # Create clock in event at 7h35 
+    # Create clock in event at 7h35
     clock_in_time = dt.time(hour=7, minute=35)
     event_in = ClockEvent(clock_in_time, ClockAction.CLOCK_IN)
     # Create clock out event at 12h10
@@ -280,30 +316,35 @@ def test_clock_out(default_time_tracker_provider):
     employee.commit()
 
     # Assert
-    assert employee.is_clocked_in_today() is False # Clocked out
-    assert len(employee.get_clock_events_today()) == 2 # Two clock events today
+    assert employee.is_clocked_in_today() is False  # Clocked out
+    assert len(employee.get_clock_events_today()) == 2  # Two clock events today
 
-    event = employee.get_clock_events_today()[0] # Get clock in event
-    assert event.action == ClockAction.CLOCK_IN # Clock in event
-    assert event.time == clock_in_time # At expected time
+    event = employee.get_clock_events_today()[0]  # Get clock in event
+    assert event.action == ClockAction.CLOCK_IN  # Clock in event
+    assert event.time == clock_in_time  # At expected time
 
-    event = employee.get_clock_events_today()[1] # Get clock out event
-    assert event.action == ClockAction.CLOCK_OUT # Clock in event
-    assert event.time == clock_out_time # At expected time
+    event = employee.get_clock_events_today()[1]  # Get clock out event
+    assert event.action == ClockAction.CLOCK_OUT  # Clock in event
+    assert event.time == clock_out_time  # At expected time
 
     # Evaluate before accessing next values
     # Evaluate at clock out time
     evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=clock_out_time))
 
-    # Clocked in at 7h35 and clocked out at 12h10 results in 4h35 of work 
+    # Clocked in at 7h35 and clocked out at 12h10 results in 4h35 of work
     worked_time = dt.timedelta(hours=4, minutes=35, seconds=0)
     assert employee.get_daily_worked_time() == worked_time
     assert employee.get_daily_balance() == (worked_time - employee.get_daily_schedule())
-    assert employee.get_monthly_balance() == (worked_time - TEST_MONTHLY_BALANCE_NO_WORK)
+    assert employee.get_monthly_balance() == (
+        worked_time - TEST_MONTHLY_BALANCE_NO_WORK
+    )
 
     # Checking the worked time at 12h40 doesn't change the result since the employee is clocked out
-    evaluate(employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=12, minute=40)))
+    evaluate(
+        employee, dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=12, minute=40))
+    )
     assert employee.get_daily_worked_time() == worked_time
+
 
 def test_full_day(default_time_tracker_provider):
     """
@@ -314,16 +355,16 @@ def test_full_day(default_time_tracker_provider):
     Clock out: 12h20
     Clock in: 13h
     Clock out: 16h40
-    Worked time: 2h + 2h05 + 3h40 = 7h45 
+    Worked time: 2h + 2h05 + 3h40 = 7h45
     """
     # Unpack the provider
     employee, evaluate = default_time_tracker_provider
-    
+
     # Act
     # Create clock in/out events
     clock_in_time_0 = dt.time(hour=8)
     event_in_0 = ClockEvent(clock_in_time_0, ClockAction.CLOCK_IN)
-    clock_out_time_0 = dt.time(hour=10)    
+    clock_out_time_0 = dt.time(hour=10)
     event_out_0 = ClockEvent(clock_out_time_0, ClockAction.CLOCK_OUT)
     clock_in_time_1 = dt.time(hour=10, minute=15)
     event_in_1 = ClockEvent(clock_in_time_1, ClockAction.CLOCK_IN)
@@ -336,7 +377,7 @@ def test_full_day(default_time_tracker_provider):
 
     # Create events list
     events = [event_in_0, event_out_0, event_in_1, event_out_1, event_in_2, event_out_2]
-    
+
     # Register events
     for event in events:
         employee.register_clock(event)
@@ -344,7 +385,7 @@ def test_full_day(default_time_tracker_provider):
     employee.commit()
 
     # Assert
-    assert employee.is_clocked_in_today() is False # Clocked out
+    assert employee.is_clocked_in_today() is False  # Clocked out
     assert len(employee.get_clock_events_today()) == len(events)
 
     # Verify registered events
@@ -361,7 +402,10 @@ def test_full_day(default_time_tracker_provider):
     worked_time = dt.timedelta(hours=7, minutes=45, seconds=0)
     assert employee.get_daily_worked_time() == worked_time
     assert employee.get_daily_balance() == (worked_time - employee.get_daily_schedule())
-    assert employee.get_monthly_balance() == (worked_time - TEST_MONTHLY_BALANCE_NO_WORK)
+    assert employee.get_monthly_balance() == (
+        worked_time - TEST_MONTHLY_BALANCE_NO_WORK
+    )
+
 
 def test_wrong_clock_action(default_time_tracker_provider):
     """
@@ -399,13 +443,14 @@ def test_wrong_clock_action(default_time_tracker_provider):
     with pytest.raises(ValueError):
         employee.register_clock(event_out)
 
+
 def test_unordered_clock_events(default_time_tracker_provider):
     """
     Try to register unordered clock events and verify that it throws errors.
     """
     # Unpack the provider
     employee, _ = default_time_tracker_provider
-    
+
     # Register a clock in at 11h
     event_in = ClockEvent(dt.time(hour=11), ClockAction.CLOCK_IN)
     employee.register_clock(event_in)
@@ -416,10 +461,11 @@ def test_unordered_clock_events(default_time_tracker_provider):
     with pytest.raises(ValueError):
         employee.register_clock(event_out)
 
+
 def test_multiple_openings(time_tracker_provider):
     """
     Try to open the same time tracker multiple times without evaluating it and see
-    if the clock events correctly persist. 
+    if the clock events correctly persist.
     """
     # Unpack the provider methods
     provider, _ = time_tracker_provider
@@ -459,6 +505,7 @@ def test_multiple_openings(time_tracker_provider):
     # Close
     employee.close()
 
+
 def test_monthly_daily_balance(time_tracker_provider):
     """
     Verify the monthly and daily balance.
@@ -487,9 +534,11 @@ def test_monthly_daily_balance(time_tracker_provider):
     # Close the time tracker
     employee.close()
 
+
 #################################################
 # Spreadsheets Time tracker specific unit tests #
 #################################################
+
 
 def test_spreadsheet_time_tracker_write(arrange_spreadsheet_time_tracker):
     """
@@ -497,8 +546,8 @@ def test_spreadsheet_time_tracker_write(arrange_spreadsheet_time_tracker):
     """
     # Define test constants
     DATE = dt.date(year=2025, day=12, month=3)
-    CLOCK_IN_CELL_AT_DATE = 'G20'
-    CLOCK_OUT_CELL_AT_DATE = 'H20'
+    CLOCK_IN_CELL_AT_DATE = "G20"
+    CLOCK_OUT_CELL_AT_DATE = "H20"
     # Build the time tracker by directly accessing the build function
     employee = build_spreadsheet_time_tracker(TEST_EMPLOYEE_ID, DATE)
     # Write a clock in event
@@ -513,12 +562,16 @@ def test_spreadsheet_time_tracker_write(arrange_spreadsheet_time_tracker):
 
     # Get file path
     from pathlib import Path
+
     file_path = Path(SPREADSHEET_SAMPLES_TEST_FOLDER) / Path(SPREADSHEET_TEST_FILE_NAME)
     # Use openpyxl to verify the file
     import openpyxl
+
     workbook = openpyxl.load_workbook(filename=file_path)
     # Get sheet for test month
-    month_sheet = workbook.worksheets[DATE.month - 1 + SHEET_JANUARY] # Month 0 is January
+    month_sheet = workbook.worksheets[
+        DATE.month - 1 + SHEET_JANUARY
+    ]  # Month 0 is January
     # Check values
     assert month_sheet[CLOCK_IN_CELL_AT_DATE].value == dt.time(hour=8, minute=35)
     assert month_sheet[CLOCK_OUT_CELL_AT_DATE].value == dt.time(hour=9, minute=45)

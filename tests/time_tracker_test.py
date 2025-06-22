@@ -34,7 +34,13 @@ from typing import Optional
 # Internal libraries
 from .test_constants import *
 from core.time_tracker_factory import TimeTrackerFactory
-from core.time_tracker import ClockEvent, ClockAction, TimeTrackerAnalysisException, TimeTrackerWriteException, TimeTrackerReadException
+from core.time_tracker import (
+    ClockEvent,
+    ClockAction,
+    TimeTrackerAnalysisException,
+    TimeTrackerWriteException,
+    TimeTrackerReadException,
+)
 
 # Time tracker factories
 from core.spreadsheets.sheet_time_tracker_factory import *
@@ -128,7 +134,7 @@ def tc_first_work_day() -> TestCaseData:
         yty_balance=dt.timedelta(hours=2),
         # Year / remaining vacation doesn't depend on current date
         year_vacation=2.0,  # Planned
-        rem_vacation=20,    # Remaining
+        rem_vacation=20,  # Remaining
     )
 
 
@@ -204,7 +210,7 @@ def test_open(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
     """
     with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
         assert tracker.employee_id == TEST_EMPLOYEE_ID
-        assert tracker.name == TEST_EMPLOYEE_NAME       
+        assert tracker.name == TEST_EMPLOYEE_NAME
         assert tracker.firstname == TEST_EMPLOYEE_FIRSTNAME
 
 
@@ -243,11 +249,17 @@ def test_get_clock_events(factory: TimeTrackerFactory, testcase: TestCaseData):
     expected ones.
     """
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime) as tracker:
-        evt_times = [evt.time if evt else None for evt in tracker.get_clocks(testcase.datetime)]
+        evt_times = [
+            evt.time if evt else None for evt in tracker.get_clocks(testcase.datetime)
+        ]
         assert evt_times == testcase.date_evt_times
 
 
-def test_is_clocked_in(factory: TimeTrackerFactory, tc_clocked_in: TestCaseData, tc_first_work_day: TestCaseData):
+def test_is_clocked_in(
+    factory: TimeTrackerFactory,
+    tc_clocked_in: TestCaseData,
+    tc_first_work_day: TestCaseData,
+):
     """
     Open the time tracker at a date that is still in progress and verify
     that the employee is clocked in. Additionally, check that the
@@ -411,15 +423,17 @@ def test_save(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
 )
 def test_get_read_only(factory: TimeTrackerFactory, testcase: TestCaseData):
     """
-    Open the time tracker in read-only mode and check getters work. 
+    Open the time tracker in read-only mode and check getters work.
     """
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime, readonly=True) as tracker:
         # Employee interface
         assert tracker.firstname == TEST_EMPLOYEE_FIRSTNAME
         # Time Tracker interface
         assert tracker.opening_vacation_days == 22
-        
-        evt_times = [evt.time if evt else None for evt in tracker.get_clocks(testcase.datetime)]
+
+        evt_times = [
+            evt.time if evt else None for evt in tracker.get_clocks(testcase.datetime)
+        ]
         assert evt_times == testcase.date_evt_times
 
         assert tracker.get_vacation(testcase.datetime) == testcase.date_vacation
@@ -428,9 +442,14 @@ def test_get_read_only(factory: TimeTrackerFactory, testcase: TestCaseData):
         with pytest.raises(TimeTrackerWriteException):
             tracker.set_vacation(testcase.datetime, 0.5)
         with pytest.raises(TimeTrackerWriteException):
-            tracker.register_clock(testcase.datetime, ClockEvent(testcase.datetime.time(), ClockAction.CLOCK_IN))
+            tracker.register_clock(
+                testcase.datetime,
+                ClockEvent(testcase.datetime.time(), ClockAction.CLOCK_IN),
+            )
         with pytest.raises(TimeTrackerWriteException):
-            tracker.write_clocks(testcase.datetime, tracker.get_clocks(testcase.datetime))
+            tracker.write_clocks(
+                testcase.datetime, tracker.get_clocks(testcase.datetime)
+            )
 
         # TimeTrackerAnalyzer interface
         with pytest.raises(TimeTrackerAnalysisException):

@@ -3,8 +3,8 @@
 File: teambridge_viewmodel_test.py
 Author: Bastian Cerf
 Date: 20/04/2025
-Description: 
-    Description: 
+Description:
+    Description:
         Unit test the TeamBridgeViewModel module to validate expected behaviors.
     Usage:
         Use pytest to execute the tests. You can run it by executing the command below in the TeamBridge/ folder.
@@ -28,11 +28,12 @@ from platform_io.barcode_scanner import BarcodeScanner
 LOGGER = logging.getLogger(__name__)
 
 TEST_EMPLOYEE_ID = "unit-test"
-TEST_DATE = dt.date(year=2025, month=3, day=10) # 10 March 2025 is a monday
+TEST_DATE = dt.date(year=2025, month=3, day=10)  # 10 March 2025 is a monday
 
 ################################################
 #                    Mocking                   #
 ################################################
+
 
 class BarcodeScannerMock:
     """
@@ -41,12 +42,13 @@ class BarcodeScannerMock:
     """
 
     def __init__(self, scanner: BarcodeScanner, monkeypatch):
-        """
-        """
+        """ """
+
         # Create the barcode scanner mocked functions
         # No effect functions
         def void(*args, **kwargs):
             pass
+
         monkeypatch.setattr(scanner, "configure", void)
         monkeypatch.setattr(scanner, "open", void)
         monkeypatch.setattr(scanner, "clear", void)
@@ -68,19 +70,20 @@ class BarcodeScannerMock:
 
     def __available(self):
         return len(self._results) > 0
-    
+
     def __read_next(self):
         return self._results.pop()
-    
+
     def set_scanning(self, value: bool):
         self._scanning = value
 
     def add_result(self, result):
         self._results.append(result)
 
+
 def wait_state(viewmodel: TeamBridgeViewModel, state: str, timeout=10):
     """
-    Run the viewmodel until it enters the expected state. 
+    Run the viewmodel until it enters the expected state.
     Assert false after the timeout is elapsed.
     """
     timeout = time.time() + timeout
@@ -90,9 +93,11 @@ def wait_state(viewmodel: TeamBridgeViewModel, state: str, timeout=10):
         viewmodel.run()
         time.sleep(0.01)
 
+
 ################################################
 #                  Unit tests                  #
 ################################################
+
 
 def test_open_scanner(teambridge_viewmodel, monkeypatch):
     """
@@ -118,6 +123,7 @@ def test_open_scanner(teambridge_viewmodel, monkeypatch):
     scanner.set_scanning(True)
     wait_state(viewmodel, "WaitClockActionState")
 
+
 def test_clock_action(teambridge_viewmodel, monkeypatch):
     """
     Clock in the test employee.
@@ -142,11 +148,12 @@ def test_clock_action(teambridge_viewmodel, monkeypatch):
     wait_state(viewmodel, "ClockSuccessState")
     # Shall automatically move to consultation state
     wait_state(viewmodel, "ConsultationSuccessState")
-    # And finally back to scanning state after the presentation duration 
+    # And finally back to scanning state after the presentation duration
     wait_state(viewmodel, "WaitClockActionState", 21.0)
 
-    # The next action has been reset 
+    # The next action has been reset
     assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
+
 
 def test_consultation(teambridge_viewmodel, monkeypatch):
     """
@@ -180,6 +187,7 @@ def test_consultation(teambridge_viewmodel, monkeypatch):
     viewmodel.next_action = ViewModelAction.CLOCK_ACTION
     wait_state(viewmodel, "WaitClockActionState")
 
+
 def test_error(teambridge_viewmodel, monkeypatch):
     """
     Enter the error state and reset to scanning state.
@@ -202,7 +210,7 @@ def test_error(teambridge_viewmodel, monkeypatch):
 
     # Shall fail and move to error state
     wait_state(viewmodel, "ErrorState")
-    # The next action has been reset 
+    # The next action has been reset
     assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
     # Reset to scanning state, acknowledge the error
     viewmodel.next_action = ViewModelAction.RESET_TO_CLOCK_ACTION

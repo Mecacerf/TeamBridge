@@ -3,7 +3,7 @@
 File: conftest.py
 Author: Bastian Cerf
 Date: 13/04/2025
-Description: 
+Description:
     Declaration of shared fixtures across unit test modules.
 
 Company: Mecacerf SA
@@ -25,6 +25,7 @@ from tests.test_constants import *
 #                          Assets arrangement                          #
 ########################################################################
 
+
 @pytest.fixture
 def arrange_assets():
     """
@@ -33,22 +34,25 @@ def arrange_assets():
     """
     assets_src = pathlib.Path(TEST_ASSETS_SRC_FOLDER)
     assets_dst = pathlib.Path(TEST_ASSETS_DST_FOLDER)
-    
+
     if not assets_src.exists():
-        raise FileNotFoundError(f"Test assets folder not found at '{assets_src.resolve()}'.")
-    
+        raise FileNotFoundError(
+            f"Test assets folder not found at '{assets_src.resolve()}'."
+        )
+
     if assets_dst.exists():
+
         def remove_readonly(func, path, exc_info):
             """
             Changes the file attribute and retries deletion if permission is denied.
             """
-            os.chmod(path, 0o777) # Grant full permissions
-            func(path) # Retry the function
+            os.chmod(path, 0o777)  # Grant full permissions
+            func(path)  # Retry the function
+
         # Remove old test assets folder
         shutil.rmtree(assets_dst, onexc=remove_readonly)
 
     shutil.copytree(assets_src, assets_dst)
-
 
 
 # @pytest.fixture
@@ -74,8 +78,8 @@ def arrange_assets():
 #     def void(**kwargs): pass
 #     monkeypatch.setattr(scanner, "close", void)
 #     # Create a viewmodel
-#     viewmodel = TeamBridgeViewModel(teambridge_model, 
-#                                     scanner=scanner, 
+#     viewmodel = TeamBridgeViewModel(teambridge_model,
+#                                     scanner=scanner,
 #                                     cam_idx=0,
 #                                     scan_rate=10,
 #                                     debug_mode=True)

@@ -3,7 +3,7 @@
 File: test_constants.py
 Author: Bastian Cerf
 Date: 18/05/2025
-Description: 
+Description:
     Declaration of general test constants.
 
 Company: Mecacerf SA

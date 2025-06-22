@@ -152,7 +152,7 @@ class BarcodeScanner:
                 f"Scanner '{self._session_name}' failed to open capture device "
                 f"[id={self._cam_idx}]."
             )
-            self._running.clear() # Do not enter the scanning loop
+            self._running.clear()  # Do not enter the scanning loop
 
         while self._running.is_set():
             # The resume flag can pause the scanning thread. When paused, the
@@ -162,7 +162,7 @@ class BarcodeScanner:
             self._scanning.set()
 
             frame_ts = time.time()
-            
+
             ret, frame = device.read()
             if not ret:
                 # The device might be unavailable (disconnected for example)
@@ -170,19 +170,19 @@ class BarcodeScanner:
                     f"Scanner '{self._session_name}' failed to read frame from "
                     f"device [id={self._cam_idx}, opened={device.isOpened()}]."
                 )
-                
+
                 # A frame reading error leads to the scanner to shutdown
                 self._running.clear()
                 break
 
             # Decode the frame as a list of barcodes. Each scanned barcode
             # has a data that can be decoded in utf-8 to get a string.
-            barcodes: list[Any] = pyzbar.pyzbar.decode(frame, symbols=self._symbols) # type: ignore library is not typed
+            barcodes: list[Any] = pyzbar.pyzbar.decode(frame, symbols=self._symbols)  # type: ignore library is not typed
             for code in barcodes:
                 raw_data = code.data
                 if raw_data is None:
                     continue
-                
+
                 try:
                     raw_value = raw_data.decode("utf-8")
                     value = raw_value
@@ -213,8 +213,8 @@ class BarcodeScanner:
                             if v >= now
                         }
 
-                        # If the value is still pending in the dictionary, 
-                        # ignore it. Otherwise the value is eligible to be 
+                        # If the value is still pending in the dictionary,
+                        # ignore it. Otherwise the value is eligible to be
                         # added in the pending list.
                         if value not in self._cooldown_codes:
                             self._pending_codes.add(value)
@@ -286,7 +286,7 @@ class BarcodeScanner:
 
             delta_ts = time.time() - frame_ts
             # Sleep required time to reach the specified scan rate.
-            # Minimal sleep duration is 1ms, otherwise the waitKeys() function 
+            # Minimal sleep duration is 1ms, otherwise the waitKeys() function
             # is blocking.
             sleep_ms = max(1, int((self._frame_period_sec - delta_ts) * 1000.0))
             cv2.waitKey(sleep_ms)
@@ -294,7 +294,7 @@ class BarcodeScanner:
         # Scanning process end
         device.release()
         self._scanning.clear()
-        
+
         logger.info(f"Scanner '{self._session_name}' finished session.")
 
     def is_scanning(self) -> bool:
@@ -306,7 +306,7 @@ class BarcodeScanner:
 
     def available(self) -> bool:
         """
-        Check if codes have been scanned. If this function returns True, 
+        Check if codes have been scanned. If this function returns True,
         `read_next()` can be called to get the next decoded value.
 
         Returns:
@@ -317,20 +317,20 @@ class BarcodeScanner:
 
     def read_next(self) -> str:
         """
-        Read the next scanned code. The code matches the configured 
-        regular expression and if an `extract_group` has been specified 
-        only the extracted group will be returned from the matching 
+        Read the next scanned code. The code matches the configured
+        regular expression and if an `extract_group` has been specified
+        only the extracted group will be returned from the matching
         expression.
 
         When a code is read with this method, it is added to the cooldown
-        queue and cannot be scanned again before the specified timeout 
+        queue and cannot be scanned again before the specified timeout
         delay.
 
         Returns:
             str: Scanned code.
 
         Raises:
-            KeyError: No code is available, use `available()` to avoid 
+            KeyError: No code is available, use `available()` to avoid
                 raising this error.
         """
         with self._lock:
@@ -367,7 +367,7 @@ class BarcodeScanner:
             join: `True` to wait for the scanning thread to finish.
         """
         self._running.clear()
-        self._resume.set() # The thread may be waiting
+        self._resume.set()  # The thread may be waiting
 
         if join and self._thread:
             self._thread.join()

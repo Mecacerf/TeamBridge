@@ -361,7 +361,7 @@ class MainScreen(FloatLayout):
         self.sliding_box_layout.expanded = show_panel
         # Show the collapse panel icon when the panel is expanded
         Animation(opacity=1.0 if show_panel else 0.0, duration=0.5).start(
-            self.collapse_panel_icon # type: ignore
+            self.collapse_panel_icon  # type: ignore
         )
 
         # Play sound depending on current state
@@ -770,8 +770,8 @@ class SlidingBoxLayout(BoxLayout):
             self._anim.cancel(self)
 
         self._anim = Animation(
-            current_pos=self.expanded_pos if self._is_expanded else self.collapsed_pos, # type: ignore
-            duration=self.duration, # type: ignore
+            current_pos=self.expanded_pos if self._is_expanded else self.collapsed_pos,  # type: ignore
+            duration=self.duration,  # type: ignore
             transition="out_quad",
         )
 
@@ -783,7 +783,7 @@ class SlidingBoxLayout(BoxLayout):
         """
         if self.collide_point(*touch.pos):
             # Dispatch the event and eat it
-            self.dispatch("on_panel_press") # type: ignore
+            self.dispatch("on_panel_press")  # type: ignore
             return True
         # Normal behavior
         return super().on_touch_down(touch)
@@ -799,7 +799,7 @@ class IconLabel(Label):
 
     def on_icon_code(self, *args: tuple[Any]):
         try:
-            self.text = chr(int(self.icon_code, 16)) # type: ignore
+            self.text = chr(int(self.icon_code, 16))  # type: ignore
         except ValueError:
             self.text = ""
             logger.warning("Cannot convert icon code to unicode.", exc_info=True)

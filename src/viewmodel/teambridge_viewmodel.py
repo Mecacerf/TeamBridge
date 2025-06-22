@@ -47,7 +47,7 @@ class ViewModelAction(Enum):
     Possible actions the viewmodel can perform.
     This enum is used to interact with the viewmodel.
     All actions are auto-clearing, meaning they are automatically reset
-    once the action is done. The default action is always the clock 
+    once the action is done. The default action is always the clock
     action.
     """
 
@@ -80,13 +80,13 @@ class TeamBridgeViewModel(IStateMachine):
         Create the viewmodel state machine.
 
         Args:
-            model (TeamBridgeScheduler): Reference on the scheduler to use 
+            model (TeamBridgeScheduler): Reference on the scheduler to use
                 to perform tasks.
-            scanner (BarcodeScanner): Reference on the barcode scanner to 
+            scanner (BarcodeScanner): Reference on the barcode scanner to
                 use to identify employees ids.
             cam_idx (int): Barcode scanner camera id.
             scan_rate (float): Barcode scanner scan rate in Hz.
-            debug_mode (bool): `True` to show a live window of the scanner 
+            debug_mode (bool): `True` to show a live window of the scanner
                 view.
         """
         # Enter the initial state
@@ -100,7 +100,7 @@ class TeamBridgeViewModel(IStateMachine):
         self._debug_mode = debug_mode
 
         self._next_action = ViewModelAction.DEFAULT_ACTION
-        
+
         # Live data are observered by the view
         self._current_state = LiveData[str](str(self._state))
         self._main_title_text = LiveData[str]("")
@@ -112,19 +112,19 @@ class TeamBridgeViewModel(IStateMachine):
     @property
     def model(self) -> TeamBridgeScheduler:
         return self._model
-    
+
     @property
     def scanner(self) -> BarcodeScanner:
         return self._scanner
-    
+
     @property
     def camera_idx(self) -> int:
         return self._cam_idx
-    
+
     @property
     def camera_scan_rate(self) -> float:
         return self._scan_rate
-    
+
     @property
     def debug_mode(self) -> bool:
         return self._debug_mode
@@ -136,7 +136,9 @@ class TeamBridgeViewModel(IStateMachine):
         # Run the state machine
         super().run()
 
-    def on_state_changed(self, old_state: Optional[IStateBehavior], new_state: IStateBehavior):
+    def on_state_changed(
+        self, old_state: Optional[IStateBehavior], new_state: IStateBehavior
+    ):
         """
         Called by the state machine on state change.
         """
@@ -236,8 +238,8 @@ class TeamBridgeViewModel(IStateMachine):
     @property
     def panel_content_text(self) -> LiveData[str]:
         """
-        The content of the information panel. The panel is typically 
-        hidden in most states and shows up for states that must display 
+        The content of the information panel. The panel is typically
+        hidden in most states and shows up for states that must display
         more information.
 
         Returns:
@@ -248,7 +250,7 @@ class TeamBridgeViewModel(IStateMachine):
 
 class _IViewModelState(IStateBehavior, ABC):
     """
-    Define the base interface for a viewmodel state. Provide getters for 
+    Define the base interface for a viewmodel state. Provide getters for
     the different UI information in the state.
     """
 
@@ -296,7 +298,7 @@ class _InitialState(_IViewModelState):
 
     def entry(self):
         """
-        Initial state entry: the barcode scanner is configured and 
+        Initial state entry: the barcode scanner is configured and
         opened.
         """
         self.fsm.scanner.configure(
@@ -310,7 +312,7 @@ class _InitialState(_IViewModelState):
 
     def __open_scanner(self):
         """
-        Try to open the barcode scanner. Note that the process may take 
+        Try to open the barcode scanner. Note that the process may take
         some time depending on OS, device, etc.
         """
         try:
@@ -321,7 +323,8 @@ class _InitialState(_IViewModelState):
         except RuntimeError:
             logger.warning(
                 "Failed to open the barcode scanner. It appears to be "
-                "running but is not actively scanning.", exc_info=True
+                "running but is not actively scanning.",
+                exc_info=True,
             )
         finally:
             self._next_retry = time.time() + self.RETRY_DELAY
@@ -334,7 +337,7 @@ class _InitialState(_IViewModelState):
         """
         if self.fsm.scanner.is_scanning():
             return _WaitClockActionState()
-        
+
         if time.time() > self._next_retry:
             self.__open_scanner()
 
@@ -622,19 +625,18 @@ class _ConsultationSuccessState(_IViewModelState):
         # Leave the state if an employee ID is available
         if self.fsm.scanner.available():
             return _WaitClockActionState()
-        
+
         # Leave the state on reset signal
         if self.fsm.next_action == ViewModelAction.RESET_TO_CLOCK_ACTION:
             return _WaitClockActionState()
         elif self.fsm.next_action == ViewModelAction.RESET_TO_CONSULTATION:
             return _WaitConsultationActionState()
-        
+
         # Leave the state when the timeout is elapsed
         if time.time() > self._leave:
             # Set default state
             self.fsm.next_action = ViewModelAction.DEFAULT_ACTION
             return _WaitClockActionState()
-
 
     @property
     def panel_title_text(self):

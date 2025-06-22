@@ -14,6 +14,7 @@ Contact: info@mecacerf.ch
 from abc import ABC
 from typing import Optional
 
+
 class IStateBehavior(ABC):
     """
     Base interface that defines how a state behaves.
