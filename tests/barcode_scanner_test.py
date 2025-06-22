@@ -12,12 +12,13 @@ Contact: info@mecacerf.ch
 """
 
 import pytest
+from pytest import FixtureRequest
 import cv2
 import pyvirtualcam
 import threading
 import pathlib
 import time
-from typing import Generator
+from typing import Generator, Any
 from platform_io.barcode_scanner import BarcodeScanner
 
 ################################################
@@ -43,7 +44,7 @@ EMPLOYEE_REGEX_GROUP = 1
         ("tests/assets/qrscan-teambridge@543.mp4", "543"),  # Shall identify id '543'
     ]
 )
-def open_virtual_device(request) -> Generator[str, None, None]:
+def open_virtual_device(request: FixtureRequest) -> Generator[str, None, None]:
     """
     Create, open the virtual camera and play a file given as parameter.
 
@@ -93,7 +94,7 @@ def open_virtual_device(request) -> Generator[str, None, None]:
                     # Convert BGR to RGB
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     # Send the frame to the virtual camera
-                    cam.send(frame)
+                    cam.send(frame)  # type: ignore
                     # Synchronize with given fps value
                     cam.sleep_until_next_frame()
                     # Set the running status, first frame has been sent
@@ -125,7 +126,9 @@ def open_virtual_device(request) -> Generator[str, None, None]:
 
 
 @pytest.fixture
-def prepare_scanner(open_virtual_device) -> Generator[tuple, None, None]:
+def prepare_scanner(
+    open_virtual_device: str,
+) -> Generator[tuple[BarcodeScanner, str], None, None]:
     """
     Open a virtual camera device then create, open and yields a barcode scanner.
 
@@ -150,7 +153,7 @@ def prepare_scanner(open_virtual_device) -> Generator[tuple, None, None]:
 ################################################
 
 
-def test_multiple_open(prepare_scanner):
+def test_multiple_open(prepare_scanner: tuple[BarcodeScanner, str]):
     """
     Try to reopen an already opened scanner and verify it throws an exception.
     """
@@ -162,7 +165,7 @@ def test_multiple_open(prepare_scanner):
         scanner.open()
 
 
-def test_clear_scanner(prepare_scanner):
+def test_clear_scanner(prepare_scanner: tuple[BarcodeScanner, str]):
     """
     Wait for an id to be scanned and clear the scanner.
     """
@@ -181,7 +184,7 @@ def test_clear_scanner(prepare_scanner):
             scanner.read_next()
 
 
-def test_scan_id(prepare_scanner):
+def test_scan_id(prepare_scanner: tuple[BarcodeScanner, str]):
     """
     The test will open a virtual camera (OBS studio required) and plays a test video
     containing a QR code. It is then checked if the QR code is correctly scanned

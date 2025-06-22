@@ -11,6 +11,10 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+# pyright: reportGeneralTypeIssues=false
+# pyright: reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false
+
 from dataclasses import dataclass
 
 from kivy.graphics import Color

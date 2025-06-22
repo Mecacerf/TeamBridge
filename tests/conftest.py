@@ -13,13 +13,19 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 import pytest
+from pytest import MonkeyPatch
 import pathlib
 import shutil
 import os
-import datetime as dt
+from typing import Any, Generator
 
 # Internal libraries
 from tests.test_constants import *
+from core.time_tracker_factory import TimeTrackerFactory
+from core.spreadsheets.sheet_time_tracker_factory import SheetTimeTrackerFactory
+from model.teambridge_scheduler import TeamBridgeScheduler
+from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
+from platform_io.barcode_scanner import BarcodeScanner
 
 ########################################################################
 #                          Assets arrangement                          #
@@ -29,8 +35,8 @@ from tests.test_constants import *
 @pytest.fixture
 def arrange_assets():
     """
-    This pytest fixture prepares the test assets. It removes any existing old
-    test asset folders and creates a new one.
+    This pytest fixture prepares the test assets. It removes any existing 
+    old test asset folders and creates a new one.
     """
     assets_src = pathlib.Path(TEST_ASSETS_SRC_FOLDER)
     assets_dst = pathlib.Path(TEST_ASSETS_DST_FOLDER)
@@ -42,48 +48,49 @@ def arrange_assets():
 
     if assets_dst.exists():
 
-        def remove_readonly(func, path, exc_info):
+        def remove_readonly(func, path, exc_info): # type: ignore
             """
             Changes the file attribute and retries deletion if permission is denied.
             """
-            os.chmod(path, 0o777)  # Grant full permissions
+            os.chmod(path, 0o777)  # type: ignore # Grant full permissions
             func(path)  # Retry the function
 
         # Remove old test assets folder
-        shutil.rmtree(assets_dst, onexc=remove_readonly)
+        shutil.rmtree(assets_dst, onexc=remove_readonly) # type: ignore
 
     shutil.copytree(assets_src, assets_dst)
 
 
-# @pytest.fixture
-# def teambridge_model(arrange_spreadsheet_time_tracker) -> Generator[TeamBridgeScheduler, None, None]:
-#     """
-#     Create a configured teambridge model instance.
-#     """
-#     # Create the model using a SpreadsheetTimeTracker
-#     repository = SpreadsheetsRepository(SAMPLES_TEST_FOLDER)
-#     time_tracker_provider=lambda date, code: SpreadsheetTimeTracker(repository=repository, employee_id=code, date=date)
-#     model = TeamBridgeScheduler(time_tracker_provider=time_tracker_provider)
-#     # Yield and close automatically
-#     yield model
-#     model.close()
+@pytest.fixture
+def factory(arrange_assets: None) -> TimeTrackerFactory:
+    """
+    Get a `TimeTrackerFactory` instance for the test.
+    """
+    return SheetTimeTrackerFactory(repository_path=TEST_REPOSITORY_ROOT)
 
-# @pytest.fixture
-# def teambridge_viewmodel(teambridge_model, monkeypatch) -> Generator[TeamBridgeViewModel, None, None]:
-#     """
-#     Create a configured teambridge viewmodel instance.
-#     """
-#     # Create a barcode scanner
-#     scanner = BarcodeScanner()
-#     def void(**kwargs): pass
-#     monkeypatch.setattr(scanner, "close", void)
-#     # Create a viewmodel
-#     viewmodel = TeamBridgeViewModel(teambridge_model,
-#                                     scanner=scanner,
-#                                     cam_idx=0,
-#                                     scan_rate=10,
-#                                     debug_mode=True)
-#     # Yield and close automatically
-#     # The scanner is also given in order to use monkeypatch to mock its functionalities
-#     yield (viewmodel, scanner)
-#     viewmodel.close()
+@pytest.fixture
+def scheduler(factory: TimeTrackerFactory) -> Generator[TeamBridgeScheduler, None, None]:
+    """
+    Get a configured model scheduler.
+    """
+    with TeamBridgeScheduler(tracker_factory=factory) as scheduler:
+        yield scheduler
+
+@pytest.fixture
+def viewmodel(scheduler: TeamBridgeScheduler, monkeypatch: MonkeyPatch) -> TeamBridgeViewModel:
+    """
+    Get a configured view model.
+    """
+    # Create a barcode scanner mock
+    scanner = BarcodeScanner()
+
+    def void(**kwargs: dict[Any, Any]): 
+        """Mock the scanner close function"""
+        pass
+    monkeypatch.setattr(scanner, "close", void)
+
+    return TeamBridgeViewModel(model=scheduler,
+                               scanner=scanner,
+                               cam_idx=0,
+                               scan_rate=10,
+                               debug_mode=True)

@@ -6,18 +6,19 @@ Date: 20/04/2025
 Description:
     Description:
         Unit test the TeamBridgeViewModel module to validate expected behaviors.
-    Usage:
-        Use pytest to execute the tests. You can run it by executing the command below in the TeamBridge/ folder.
-        - pytest
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+# Standard libraries
 import time
 import logging
 import datetime as dt
+
+# Internal libraries
+from .test_constants import *
 from viewmodel.teambridge_viewmodel import *
 from platform_io.barcode_scanner import BarcodeScanner
 
@@ -25,10 +26,27 @@ from platform_io.barcode_scanner import BarcodeScanner
 #               Tests constants                #
 ################################################
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
-TEST_EMPLOYEE_ID = "unit-test"
 TEST_DATE = dt.date(year=2025, month=3, day=10)  # 10 March 2025 is a monday
+
+################################################
+#                   Fixtures                   #
+################################################
+
+@pytest.fixture
+def factory(arrange_assets: None) -> TimeTrackerFactory:
+    """
+    Get a `TimeTrackerFactory` instance for the test.
+    """
+    return SheetTimeTrackerFactory(repository_path=TEST_REPOSITORY_ROOT)
+
+@pytest.fixture
+def scheduler(factory: TimeTrackerFactory) -> TeamBridgeScheduler:
+    """
+    Get a configured model scheduler.
+    """
+    return TeamBridgeScheduler(tracker_factory=factory)
 
 ################################################
 #                    Mocking                   #
@@ -37,8 +55,8 @@ TEST_DATE = dt.date(year=2025, month=3, day=10)  # 10 March 2025 is a monday
 
 class BarcodeScannerMock:
     """
-    Mock the barcode scanner functions. The functions of the given object will
-    be temporarily replaced.
+    Mock the barcode scanner functions. The functions of the given object 
+    are temporarily replaced.
     """
 
     def __init__(self, scanner: BarcodeScanner, monkeypatch):

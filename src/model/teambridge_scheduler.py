@@ -175,6 +175,19 @@ class TeamBridgeScheduler:
         # finish and cancel pending ones.
         self._pool.shutdown(wait=True, cancel_futures=True)
 
+    def __enter__(self) -> "TeamBridgeScheduler":
+        # Enter function when using a context manager
+        return self
+    
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Optional[bool]:
+        # Close function when using a context manager
+        self.close()
+
     def __clock_action_task(
         self, employee_id: str, datetime: dt.datetime, action: Optional[ClockAction]
     ) -> IModelMessage:
