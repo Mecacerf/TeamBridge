@@ -206,7 +206,8 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
                 )
 
                 # Sanity check tracked year
-                if tracker.tracked_year != year:
+                tracked_year = tracker.tracked_year
+                if tracked_year != year:
 
                     cause = None
                     try:
@@ -215,9 +216,9 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
                         cause = e
 
                     raise TimeTrackerOpenException(
-                        f"Year mismatch: employee '{employee_id}' tracker for "
-                        f"year {tracker.tracked_year} found in folder "
-                        f"for year {year}."
+                        f"Year mismatch: a tracker for employee '{employee_id}' "
+                        f"in year {tracked_year} "
+                        f"was found in the folder targeting year {year}."
                     ) from cause  # The cause shows if the closing failed
 
                 return tracker

@@ -22,12 +22,11 @@ def main() -> int:
     """
     Application entry point.
     """
-    # Configure logging and get module logger
     configure_logging()
     logger = logging.getLogger("Main")
     logger.info("-- Mecacerf TeamBridge Application --")
 
-    # Custom function to parse positive integer.
+    # Custom function to parse positive integer
     def positive_int(value: Any):
         ivalue = int(value)
         if ivalue < 0:
@@ -77,12 +76,14 @@ def main() -> int:
         help="Sleep timeout in seconds, if not specified the sleep mode is disabled",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
-    # Parse the arguments
+
     args = parser.parse_args()
-    # Show configuration
+
     logger.info(
-        f"Starting with configuration [repository='{args.repository}', scan-rate={args.scan_rate}, camera-id={args.camera_id}, "
-        f"fullscreen={args.fullscreen}, dark_mode={args.dark}, sleep_brightness={args.sleep_brightness}, "
+        f"Starting with configuration [repository='{args.repository}', "
+        f"scan-rate={args.scan_rate}, camera-id={args.camera_id}, "
+        f"fullscreen={args.fullscreen}, dark_mode={args.dark}, "
+        f"sleep_brightness={args.sleep_brightness}, "
         f"work_brightness={args.work_brightness if hasattr(args, 'work_brightness') else "auto"}, "
         f"sleep_timeout={args.sleep_timeout if hasattr(args, 'sleep_timeout') else 'disabled'}, debug={args.debug}]"
     )
@@ -94,13 +95,11 @@ def main() -> int:
     from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
     from model.teambridge_scheduler import TeamBridgeScheduler
 
-    # Configure application
+    # Create the model and inject a sheet time tracker factory
     factory = SheetTimeTrackerFactory(args.repository)
-    # Create the application model
     model = TeamBridgeScheduler(tracker_factory=factory)
-    # Create the barcode scanner
+
     scanner = BarcodeScanner()
-    # Create the application viewmodel
     viewmodel = TeamBridgeViewModel(
         model=model,
         scanner=scanner,
@@ -109,14 +108,14 @@ def main() -> int:
         cam_idx=args.camera_id,
     )
 
-    # Configure sleep mode, it is disabled by default.
+    # Configure sleep mode, it is disabled by default
     sleep_timeout = 0
     sleep_manager = None
-    # If the sleep timeout is specified, the sleep mode is enabled.
+    # If the sleep timeout is specified, the sleep mode is enabled
     if hasattr(args, "sleep_timeout"):
-        # Sleep mode is enabled, configure the sleep manager.
+        # Sleep mode is enabled, configure the sleep manager
         if hasattr(args, "work_brightness"):
-            # Use specified work brightness.
+            # Use specified work brightness
             sleep_manager = SleepManager(
                 low_brightness_lvl=args.sleep_brightness,
                 high_brightness_lvl=args.work_brightness,
@@ -124,7 +123,7 @@ def main() -> int:
         else:
             # Use automatic screen brightness (do not specify it).
             sleep_manager = SleepManager(low_brightness_lvl=args.sleep_brightness)
-        # Set the sleep timeout.
+        # Set the sleep timeout
         sleep_timeout = args.sleep_timeout
 
     def start_kivy_frontend():
@@ -152,8 +151,10 @@ def main() -> int:
         logger.info(f"Starting application '{app}' using Kivy frontend.")
         app.run()
 
-    # Start the frontend to use.
+    # Start the application frontend
     start_kivy_frontend()
+
+    return 0
 
 
 def configure_logging():
@@ -165,7 +166,8 @@ def configure_logging():
 
     class ColorFormatter(logging.Formatter):
         """
-        Custom log formatter that colors only the log level name if the terminal supports it.
+        Custom log formatter that colors only the log level name if the
+        terminal supports it.
         """
 
         COLORS = {
@@ -180,7 +182,7 @@ def configure_logging():
         def __init__(self):
             super().__init__(LOGGING_FORMAT)
 
-        def format(self, record):
+        def format(self, record: logging.LogRecord):
             color = self.COLORS.get(record.levelname, self.COLORS["RESET"])
             record.levelname = f"{color}{record.levelname}{self.COLORS['RESET']}"
             return super().format(record)

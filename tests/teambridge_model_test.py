@@ -15,32 +15,29 @@ Contact: info@mecacerf.ch
 import time
 import logging
 
+logger = logging.getLogger(__name__)
+
 # Internal libraries
 from .test_constants import *
 from model.teambridge_scheduler import *
 
-################################################
-#               Tests constants                #
-################################################
-
-logger = logging.getLogger(__name__)
+########################################################################
+#                           Tests constants                            #
+########################################################################
 
 TEST_DATE = dt.date(year=2025, month=3, day=10)  # 10 March 2025 is a monday
 
-################################################
-#                   Fixtures                   #
-################################################
-
-################################################
-#                  Unit tests                  #
-################################################
+########################################################################
+#                            Unit tests                                #
+########################################################################
 
 
 def test_clock_action(scheduler: TeamBridgeScheduler):
-    """ 
-    Clock in and out the test employee, check expected messages are 
+    """
+    Clock in and out the test employee, check expected messages are
     received. Finally perform a consultation.
     """
+
     # Wait for the task to finish
     def wait_result(handle: int) -> Optional[IModelMessage]:
         # Poll the model until a message is posted or timed out

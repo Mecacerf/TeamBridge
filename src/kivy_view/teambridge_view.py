@@ -173,7 +173,7 @@ class TeamBridgeApp(App):
         Get current application theme.
 
         Returns:
-            ViewTheme: theme in use
+            ViewTheme: Theme in use.
         """
         return self.theme
 
@@ -182,7 +182,7 @@ class TeamBridgeApp(App):
         Change application theme.
 
         Args:
-            theme: `ViewTheme` new theme to use
+            theme (ViewTheme): New theme to use.
         """
         self.theme = theme
 
@@ -337,10 +337,10 @@ class MainScreen(FloatLayout):
             "WaitConsultationActionState",
             "ConsultationSuccessState",
         ]
-        self.consultation_button.enabled = state in enabled_states
+        self.consultation_button.button_enabled = state in enabled_states
         # Clock button is enabled in error state for acknowledgment as well
         enabled_states.append("ErrorState")
-        self.clock_button.enabled = state in enabled_states
+        self.clock_button.button_enabled = state in enabled_states
 
         # Set the buttons toggle state
         self.clock_button.toggle_state = (
@@ -525,7 +525,7 @@ class IconButton(ButtonBehavior, RelativeLayout):
         """
         if parent:
             # Bind the update size method to react when available place changes
-            parent.bind(size=self._update_side)
+            parent.bind(size=self._update_side)  # type: ignore
             # Initial update of the size
             self._update_side()
 
@@ -535,7 +535,7 @@ class IconButton(ButtonBehavior, RelativeLayout):
         """
         if self.parent:
             # Set the square side to the minimal available size in width and height
-            self.actual_side = min(self.parent.size)
+            self.actual_side = min(self.parent.size)  # type: ignore
             # Update the style to automatically adapt the widget size
             self.on_style_update()
 
@@ -543,7 +543,7 @@ class IconButton(ButtonBehavior, RelativeLayout):
     def pressed(self) -> bool:
         """
         Returns:
-            bool: True if button pressed, False otherwise
+            bool: True if button pressed, False otherwise.
         """
         return self._state == IconButton.ButtonState.PRESSED
 
@@ -551,7 +551,7 @@ class IconButton(ButtonBehavior, RelativeLayout):
     def pressed(self, value: bool):
         """
         Args:
-            pressed: `bool` True for button press, False for button released
+            pressed (bool): True for button press, False for button released.
         """
         # The state cannot change if button is disabled
         if self._state == IconButton.ButtonState.DISABLED:
@@ -564,18 +564,18 @@ class IconButton(ButtonBehavior, RelativeLayout):
         self.on_style_update()
 
     @property
-    def enabled(self) -> bool:
+    def button_enabled(self) -> bool:
         """
         Returns:
-            bool: True if enabled, False if disabled
+            bool: True if enabled, False if disabled.
         """
         return self._state != IconButton.ButtonState.DISABLED
 
-    @enabled.setter
-    def enabled(self, value: bool):
+    @button_enabled.setter
+    def button_enabled(self, value: bool):
         """
         Args:
-            value: `bool` enabled state
+            value (bool): Enabled state.
         """
         if not value:
             self._state = IconButton.ButtonState.DISABLED
@@ -588,6 +588,23 @@ class IconButton(ButtonBehavior, RelativeLayout):
 
     def on_release(self):
         self.pressed = False
+
+    def on_touch_down(self, touch: MotionEvent) -> Any:
+        # Call both base classes explicitly
+        handled = ButtonBehavior.on_touch_down(self, touch)
+        layout_handled = RelativeLayout.on_touch_down(self, touch)
+
+        # Return True if either handled the touch
+        return bool(handled or layout_handled)
+
+    def on_touch_move(self, touch: MotionEvent) -> Any:
+        # Call both base classes explicitly
+        handled = ButtonBehavior.on_touch_move(self, touch)
+        layout_handled = RelativeLayout.on_touch_move(self, touch)
+
+        # Return True if either handled the move
+        return bool(handled or layout_handled)
+
 
 
 class ToggleIconButton(IconButton):
@@ -607,7 +624,7 @@ class ToggleIconButton(IconButton):
     def toggle_state(self) -> bool:
         """
         Returns:
-            bool: current button state
+            bool: Current button state.
         """
         return self._toggle_state
 
@@ -620,14 +637,16 @@ class ToggleIconButton(IconButton):
         self._toggle_state = value
         self.pressed = value
 
-    @IconButton.enabled.setter
-    def enabled(self, value: bool):
+    @IconButton.button_enabled.setter
+    def button_enabled(self, value: bool):
         """
         Override default enabled setter to automatically apply the
         toggled state when enabled.
         """
-        # Call the super setter
-        super(ToggleIconButton, self.__class__).enabled.fset(self, value)
+        # Explicitly call the superclass setter 
+        assert IconButton.button_enabled.fset is not None
+        IconButton.button_enabled.fset(self, value)
+
         self.pressed = value
 
     def on_press(self):
@@ -661,7 +680,7 @@ class LinearProgressBar(ProgressBar):
     def loading(self) -> bool:
         """
         Returns:
-            bool: loading flag
+            bool: loading flag.
         """
         return self._loading
 
@@ -669,7 +688,7 @@ class LinearProgressBar(ProgressBar):
     def loading(self, value: bool):
         """
         Args:
-            value: `bool` loading flag
+            value (bool): Loading flag.
         """
         last_loading = self._loading
         self._loading = value
@@ -748,7 +767,7 @@ class SlidingBoxLayout(BoxLayout):
     def expanded(self) -> bool:
         """
         Returns:
-            bool: expanded state
+            bool: Expanded state.
         """
         return self._is_expanded
 
@@ -758,7 +777,7 @@ class SlidingBoxLayout(BoxLayout):
         Set expanded state.
 
         Args:
-            value: `bool` expanded state
+            value (bool): Expanded state.
         """
         if self._is_expanded == value:
             return

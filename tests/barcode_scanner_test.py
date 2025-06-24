@@ -11,6 +11,7 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+# Standard libraries
 import pytest
 from pytest import FixtureRequest
 import cv2
@@ -18,24 +19,26 @@ import pyvirtualcam
 import threading
 import pathlib
 import time
-from typing import Generator, Any
+from typing import Generator
+
+# Internal libraries
 from platform_io.barcode_scanner import BarcodeScanner
 
-################################################
-#               Tests constants                #
-################################################
+########################################################################
+#                           Tests constants                            #
+########################################################################
 
-# Virtual camera id. If more than one camera is connected, ensure this is the id of
-# the virtual camera created by OBS Studio.
+# Virtual camera id. If more than one camera is connected, ensure this is the
+# id of the virtual camera created by OBS Studio.
 VIRTUAL_CAM_IDX = 0
 # Regular expression to use to identify employee's id
 EMPLOYEE_REGEX = r"teambridge@(\w+)"
 # Group to extract ID
 EMPLOYEE_REGEX_GROUP = 1
 
-################################################
-#                  Fixtures                    #
-################################################
+########################################################################
+#                               Fixtures                               #
+########################################################################
 
 
 @pytest.fixture(

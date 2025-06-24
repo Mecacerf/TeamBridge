@@ -178,7 +178,7 @@ class TeamBridgeScheduler:
     def __enter__(self) -> "TeamBridgeScheduler":
         # Enter function when using a context manager
         return self
-    
+
     def __exit__(
         self,
         exc_type: Optional[Type[BaseException]],

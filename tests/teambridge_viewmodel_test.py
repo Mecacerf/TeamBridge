@@ -5,7 +5,8 @@ Author: Bastian Cerf
 Date: 20/04/2025
 Description:
     Description:
-        Unit test the TeamBridgeViewModel module to validate expected behaviors.
+        Unit test the TeamBridgeViewModel module to validate expected
+        behaviors.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -19,87 +20,23 @@ import datetime as dt
 
 # Internal libraries
 from .test_constants import *
+from .classes_mocks import BarcodeScannerMock
 from viewmodel.teambridge_viewmodel import *
-from platform_io.barcode_scanner import BarcodeScanner
 
-################################################
-#               Tests constants                #
-################################################
+########################################################################
+#                           Tests constants                            #
+########################################################################
 
 logger = logging.getLogger(__name__)
 
 TEST_DATE = dt.date(year=2025, month=3, day=10)  # 10 March 2025 is a monday
 
-################################################
-#                   Fixtures                   #
-################################################
-
-@pytest.fixture
-def factory(arrange_assets: None) -> TimeTrackerFactory:
-    """
-    Get a `TimeTrackerFactory` instance for the test.
-    """
-    return SheetTimeTrackerFactory(repository_path=TEST_REPOSITORY_ROOT)
-
-@pytest.fixture
-def scheduler(factory: TimeTrackerFactory) -> TeamBridgeScheduler:
-    """
-    Get a configured model scheduler.
-    """
-    return TeamBridgeScheduler(tracker_factory=factory)
-
-################################################
-#                    Mocking                   #
-################################################
+########################################################################
+#                             Unit tests                               #
+########################################################################
 
 
-class BarcodeScannerMock:
-    """
-    Mock the barcode scanner functions. The functions of the given object 
-    are temporarily replaced.
-    """
-
-    def __init__(self, scanner: BarcodeScanner, monkeypatch):
-        """ """
-
-        # Create the barcode scanner mocked functions
-        # No effect functions
-        def void(*args, **kwargs):
-            pass
-
-        monkeypatch.setattr(scanner, "configure", void)
-        monkeypatch.setattr(scanner, "open", void)
-        monkeypatch.setattr(scanner, "clear", void)
-        monkeypatch.setattr(scanner, "close", void)
-        monkeypatch.setattr(scanner, "pause", void)
-        monkeypatch.setattr(scanner, "resume", void)
-
-        # Mock the scanning flag
-        self._scanning = False
-        monkeypatch.setattr(scanner, "is_scanning", self.__is_scanning)
-
-        # Mock the available and read functions
-        self._results = []
-        monkeypatch.setattr(scanner, "available", self.__available)
-        monkeypatch.setattr(scanner, "read_next", self.__read_next)
-
-    def __is_scanning(self):
-        return self._scanning
-
-    def __available(self):
-        return len(self._results) > 0
-
-    def __read_next(self):
-        return self._results.pop()
-
-    def set_scanning(self, value: bool):
-        self._scanning = value
-
-    def add_result(self, result):
-        self._results.append(result)
-
-
-def wait_state(viewmodel: TeamBridgeViewModel, state: str, timeout=10):
+def wait_state(viewmodel: TeamBridgeViewModel, state: str, timeout: float = 10):
     """
     Run the viewmodel until it enters the expected state.
     Assert false after the timeout is elapsed.
@@ -112,54 +49,50 @@ def wait_state(viewmodel: TeamBridgeViewModel, state: str, timeout=10):
         time.sleep(0.01)
 
 
-################################################
-#                  Unit tests                  #
-################################################
-
-
-def test_open_scanner(teambridge_viewmodel, monkeypatch):
+def test_open_scanner(
+    viewmodel_scanner: tuple[TeamBridgeViewModel, BarcodeScannerMock],
+):
     """
     Open / close the scanner and check the viewmodel state.
     """
-    # Unpack the fixture
-    viewmodel, scanner = teambridge_viewmodel
-    # Create the scanner mocking object
-    scanner = BarcodeScannerMock(scanner, monkeypatch)
+    viewmodel, scanner_mock = viewmodel_scanner
 
     # Run the viewmodel and assert it is in initial state
     wait_state(viewmodel, "InitialState")
 
     # After the scanner has been opened, the state is waiting for a clock action
-    scanner.set_scanning(True)
+    logger.info("Set scanning True")
+    scanner_mock.set_scanning(True)
     wait_state(viewmodel, "WaitClockActionState")
 
     # On scanner failure, return to initial state and try to reopen
-    scanner.set_scanning(False)
+    logger.info("Set scanning False")
+    scanner_mock.set_scanning(False)
     wait_state(viewmodel, "InitialState")
 
     # If the scanner recovers, return to initial state
-    scanner.set_scanning(True)
+    logger.info("Set scanning True")
+    scanner_mock.set_scanning(True)
     wait_state(viewmodel, "WaitClockActionState")
 
 
-def test_clock_action(teambridge_viewmodel, monkeypatch):
+def test_clock_action(
+    viewmodel_scanner: tuple[TeamBridgeViewModel, BarcodeScannerMock],
+):
     """
     Clock in the test employee.
     """
-    # Unpack the fixture
-    viewmodel, scanner = teambridge_viewmodel
-    # Create the barcode mocking object
-    scanner = BarcodeScannerMock(scanner, monkeypatch)
+    viewmodel, scanner_mock = viewmodel_scanner
 
     # Move to scanning state
-    scanner.set_scanning(True)
+    scanner_mock.set_scanning(True)
     wait_state(viewmodel, "WaitClockActionState")
 
     # Set next action to clock action
     viewmodel.next_action = ViewModelAction.CLOCK_ACTION
 
     # Post an employee ID, shall move to clocking state
-    scanner.add_result(TEST_EMPLOYEE_ID)
+    scanner_mock.add_result(TEST_EMPLOYEE_ID)
     wait_state(viewmodel, "ClockActionState")
 
     # Then shall move to ClockSuccessState
@@ -173,17 +106,16 @@ def test_clock_action(teambridge_viewmodel, monkeypatch):
     assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
 
 
-def test_consultation(teambridge_viewmodel, monkeypatch):
+def test_consultation(
+    viewmodel_scanner: tuple[TeamBridgeViewModel, BarcodeScannerMock],
+):
     """
     Clock in the test employee.
     """
-    # Unpack the fixture
-    viewmodel, scanner = teambridge_viewmodel
-    # Create the barcode mocking object
-    scanner = BarcodeScannerMock(scanner, monkeypatch)
+    viewmodel, scanner_mock = viewmodel_scanner
 
     # Move to scanning state
-    scanner.set_scanning(True)
+    scanner_mock.set_scanning(True)
     wait_state(viewmodel, "WaitClockActionState")
 
     # Set next action to consultation
@@ -192,7 +124,7 @@ def test_consultation(teambridge_viewmodel, monkeypatch):
     wait_state(viewmodel, "WaitConsultationActionState")
 
     # Post an employee ID, shall move to consultation action state
-    scanner.add_result(TEST_EMPLOYEE_ID)
+    scanner_mock.add_result(TEST_EMPLOYEE_ID)
     wait_state(viewmodel, "ConsultationActionState")
     # Shall automatically move to consultation success state
     wait_state(viewmodel, "ConsultationSuccessState")
@@ -206,24 +138,21 @@ def test_consultation(teambridge_viewmodel, monkeypatch):
     wait_state(viewmodel, "WaitClockActionState")
 
 
-def test_error(teambridge_viewmodel, monkeypatch):
+def test_error(viewmodel_scanner: tuple[TeamBridgeViewModel, BarcodeScannerMock]):
     """
     Enter the error state and reset to scanning state.
     """
-    # Unpack the fixture
-    viewmodel, scanner = teambridge_viewmodel
-    # Create the barcode mocking object
-    scanner = BarcodeScannerMock(scanner, monkeypatch)
+    viewmodel, scanner_mock = viewmodel_scanner
 
     # Move to scanning state
-    scanner.set_scanning(True)
+    scanner_mock.set_scanning(True)
     wait_state(viewmodel, "WaitClockActionState")
 
     # Set next action to clock action
     viewmodel.next_action = ViewModelAction.CLOCK_ACTION
 
     # Post a wrong employee ID, shall move to clocking state
-    scanner.add_result("thisiswrongid8752145")
+    scanner_mock.add_result("thisiswrongid8752145")
     wait_state(viewmodel, "ClockActionState")
 
     # Shall fail and move to error state

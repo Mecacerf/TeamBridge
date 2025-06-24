@@ -153,6 +153,4 @@ def test_concurrent_create(factory: SheetTimeTrackerFactory):
                 assert tracker.tracked_year == year
 
     with ThreadPoolExecutor(max_workers=10) as pool:
-        pool.map(
-            create, (test[1] for test in TEST_DATA), (test[0] for test in TEST_DATA)
-        )
+        pool.map(create, *zip(*((test[1], test[0]) for test in TEST_DATA)))

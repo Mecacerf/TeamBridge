@@ -17,10 +17,11 @@ from pytest import MonkeyPatch
 import pathlib
 import shutil
 import os
-from typing import Any, Generator
+from typing import Generator
 
 # Internal libraries
-from tests.test_constants import *
+from .test_constants import *
+from .classes_mocks import BarcodeScannerMock
 from core.time_tracker_factory import TimeTrackerFactory
 from core.spreadsheets.sheet_time_tracker_factory import SheetTimeTrackerFactory
 from model.teambridge_scheduler import TeamBridgeScheduler
@@ -35,7 +36,7 @@ from platform_io.barcode_scanner import BarcodeScanner
 @pytest.fixture
 def arrange_assets():
     """
-    This pytest fixture prepares the test assets. It removes any existing 
+    This pytest fixture prepares the test assets. It removes any existing
     old test asset folders and creates a new one.
     """
     assets_src = pathlib.Path(TEST_ASSETS_SRC_FOLDER)
@@ -48,7 +49,7 @@ def arrange_assets():
 
     if assets_dst.exists():
 
-        def remove_readonly(func, path, exc_info): # type: ignore
+        def remove_readonly(func, path, exc_info):  # type: ignore
             """
             Changes the file attribute and retries deletion if permission is denied.
             """
@@ -56,7 +57,7 @@ def arrange_assets():
             func(path)  # Retry the function
 
         # Remove old test assets folder
-        shutil.rmtree(assets_dst, onexc=remove_readonly) # type: ignore
+        shutil.rmtree(assets_dst, onexc=remove_readonly)  # type: ignore
 
     shutil.copytree(assets_src, assets_dst)
 
@@ -68,29 +69,31 @@ def factory(arrange_assets: None) -> TimeTrackerFactory:
     """
     return SheetTimeTrackerFactory(repository_path=TEST_REPOSITORY_ROOT)
 
+
 @pytest.fixture
-def scheduler(factory: TimeTrackerFactory) -> Generator[TeamBridgeScheduler, None, None]:
+def scheduler(
+    factory: TimeTrackerFactory,
+) -> Generator[TeamBridgeScheduler, None, None]:
     """
     Get a configured model scheduler.
     """
     with TeamBridgeScheduler(tracker_factory=factory) as scheduler:
         yield scheduler
 
+
 @pytest.fixture
-def viewmodel(scheduler: TeamBridgeScheduler, monkeypatch: MonkeyPatch) -> TeamBridgeViewModel:
+def viewmodel_scanner(
+    scheduler: TeamBridgeScheduler, monkeypatch: MonkeyPatch
+) -> Generator[tuple[TeamBridgeViewModel, BarcodeScannerMock], None, None]:
     """
-    Get a configured view model.
+    Get a configured view model that uses a mocked barcode scanner.
     """
-    # Create a barcode scanner mock
     scanner = BarcodeScanner()
+    scanner_mock = BarcodeScannerMock(scanner, monkeypatch)
 
-    def void(**kwargs: dict[Any, Any]): 
-        """Mock the scanner close function"""
-        pass
-    monkeypatch.setattr(scanner, "close", void)
+    viewmodel = TeamBridgeViewModel(
+        model=scheduler, scanner=scanner, cam_idx=0, scan_rate=10, debug_mode=True
+    )
 
-    return TeamBridgeViewModel(model=scheduler,
-                               scanner=scanner,
-                               cam_idx=0,
-                               scan_rate=10,
-                               debug_mode=True)
+    yield viewmodel, scanner_mock
+    viewmodel.close()

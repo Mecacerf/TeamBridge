@@ -142,11 +142,13 @@ class TeamBridgeViewModel(IStateMachine):
         """
         Called by the state machine on state change.
         """
-        logger.info(f"State changed from {old_state} to {self._state}.")
-        # The state machine must work with known state types
+        logger.info(f"State changed from {old_state!r} to {self._state!r}.")
+
+        # The state machine must work with subclasses of _IViewModelState
         assert isinstance(self._state, _IViewModelState)
-        # Update the state machine data
-        self._current_state.value = str(self._state)
+        
+        self._current_state.value = repr(self._state)
+
         # The texts for the view are updated on state change, as it is for a Moore
         # state machine. This can be limiting in some cases where extra states must
         # be added. This design might be re-evaluated in the future.
@@ -177,7 +179,7 @@ class TeamBridgeViewModel(IStateMachine):
     @property
     def current_state(self) -> LiveData[str]:
         """
-        Machine states are expressed as strings.
+        Machine state are expressed as a string.
 
         Returns:
             LiveData[str]: observable on the current machine state as a string
