@@ -150,7 +150,7 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
         for rem_year in old_years - new_years:
             logger.warning(f"Removed year {rem_year}: folder no longer found.")
 
-        years = [year for year in self._year_accessors.keys()]
+        years = list(self._year_accessors.keys())
         logger.info(
             f"Repository scan returned {len(years)} entries: {
                 ", ".join([str(year) for year in years])
@@ -255,9 +255,9 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
         Return a deduplicated list of all employee IDs found across
         all unsorted repository accessors.
         """
-        accessors: list[SheetsRepoAccessor] = [self._root_accessor] + [
-            accessor for accessor in self._year_accessors.values()
-        ]
+        accessors: list[SheetsRepoAccessor] = [self._root_accessor] + list(
+            self._year_accessors.values()
+        )
 
         ids: set[str] = set()
         for accessor in accessors:

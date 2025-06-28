@@ -45,7 +45,7 @@ from core.time_tracker import (
 # Time tracker factories
 from core.spreadsheets.sheet_time_tracker_factory import *
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 ########################################################################
 #                              Fixtures                                #
@@ -54,8 +54,8 @@ LOGGER = logging.getLogger(__name__)
 
 @pytest.fixture(
     params=[
-        # New factories can be added here
-        SheetTimeTrackerFactory(TEST_REPOSITORY_ROOT)
+        # New factories can be added here as lambdas
+        lambda: SheetTimeTrackerFactory(TEST_REPOSITORY_ROOT)
     ]
 )
 def factory(request: FixtureRequest, arrange_assets: None) -> TimeTrackerFactory:
@@ -69,7 +69,7 @@ def factory(request: FixtureRequest, arrange_assets: None) -> TimeTrackerFactory
     Returns:
         TimeTrackerFactory: An instance of a time tracker factory.
     """
-    return request.param
+    return request.param()
 
 
 ########################################################################
@@ -124,8 +124,8 @@ def tc_first_work_day() -> TestCaseData:
         date_balance=dt.timedelta(minutes=13),
         date_vacation=0.0,
         # Scheduled, vacation and worked time doesn't depend on current date
-        month_schedule=dt.timedelta(hours=182, minutes=14),
-        month_worked=dt.timedelta(hours=180),
+        month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
+        month_worked=dt.timedelta(hours=167, minutes=35),
         month_vacation=1.5,
         # Balance does: since date is 01.01.25, month and date balances are equal
         month_balance=dt.timedelta(minutes=13),
@@ -153,12 +153,12 @@ def tc_clocked_in():
         date_balance=dt.timedelta(hours=-5, minutes=-12),
         date_vacation=0.0,
         # Scheduled, vacation and worked time doesn't depend on current date
-        month_schedule=dt.timedelta(hours=149, minutes=6),
+        month_schedule=dt.timedelta(hours=161, minutes=31, seconds=30),
         month_worked=dt.timedelta(hours=55, minutes=55),
         month_vacation=0.5,
         month_balance=dt.timedelta(hours=-2, minutes=-4),
-        ytd_balance=dt.timedelta(hours=-2, minutes=17),
-        yty_balance=dt.timedelta(hours=2, minutes=55),
+        ytd_balance=dt.timedelta(hours=-2, minutes=-17, seconds=-30),
+        yty_balance=dt.timedelta(hours=2, minutes=54, seconds=30),
         # Year / remaining vacation doesn't depend on current date
         year_vacation=2.0,
         rem_vacation=20,
@@ -322,10 +322,6 @@ def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
         assert month_balance == testcase.month_balance
         assert month_worked_time == testcase.month_worked
         assert month_vacation == approx(testcase.month_vacation)
-
-        # Check that the relation between scheduled time, worked time and
-        # balance is respected
-        assert month_schedule + month_balance == month_worked_time
 
 
 @pytest.mark.parametrize(

@@ -30,6 +30,10 @@ from .libreoffice import *
 
 logger = logging.getLogger(__name__)
 
+# Prevent PIL from spamming debug messages
+# https://github.com/camptocamp/pytest-odoo/issues/15
+logging.getLogger("PIL").setLevel(logging.INFO)
+
 ########################################################################
 #                   Spreadsheet constants declaration                  #
 ########################################################################
@@ -41,13 +45,16 @@ EVAL_FILE_PREFIX = "eval_"
 # Opening a spreadsheet that doesn't use this major version will fail to
 # prevent compatibity issues
 # This version may be preceded by a minor version in the form '.xx'
-EXPECTED_MAJOR_VERSION = "v220525"
+EXPECTED_MAJOR_VERSION = "v180625"
 
 # Init sheet index
 SHEET_INIT = 0
 
 # Spreadsheet version
 CELL_VERSION = "A3"
+
+# Year the data in the spreasheet belongs to
+CELL_YEAR = "A4"
 
 CELL_NAME = "A10"
 CELL_FIRSTNAME = "A11"
@@ -59,9 +66,6 @@ CELL_OPENING_BALANCE = "A14"
 # These are the date and time data analysis is based on
 CELL_DATE = "A21"
 CELL_TIME = "A22"
-
-# The year is a constant for the spreadsheet file
-CELL_YEAR = "A4"
 
 # Formula evaluation test cell
 CELL_EVALUATED = "A23"
@@ -77,27 +81,29 @@ LOC_JANUARY_SHEET = "A24"
 LOC_FIRST_MONTH_DATE_ROW = "A25"
 
 # Clock in/out times columns (left and right array delimeters)
-LOC_FIRST_CLOCK_IN_COL = "A34"
-LOC_LAST_CLOCK_OUT_COL = "A35"
+LOC_FIRST_CLOCK_IN_COL = "A26"
+LOC_LAST_CLOCK_OUT_COL = "A27"
 
 # Day related information
-LOC_DAY_SCHEDULE_COL = "A26"
-LOC_DAY_WORKED_TIME_COL = "A27"
-LOC_DAY_BALANCE_COL = "A28"
-LOC_DAY_VACATION_COL = "A33"
-LOC_DAY_SHEET_ERROR_COL = "A33"  # TODO  # Error detected by the spreadsheet
-LOC_DAY_SOFT_ERROR_COL = "A33"  # TODO  # Custom error set by the software
+LOC_DAY_SCHEDULE_COL = "A28"
+LOC_DAY_WORKED_TIME_COL = "A29"
+LOC_DAY_BALANCE_COL = "A30"
+LOC_DAY_VACATION_COL = "A31"
+LOC_DAY_PAID_ABSENCE_COL = "A32"
+LOC_DAY_SHEET_ERROR_COL = "A33"
+LOC_DAY_SOFT_ERROR_COL = "A34"
 
 # Month related information
-LOC_MONTH_SCHEDULE = "A36"  # TODO
-LOC_MONTH_WORKED_TIME = "A37"  # TODO
-LOC_MONTH_BALANCE = "A29"
-LOC_MONTH_VACATION = "A32"
+LOC_MONTH_SCHEDULE = "A35"
+LOC_MONTH_WORKED_TIME = "A36"
+LOC_MONTH_BALANCE = "A37"
+LOC_MONTH_VACATION = "A38"
+LOC_MONTH_PAID_ABSENCE = "A39"
 
 # General information in the month sheets
-LOC_EXPECTED_DAY_SCHEDULE = "A36"  # TODO
-LOC_REMAINING_VACATION = "A31"
-LOC_YTD_BALANCE = "A30"  # Year-to-date balance
+LOC_EXPECTED_DAY_SCHEDULE = "A40"
+LOC_REMAINING_VACATION = "A41"
+LOC_YTD_BALANCE = "A42"  # Year-to-date balance
 
 ################################################
 #   Spreadsheets time tracker implementation   #
@@ -178,12 +184,14 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         self._col_day_worked_time = col_idx(sheet[LOC_DAY_WORKED_TIME_COL].value)
         self._col_day_balance = col_idx(sheet[LOC_DAY_BALANCE_COL].value)
         self._col_day_vacation = col_idx(sheet[LOC_DAY_VACATION_COL].value)
+        self._col_day_paid_absence = col_idx(sheet[LOC_DAY_PAID_ABSENCE_COL].value)
         self._col_day_sheet_error = col_idx(sheet[LOC_DAY_SHEET_ERROR_COL].value)
         self._col_day_soft_error = col_idx(sheet[LOC_DAY_SOFT_ERROR_COL].value)
         self._cell_month_schedule = str(sheet[LOC_MONTH_SCHEDULE].value)
         self._cell_month_worked_time = str(sheet[LOC_MONTH_WORKED_TIME].value)
         self._cell_month_balance = str(sheet[LOC_MONTH_BALANCE].value)
         self._cell_month_vacation = str(sheet[LOC_MONTH_VACATION].value)
+        self._cell_month_paid_absence = str(sheet[LOC_MONTH_PAID_ABSENCE].value)
         self._cell_exp_day_schedule = str(sheet[LOC_EXPECTED_DAY_SCHEDULE].value)
         self._cell_remaining_vacation = str(sheet[LOC_REMAINING_VACATION].value)
         self._cell_ytd_balance = str(sheet[LOC_YTD_BALANCE].value)
@@ -553,6 +561,25 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         raise ValueError(f"Cannot convert {type(value).__name__} to time.")
 
+    def __to_float_none_safe(self, value: Any) -> float:
+        """
+        Convert the given value to a float. A `None` value is interpreted
+        as 0.0.
+
+        Args:
+            value (Any): Input value
+
+        Returns:
+            float: Converted value.
+        """
+        if value is None:
+            return 0.0
+
+        if isinstance(value, (float, int)):
+            return float(value)
+
+        raise ValueError(f"Cannot convert {type(value).__name__} to float.")
+
     ## General employee's properties access ##
 
     @property
@@ -753,7 +780,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
     def get_vacation(self, date: dt.date | dt.datetime) -> float:
         return self.__get_month_day_cell_value(
-            self._workbook_raw, date, self._col_day_vacation, float
+            self._workbook_raw, date, self._col_day_vacation, self.__to_float_none_safe
         )
 
     def set_attendance_error(

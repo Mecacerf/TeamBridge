@@ -606,7 +606,6 @@ class IconButton(ButtonBehavior, RelativeLayout):
         return bool(handled or layout_handled)
 
 
-
 class ToggleIconButton(IconButton):
     """
     Icon button that overrides the default pressed/released behavior
@@ -643,7 +642,7 @@ class ToggleIconButton(IconButton):
         Override default enabled setter to automatically apply the
         toggled state when enabled.
         """
-        # Explicitly call the superclass setter 
+        # Explicitly call the superclass setter
         assert IconButton.button_enabled.fset is not None
         IconButton.button_enabled.fset(self, value)
 

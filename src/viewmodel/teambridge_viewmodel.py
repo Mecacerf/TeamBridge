@@ -146,7 +146,7 @@ class TeamBridgeViewModel(IStateMachine):
 
         # The state machine must work with subclasses of _IViewModelState
         assert isinstance(self._state, _IViewModelState)
-        
+
         self._current_state.value = repr(self._state)
 
         # The texts for the view are updated on state change, as it is for a Moore
