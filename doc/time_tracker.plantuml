@@ -34,6 +34,8 @@ class "TimeTracker" {
   is_clocked_in(date: dt.date) -> bool
   {abstract}set_vacation(date: dt.date, day_ratio: float) -> None
   {abstract}get_vacation(date: dt.date) -> float
+  {abstract}set_paid_absence(date: dt.date, day_ratio: float) -> None
+  {abstract}get_paid_absence(date: dt.date) -> float
   {abstract}set_attendance_error(date: dt.date, error_id: Optional[int]) -> None
   {abstract}get_attendance_error(date: dt.date) -> Optional[int]
   {abstract}save() -> None

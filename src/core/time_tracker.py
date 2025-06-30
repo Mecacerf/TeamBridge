@@ -470,7 +470,7 @@ class TimeTracker(Employee, ABC):
     def set_vacation(self, date: dt.date | dt.datetime, day_ratio: float):
         """
         Set the vacation ratio for the day, from 0.0 (no vacation) to
-        1.0 (full day off).
+        1.0 (full-day off).
 
         Args:
             date (datetime.date): The date to set data.
@@ -489,13 +489,53 @@ class TimeTracker(Employee, ABC):
     def get_vacation(self, date: dt.date | dt.datetime) -> float:
         """
         Get the vacation ratio for the day, from 0.0 (no vacation) to
-        1.0 (full day off).
+        1.0 (full-day off).
 
         Args:
             date (datetime.date): The date to read data.
 
         Returns:
-            float: Vacation ratio for the current date.
+            float: Vacation ratio for the date.
+
+        Raises:
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+        """
+        pass
+
+    @abstractmethod
+    def set_paid_absence(self, date: dt.date | dt.datetime, day_ratio: float):
+        """
+        Set the paid absence ratio for the day, from 0.0 (no absence) to
+        1.0 (full-day absence). Paid absences refer to time off that is
+        not counted as vacation, such as sick leave or accidents.
+
+        Args:
+            date (datetime.date): The date to set data.
+            day_ratio (float): Paid absence ratio for the day.
+
+        Raises:
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerWriteException: Raised on writing error.
+            TimeTrackerSaveException: Unable to save the tracker in the
+                local cache.
+            See chained exceptions for specific failure reasons.
+        """
+        pass
+
+    @abstractmethod
+    def get_paid_absence(self, date: dt.date | dt.datetime) -> float:
+        """
+        Get the paid absence ratio for the day, from 0.0 (no absence) to
+        1.0 (full-day absence). Paid absences refer to time off that is
+        not counted as vacation, such as sick leave or accidents.
+
+        Args:
+            date (datetime.date): The date to read data.
+
+        Returns:
+            float: Paid absence ratio for the date.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.

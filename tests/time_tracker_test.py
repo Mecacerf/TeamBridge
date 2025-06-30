@@ -81,7 +81,7 @@ def factory(request: FixtureRequest, arrange_assets: None) -> TimeTrackerFactory
 class TestCaseData:
     """
     Structure for a test case data. The structure holds the test date
-    and time and the expected values for that datetime.  
+    and time and the expected values for that datetime.
     """
 
     datetime: dt.datetime
@@ -127,22 +127,18 @@ def tc_first_work_day() -> TestCaseData:
         date_worked=dt.timedelta(hours=8, minutes=30),
         date_balance=dt.timedelta(minutes=13),
         date_vacation=0.0,
-
-        # Scheduled time, worked time and vacation for the month don't depend 
-        # on the date. They are always the sum for the whole month, even though 
-        # the test datetime is for the 1st. 
+        # Scheduled time, worked time and vacation for the month don't depend
+        # on the date. They are always the sum for the whole month, even though
+        # the test datetime is for the 1st.
         month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
         month_worked=dt.timedelta(hours=167, minutes=35),
         month_vacation=1.5,
-
-        # Balance does depend on the test datetime. It is the same as the day 
+        # Balance does depend on the test datetime. It is the same as the day
         # balance since the test date is the 01.01.25.
         month_balance=dt.timedelta(minutes=13),
-        
         # Opening balance is 2 hours, add the 13 minutes of the date
         ytd_balance=dt.timedelta(hours=2, minutes=13),
         yty_balance=dt.timedelta(hours=2),
-
         # Year / remaining vacation doesn't depend on current date
         year_vacation=2.0,  # Planned
         rem_vacation=20,  # Remaining
@@ -152,7 +148,7 @@ def tc_first_work_day() -> TestCaseData:
 @pytest.fixture
 def tc_month_closing():
     """
-    Test case data for the 31.01.25 after the last employee's clock out 
+    Test case data for the 31.01.25 after the last employee's clock out
     event.
     """
     return TestCaseData(
@@ -169,21 +165,17 @@ def tc_month_closing():
         date_worked=dt.timedelta(hours=9),
         date_balance=dt.timedelta(minutes=43),
         date_vacation=0.0,
-
-        # Scheduled time, worked time and vacation for the month don't depend 
-        # on the date. They are always the sum for the whole month, even though 
-        # the test datetime is for the 1st. 
+        # Scheduled time, worked time and vacation for the month don't depend
+        # on the date. They are always the sum for the whole month, even though
+        # the test datetime is for the 1st.
         month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
         month_worked=dt.timedelta(hours=167, minutes=35),
         month_vacation=1.5,
-
-        # Balance does depend on the test datetime but relates to the whole 
+        # Balance does depend on the test datetime but relates to the whole
         # month since the test date is the 31.01.25.
         month_balance=dt.timedelta(hours=-2, minutes=-13, seconds=-30),
-        
         ytd_balance=dt.timedelta(minutes=-13, seconds=-30),
         yty_balance=dt.timedelta(minutes=-56, seconds=-30),
-
         # Year / remaining vacation doesn't depend on current date
         year_vacation=2.0,  # Planned
         rem_vacation=20,  # Remaining
@@ -193,7 +185,7 @@ def tc_month_closing():
 @pytest.fixture
 def tc_clocked_in():
     """
-    Test case data for an ongoing day where the employee is still 
+    Test case data for an ongoing day where the employee is still
     working (clocked in). The test date and time is the 11.02.25 at 11h.
     No clock events exist in the dataset after this date.
     """

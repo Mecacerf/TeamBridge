@@ -30,7 +30,7 @@ from .libreoffice import *
 
 logger = logging.getLogger(__name__)
 
-# Prevent PIL from spamming debug messages
+# Prevent PIL from spamming debug messages (seems used by openpyxl)
 # https://github.com/camptocamp/pytest-odoo/issues/15
 logging.getLogger("PIL").setLevel(logging.INFO)
 
@@ -781,6 +781,17 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
     def get_vacation(self, date: dt.date | dt.datetime) -> float:
         return self.__get_month_day_cell_value(
             self._workbook_raw, date, self._col_day_vacation, self.__to_float_none_safe
+        )
+
+    def set_paid_absence(self, date: dt.date | dt.datetime, day_ratio: float):
+        self.__set_month_day_cell_value(date, self._col_day_paid_absence, day_ratio)
+
+    def get_paid_absence(self, date: dt.date | dt.datetime) -> float:
+        return self.__get_month_day_cell_value(
+            self._workbook_raw,
+            date,
+            self._col_day_paid_absence,
+            self.__to_float_none_safe,
         )
 
     def set_attendance_error(
