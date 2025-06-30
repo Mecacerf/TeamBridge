@@ -79,7 +79,10 @@ def factory(request: FixtureRequest, arrange_assets: None) -> TimeTrackerFactory
 
 @dataclass
 class TestCaseData:
-    """Structure for a test case data"""
+    """
+    Structure for a test case data. The structure holds the test date
+    and time and the expected values for that datetime.  
+    """
 
     datetime: dt.datetime
 
@@ -102,13 +105,14 @@ class TestCaseData:
 
 @pytest.fixture
 def testcase(request: FixtureRequest) -> TestCaseData:
+    """Get a test case data by its fixture name."""
     name = request.param
     return request.getfixturevalue(name)
 
 
 @pytest.fixture
 def tc_first_work_day() -> TestCaseData:
-    """Test case data for the first work day of the year."""
+    """Test case data for the first work day of the year (1st January 2025)."""
     return TestCaseData(
         datetime=dt.datetime(year=2025, month=1, day=1, hour=18),
         date_evt_times=[
@@ -123,15 +127,63 @@ def tc_first_work_day() -> TestCaseData:
         date_worked=dt.timedelta(hours=8, minutes=30),
         date_balance=dt.timedelta(minutes=13),
         date_vacation=0.0,
-        # Scheduled, vacation and worked time doesn't depend on current date
+
+        # Scheduled time, worked time and vacation for the month don't depend 
+        # on the date. They are always the sum for the whole month, even though 
+        # the test datetime is for the 1st. 
         month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
         month_worked=dt.timedelta(hours=167, minutes=35),
         month_vacation=1.5,
-        # Balance does: since date is 01.01.25, month and date balances are equal
+
+        # Balance does depend on the test datetime. It is the same as the day 
+        # balance since the test date is the 01.01.25.
         month_balance=dt.timedelta(minutes=13),
-        # Initial balance is 2 hours, add the 13 minutes of the date
+        
+        # Opening balance is 2 hours, add the 13 minutes of the date
         ytd_balance=dt.timedelta(hours=2, minutes=13),
         yty_balance=dt.timedelta(hours=2),
+
+        # Year / remaining vacation doesn't depend on current date
+        year_vacation=2.0,  # Planned
+        rem_vacation=20,  # Remaining
+    )
+
+
+@pytest.fixture
+def tc_month_closing():
+    """
+    Test case data for the 31.01.25 after the last employee's clock out 
+    event.
+    """
+    return TestCaseData(
+        datetime=dt.datetime(year=2025, month=1, day=31, hour=18),
+        date_evt_times=[
+            dt.time(hour=7, minute=45),
+            dt.time(hour=9, minute=50),
+            dt.time(hour=10, minute=0),
+            dt.time(hour=12, minute=30),
+            dt.time(hour=13, minute=15),
+            dt.time(hour=17, minute=40),
+        ],
+        date_schedule=dt.timedelta(hours=8, minutes=17),
+        date_worked=dt.timedelta(hours=9),
+        date_balance=dt.timedelta(minutes=43),
+        date_vacation=0.0,
+
+        # Scheduled time, worked time and vacation for the month don't depend 
+        # on the date. They are always the sum for the whole month, even though 
+        # the test datetime is for the 1st. 
+        month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
+        month_worked=dt.timedelta(hours=167, minutes=35),
+        month_vacation=1.5,
+
+        # Balance does depend on the test datetime but relates to the whole 
+        # month since the test date is the 31.01.25.
+        month_balance=dt.timedelta(hours=-2, minutes=-13, seconds=-30),
+        
+        ytd_balance=dt.timedelta(minutes=-13, seconds=-30),
+        yty_balance=dt.timedelta(minutes=-56, seconds=-30),
+
         # Year / remaining vacation doesn't depend on current date
         year_vacation=2.0,  # Planned
         rem_vacation=20,  # Remaining
@@ -140,7 +192,11 @@ def tc_first_work_day() -> TestCaseData:
 
 @pytest.fixture
 def tc_clocked_in():
-    """Test case data for an ongoing day where the employee is working."""
+    """
+    Test case data for an ongoing day where the employee is still 
+    working (clocked in). The test date and time is the 11.02.25 at 11h.
+    No clock events exist in the dataset after this date.
+    """
     return TestCaseData(
         datetime=dt.datetime(year=2025, month=2, day=11, hour=11),
         date_evt_times=[
@@ -240,7 +296,7 @@ def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
     indirect=True,
 )
 def test_get_clock_events(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -272,7 +328,7 @@ def test_is_clocked_in(
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
     indirect=True,
 )
 def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -301,7 +357,7 @@ def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
     indirect=True,
 )
 def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -326,7 +382,7 @@ def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
     indirect=True,
 )
 def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -343,7 +399,7 @@ def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: TestCaseDat
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
     indirect=True,
 )
 def test_year_vacation(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -414,7 +470,7 @@ def test_save(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
     indirect=True,
 )
 def test_get_read_only(factory: TimeTrackerFactory, testcase: TestCaseData):
