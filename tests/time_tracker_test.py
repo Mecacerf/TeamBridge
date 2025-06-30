@@ -204,6 +204,7 @@ def tc_clocked_in():
         month_schedule=dt.timedelta(hours=161, minutes=31, seconds=30),
         month_worked=dt.timedelta(hours=55, minutes=55),
         month_vacation=0.5,
+        # Month balance, year-to-date and year-to-yesterday depend on current date
         month_balance=dt.timedelta(hours=-2, minutes=-4),
         ytd_balance=dt.timedelta(hours=-2, minutes=-17, seconds=-30),
         yty_balance=dt.timedelta(hours=2, minutes=54, seconds=30),
@@ -213,38 +214,46 @@ def tc_clocked_in():
     )
 
 
-# @pytest.fixture
-# def tc_midnight_rollover():
-#     """Test case data for a day where an employee works at midnight."""
-#     return TestCaseData()
+@pytest.fixture
+def tc_work_at_midnight():
+    """
+    Test case data for a day where the employee worked after midnight.
+    The system must automatically register a clock-out at 00:00 on the
+    day and a clock-in at 00:00 on the next day. The clock-out is
+    actually registered at 24:00:00, which is read as 00:00 by the
+    time tracker.
+    """
+    return TestCaseData(
+        # The time can be arbitrarily chosen, the last clock-out is registered
+        datetime=dt.datetime(year=2025, month=1, day=7, hour=21),
+        date_evt_times=[
+            dt.time(hour=7, minute=45),
+            dt.time(hour=9, minute=50),
+            dt.time(hour=10, minute=0),
+            dt.time(hour=12, minute=30),
+            dt.time(hour=13, minute=15),
+            dt.time(hour=15, minute=0),
+            dt.time(hour=22, minute=0),
+            # Clock-out at midnight, clock-in at midnight the next day
+            dt.time(hour=0, minute=0),
+        ],
+        date_schedule=dt.timedelta(hours=8, minutes=17),
+        date_worked=dt.timedelta(hours=8, minutes=20),
+        date_balance=dt.timedelta(hours=0, minutes=3),
+        date_vacation=0.0,
+        # Scheduled, vacation and worked time doesn't depend on current date
+        month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
+        month_worked=dt.timedelta(hours=167, minutes=35),
+        month_vacation=1.5,
+        # Month balance, year-to-date and year-to-yesterday depend on current date
+        month_balance=dt.timedelta(hours=1, minutes=30),
+        ytd_balance=dt.timedelta(hours=3, minutes=30),
+        yty_balance=dt.timedelta(hours=3, minutes=27),
+        # Year / remaining vacation doesn't depend on current date
+        year_vacation=2.0,
+        rem_vacation=20,
+    )
 
-
-# @pytest.fixture
-# def date_until_midnight() -> DateData:
-#     """Get the date data for a day with midnight rollover.
-
-#     Clock events for the date:
-#         07:45	09:50	10:00	12:30	13:15	15:00	22:00	00:00
-#     Day schedule / Worked time / Balance / Vacation:
-#         8:17          8:20        0:03       0.0
-#     """
-#     return DateData(
-#         datetime=dt.datetime(year=2025, month=1, day=7, hour=23, minute=59),
-#         evt_times=[
-#             dt.time(hour=7, minute=45),
-#             dt.time(hour=9, minute=50),
-#             dt.time(hour=10, minute=0),
-#             dt.time(hour=12, minute=30),
-#             dt.time(hour=13, minute=15),
-#             dt.time(hour=15, minute=0),
-#             dt.time(hour=22, minute=0),
-#             dt.time(hour=0, minute=0),
-#         ],
-#         schedule=dt.timedelta(hours=8, minutes=17),
-#         worked=dt.timedelta(hours=8, minutes=20),
-#         balance=dt.timedelta(minutes=3),
-#         vacation=0.0,
-#     )
 
 ########################################################################
 #                            Unit tests                                #
@@ -288,7 +297,7 @@ def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
     indirect=True,
 )
 def test_get_clock_events(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -320,7 +329,7 @@ def test_is_clocked_in(
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
     indirect=True,
 )
 def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -349,7 +358,7 @@ def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
     indirect=True,
 )
 def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -374,7 +383,7 @@ def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
     indirect=True,
 )
 def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -391,7 +400,7 @@ def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: TestCaseDat
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
     indirect=True,
 )
 def test_year_vacation(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -462,7 +471,7 @@ def test_save(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing"],
+    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
     indirect=True,
 )
 def test_get_read_only(factory: TimeTrackerFactory, testcase: TestCaseData):
@@ -500,6 +509,16 @@ def test_get_read_only(factory: TimeTrackerFactory, testcase: TestCaseData):
             tracker.analyze(testcase.datetime)
         with pytest.raises(TimeTrackerReadException):
             tracker.read_day_schedule(testcase.datetime)
+
+
+# def test_midnight(factory: TimeTrackerFactory):
+#     """
+#     Continue the day started on 11.02.2025 and work at midnight.
+#     """
+#     with factory.create(TEST_EMPLOYEE_ID, 2025) as tracker:
+#         tracker.register_clock(dt.date(2025, 2, 11),
+#                                ClockEvent(dt.time(24), ClockAction.CLOCK_OUT))
+#         tracker.save()
 
 
 # TODO: integration tests / edge case tests
@@ -555,6 +574,12 @@ def test_get_read_only(factory: TimeTrackerFactory, testcase: TestCaseData):
 
 
 # --- Edge case stubs below ---
+
+
+@pytest.mark.skip(reason="Not implemented")
+def test_register_evt_at_midnight(factory: TimeTrackerFactory):
+    # Expect: possible to register at midnight
+    pass
 
 
 @pytest.mark.skip(reason="Not implemented")
