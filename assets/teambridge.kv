@@ -170,7 +170,7 @@
                 ToggleIconButton:
                     id: consultation_button_id
                     source: 'assets/images/consultation.png'
-                    on_press: if self.enabled: root.on_consultation_press()
+                    on_press: if self.button_enabled: root.on_consultation_press()
         
             AnchorLayout:
                 size_hint: 0.26, 1
@@ -178,14 +178,14 @@
                 ToggleIconButton:
                     id: clock_button_id
                     source: 'assets/images/start_pause.png'
-                    on_press: if self.enabled: root.on_clock_action_press()
+                    on_press: if self.button_enabled: root.on_clock_action_press()
 
             AnchorLayout:
                 size_hint: 0.26, 1
 
                 IconButton:
                     source: 'assets/images/attendance.png'
-                    on_press: if self.enabled: root.on_attendance_press()
+                    on_press: if self.button_enabled: root.on_attendance_press()
 
             # Right border
             Widget:

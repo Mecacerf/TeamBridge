@@ -1,0 +1,162 @@
+@startuml time_tracker
+
+class "Employee" {
+  employee_id: str
+  {abstract}name: str
+  {abstract}firstname: str
+
+  Employee(employee_id: str, *kargs: Any, **kwargs: Any)
+  {abstract}close() -> None
+}
+
+note left 
+  The `Employee` is the base interface that provides 
+  access to general information about an employee, such
+  as his name, firstname, ID or anything that is static
+  (we may add the role, status, birthday and so on).
+  This interface doesn't provide any setter because the 
+  implementation is supposed to be read-only.
+  Implementation(s) of this interface works with IO 
+  resources (file, database). A context manager can be 
+  used to automatically manage resource lifecycle.
+end note
+
+class "TimeTracker" {
+  {abstract}tracked_year: int
+  {abstract}opening_day_schedule: dt.timedelta
+  {abstract}opening_balance: dt.timedelta
+  {abstract}opening_vacation_days: float
+  {abstract}max_clock_events_per_day: int
+
+  {abstract}get_clocks(date: dt.date) -> list[Optional[ClockEvent]]
+  {abstract}register_clock(date: dt.date, event: ClockEvent) -> None
+  {abstract}write_clocks(date: dt.date, events: list[Optional[ClockEvent]]) -> None
+  is_clocked_in(date: dt.date) -> bool
+  {abstract}set_vacation(date: dt.date, day_ratio: float) -> None
+  {abstract}get_vacation(date: dt.date) -> float
+  {abstract}set_paid_absence(date: dt.date, day_ratio: float) -> None
+  {abstract}get_paid_absence(date: dt.date) -> float
+  {abstract}set_attendance_error(date: dt.date, error_id: Optional[int]) -> None
+  {abstract}get_attendance_error(date: dt.date) -> Optional[int]
+  {abstract}save() -> None
+}
+
+note left
+The `TimeTracker` is a specialization of the `Employee` 
+interface that provides methods to read and write clock 
+events (such as clock-ins and clock-outs), day vacation 
+and day attendance error. It focuses on single days and
+does not evaluate any given data in any way. The `save()`
+method allows to write the data to the storage system.
+Each `TimeTracker` instance is bound to a specific year, 
+and all read or write operations must relate to that year.
+end note
+
+class "TimeTrackerAnalyzer" {
+  {abstract}target_datetime: Optional[dt.datetime]
+  analyzed: bool
+  
+  analyze(target_datetime: dt.datetime) -> None
+  {abstract}read_day_schedule(date: dt.date) -> dt.timedelta
+  {abstract}read_day_worked_time(date: dt.date) -> dt.timedelta
+  {abstract}read_day_balance(date: dt.date) -> dt.timedelta
+  {abstract}read_day_attendance_error(date: dt.date) -> Optional[int]
+  {abstract}read_month_expected_daily_schedule(month: int) -> dt.timedelta
+  {abstract}read_month_schedule(month: int) -> dt.timedelta
+  {abstract}read_month_worked_time(month: int) -> dt.timedelta
+  {abstract}read_month_balance(month: int) -> dt.timedelta
+  {abstract}read_month_vacation(month: int) -> float
+  {abstract}read_year_vacation() -> float
+  {abstract}read_year_remaining_vacation() -> float
+  {abstract}read_year_to_date_balance() -> dt.timedelta
+  read_year_to_yesterday_balance() -> dt.timedelta
+}
+
+note left
+The `TimeTrackerAnalyzer` interface extends the `TimeTracker` 
+interface by providing methods to analyze an employee’s 
+data, including day, month, and year balances, dynamic 
+daily schedules based on weekdays and vacations, and more.
+
+Data is not immediately available. It becomes accessible 
+only after calling the `analyze()` method with a specified 
+`target_datetime`. This datetime defines the point in time 
+the analysis is based on. For example, if the tracker is 
+analyzed at 10:00 on a given day and the employee clocked 
+in at 08:00, the worked time will be 2 hours. If analyzed 
+at 11:00, it will be 3 hours.
+
+The analyzer also performs basic attendance error detection, 
+such as identifying missing clock-out events. These errors 
+can be retrieved using `read_attendance_error(date)`. This 
+differs from the `set/get_attendance_error()` methods, which 
+are used to manually define or retrieve custom errors.
+end note
+
+Employee <|-- TimeTracker
+TimeTracker <|-- TimeTrackerAnalyzer
+
+enum "ClockAction" {
+  CLOCK_IN
+  CLOCK_OUT
+}
+
+class "ClockEvent" <<dataclass>> {
+  action: ClockAction
+  time : dt.time
+}
+
+ClockEvent .l.> TimeTracker
+ClockAction -l* ClockEvent : action
+
+class "AttendanceError" {
+  error_id: int
+  description : str
+}
+
+class "AttendanceValidator" {
+  time_tracker: TimeTracker
+  analyze_date(date: dt.date, update: bool=False) -> Optional[AttendanceError]
+  analyze_until(date: dt.date, update: bool=False) -> dict[dt.date, AttendanceError]
+}
+
+note right
+  The `AttendanceValidator` class complements the functionality 
+  of the `TimeTrackerAnalyzer` by detecting additional types of 
+  attendance errors, such as unordered clock events or custom-
+  defined conditions like excessive daily work hours.
+
+  The `update` argument can optionally be set to `True` when 
+  analyzing for errors. When enabled, it instructs the validator 
+  to write all detected errors to the time tracker and save them.
+  
+  It is designed for extensibility — subclasses can implement 
+  additional validation rules to support custom error checks as 
+  needed.
+end note
+
+TimeTracker --o AttendanceValidator : time_tracker
+AttendanceError .> AttendanceValidator
+
+class "TimeTrackerAnalyzerFactory" <<Singleton>> {
+  {abstract}create(employee_id: str, year: int, readonly: bool) -> TimeTrackerAnalyzer
+  {abstract}list_employee_ids() -> list[str]
+}
+
+note left
+  The TimeTrackerAnalyzerFactory is a generic interface that 
+  provides a simple way to create TimeTrackerAnalyzer instances 
+  using an employee ID and a target year.
+  Typically, implementations of this interface are created at 
+  startup and injected into any module that needs to work with 
+  time trackers, allowing the module to remain unaware of the 
+  specific time tracker implementation in use.
+  The factory also provides a utility method to retrieve all 
+  employee IDs registered in the system.
+  The `readonly` flag can be specified. If supported by the
+  implementation, a read-only time tracker will be created.
+end note
+
+TimeTrackerAnalyzerFactory <.. TimeTrackerAnalyzer
+
+@enduml

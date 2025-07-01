@@ -12,9 +12,11 @@ Contact: info@mecacerf.ch
 from .data import *
 from .teambridge_scheduler import *
 
-__all__ = ['IModelMessage', 
-           'IEmployeeMessage', 
-           'EmployeeEvent',
-           'EmployeeData', 
-           'ModelError',
-           'TeamBridgeScheduler']
+__all__ = [
+    "IModelMessage",
+    "IEmployeeMessage",
+    "EmployeeEvent",
+    "EmployeeData",
+    "ModelError",
+    "TeamBridgeScheduler",
+]

@@ -3,24 +3,30 @@
 File: view_theme.py
 Author: Bastian Cerf
 Date: 26/04/2025
-Description: 
-    Define base properties for a view theme.    
+Description:
+    Define base properties for a view theme.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+# pyright: reportGeneralTypeIssues=false
+# pyright: reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false
+
 from dataclasses import dataclass
 
 from kivy.graphics import Color
 from kivy.utils import get_color_from_hex
+
 
 @dataclass
 class ViewTheme:
     """
     Define the view theme properties.
     """
+
     # Background color (main screen)
     bg_color: Color
 
@@ -54,32 +60,33 @@ class ViewTheme:
     # Hint text color (placeholder text in inputs)
     hint_color: Color
 
+
 # Light theme
 LIGHT_THEME = ViewTheme(
-    bg_color=get_color_from_hex("FFFFFF"),        
-    surface_color=get_color_from_hex("D9D9D9"),     
-    primary_color=get_color_from_hex("1C6EAC"),     
-    secondary_color=get_color_from_hex("B9D2E5"),  
+    bg_color=get_color_from_hex("FFFFFF"),
+    surface_color=get_color_from_hex("D9D9D9"),
+    primary_color=get_color_from_hex("1C6EAC"),
+    secondary_color=get_color_from_hex("B9D2E5"),
     text_primary_color=get_color_from_hex("1C6EAC"),
-    text_secondary_color=get_color_from_hex("000000"), 
-    border_color=get_color_from_hex("4F4F4F"),      
-    error_color=get_color_from_hex("ED1C24"),               
-    success_color=get_color_from_hex("1CAC3B"),            
-    disabled_color=(0.55, 0.55, 0.55, 1),       
-    hint_color=(0.5, 0.5, 0.5, 1),           
+    text_secondary_color=get_color_from_hex("000000"),
+    border_color=get_color_from_hex("4F4F4F"),
+    error_color=get_color_from_hex("ED1C24"),
+    success_color=get_color_from_hex("1CAC3B"),
+    disabled_color=(0.55, 0.55, 0.55, 1),
+    hint_color=(0.5, 0.5, 0.5, 1),
 )
 
 # Dark theme
 DARK_THEME = ViewTheme(
-    bg_color = get_color_from_hex("1F1F1F"),           
-    surface_color=get_color_from_hex("3F3F3F"),      
-    primary_color=get_color_from_hex("238BD9"),      
-    secondary_color=get_color_from_hex("B9D2E5"),   
-    text_primary_color=get_color_from_hex("238BD9"), 
-    text_secondary_color=get_color_from_hex("B0BEC5"), 
+    bg_color=get_color_from_hex("1F1F1F"),
+    surface_color=get_color_from_hex("3F3F3F"),
+    primary_color=get_color_from_hex("238BD9"),
+    secondary_color=get_color_from_hex("B9D2E5"),
+    text_primary_color=get_color_from_hex("238BD9"),
+    text_secondary_color=get_color_from_hex("B0BEC5"),
     border_color=get_color_from_hex("2C2C2C"),
-    error_color=(0.9, 0.3, 0.3, 1),        
+    error_color=(0.9, 0.3, 0.3, 1),
     success_color=(0.3, 0.9, 0.3, 1),
     disabled_color=(0.4, 0.4, 0.4, 1),
-    hint_color=(0.5, 0.5, 0.5, 1),               
+    hint_color=(0.5, 0.5, 0.5, 1),
 )

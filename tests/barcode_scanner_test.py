@@ -3,7 +3,7 @@
 File: qr_scanner_test.py
 Author: Bastian Cerf
 Date: 06/03/2025
-Description: 
+Description:
     Unit test / integration test of the barcode scanner module.
 
 Company: Mecacerf SA
@@ -11,38 +11,45 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
+# Standard libraries
 import pytest
+from pytest import FixtureRequest
 import cv2
 import pyvirtualcam
 import threading
 import pathlib
 import time
 from typing import Generator
+
+# Internal libraries
 from platform_io.barcode_scanner import BarcodeScanner
 
-################################################
-#               Tests constants                #
-################################################
+########################################################################
+#                           Tests constants                            #
+########################################################################
 
-# Virtual camera id. If more than one camera is connected, ensure this is the id of
-# the virtual camera created by OBS Studio.
+# Virtual camera id. If more than one camera is connected, ensure this is the
+# id of the virtual camera created by OBS Studio.
 VIRTUAL_CAM_IDX = 0
 # Regular expression to use to identify employee's id
 EMPLOYEE_REGEX = r"teambridge@(\w+)"
 # Group to extract ID
 EMPLOYEE_REGEX_GROUP = 1
 
-################################################
-#                  Fixtures                    #
-################################################
+########################################################################
+#                               Fixtures                               #
+########################################################################
 
-@pytest.fixture(params=[
-    ("tests/assets/qrscan-000.mp4", None), # '000' doesn't match regular expression
-    ("tests/assets/qrscan-teambridge@543.mp4", '543') # Shall identify id '543'
-])
-def open_virtual_device(request) -> Generator[str, None, None]:
+
+@pytest.fixture(
+    params=[
+        ("tests/assets/qrscan-000.mp4", None),  # '000' doesn't match regular expression
+        ("tests/assets/qrscan-teambridge@543.mp4", "543"),  # Shall identify id '543'
+    ]
+)
+def open_virtual_device(request: FixtureRequest) -> Generator[str, None, None]:
     """
-    Create, open the virtual camera and play a file given as parameter. 
+    Create, open the virtual camera and play a file given as parameter.
 
     Yields:
         str: the ID that shall be found in the playing video
@@ -62,7 +69,7 @@ def open_virtual_device(request) -> Generator[str, None, None]:
     def video_player_task():
         """
         Read the given capture and play the frames in a
-        virtual camera device. This function uses pyvirtualcam 
+        virtual camera device. This function uses pyvirtualcam
         and require OBS studio to be installed on the system.
         """
         # Open the video file
@@ -74,11 +81,13 @@ def open_virtual_device(request) -> Generator[str, None, None]:
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = int(capture.get(cv2.CAP_PROP_FPS))
-        print(f"Going to play {video_path} with dimension {width}x{height}px at {fps} fps.")
+        print(
+            f"Going to play {video_path} with dimension {width}x{height}px at {fps} fps."
+        )
 
         # Create and open the virtual camera
         with pyvirtualcam.Camera(width, height, fps=fps) as cam:
-            # Run while feeder flag is set 
+            # Run while feeder flag is set
             while run_feeder.is_set():
                 # Read the next frame
                 ret, frame = capture.read()
@@ -88,7 +97,7 @@ def open_virtual_device(request) -> Generator[str, None, None]:
                     # Convert BGR to RGB
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     # Send the frame to the virtual camera
-                    cam.send(frame)
+                    cam.send(frame)  # type: ignore
                     # Synchronize with given fps value
                     cam.sleep_until_next_frame()
                     # Set the running status, first frame has been sent
@@ -99,7 +108,7 @@ def open_virtual_device(request) -> Generator[str, None, None]:
                     capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
         # Release the capture
         capture.release()
-                    
+
     # Run the video player task in a background thread
     video_task = threading.Thread(target=video_player_task, name="VirtualCam-Feeder")
     # Set the running flag and start the thread
@@ -112,14 +121,17 @@ def open_virtual_device(request) -> Generator[str, None, None]:
     # Run the test
     yield expected_id
 
-    # Once test done, reset the flag and join the thread        
+    # Once test done, reset the flag and join the thread
     run_feeder.clear()
     video_task.join()
     # Add a little delay before starting next virtual camera, usually not required
     time.sleep(0.1)
 
+
 @pytest.fixture
-def prepare_scanner(open_virtual_device) -> Generator[tuple, None, None]:
+def prepare_scanner(
+    open_virtual_device: str,
+) -> Generator[tuple[BarcodeScanner, str], None, None]:
     """
     Open a virtual camera device then create, open and yields a barcode scanner.
 
@@ -129,18 +141,22 @@ def prepare_scanner(open_virtual_device) -> Generator[tuple, None, None]:
     """
     # Create and open the scanner
     scanner = BarcodeScanner()
-    scanner.configure(debug_mode=True, regex=EMPLOYEE_REGEX, extract_group=EMPLOYEE_REGEX_GROUP)
+    scanner.configure(
+        debug_mode=True, regex=EMPLOYEE_REGEX, extract_group=EMPLOYEE_REGEX_GROUP
+    )
     scanner.open(cam_idx=VIRTUAL_CAM_IDX, scan_rate=5)
     # Run the test
     yield scanner, open_virtual_device
     # Close the scanner, wait for the scanning thread to finish
     scanner.close(join=True)
 
+
 ################################################
 #                    Tests                     #
 ################################################
 
-def test_multiple_open(prepare_scanner):
+
+def test_multiple_open(prepare_scanner: tuple[BarcodeScanner, str]):
     """
     Try to reopen an already opened scanner and verify it throws an exception.
     """
@@ -151,7 +167,8 @@ def test_multiple_open(prepare_scanner):
         # An exception is raised because the scanner is already running
         scanner.open()
 
-def test_clear_scanner(prepare_scanner):
+
+def test_clear_scanner(prepare_scanner: tuple[BarcodeScanner, str]):
     """
     Wait for an id to be scanned and clear the scanner.
     """
@@ -169,7 +186,8 @@ def test_clear_scanner(prepare_scanner):
         with pytest.raises(KeyError):
             scanner.read_next()
 
-def test_scan_id(prepare_scanner):
+
+def test_scan_id(prepare_scanner: tuple[BarcodeScanner, str]):
     """
     The test will open a virtual camera (OBS studio required) and plays a test video
     containing a QR code. It is then checked if the QR code is correctly scanned
