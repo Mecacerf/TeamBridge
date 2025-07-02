@@ -86,7 +86,7 @@ class TestCaseData:
 
     datetime: dt.datetime
 
-    date_evt_times: list[dt.time]
+    date_events: list[tuple[dt.time, ClockAction]]
     date_schedule: dt.timedelta
     date_worked: dt.timedelta
     date_balance: dt.timedelta
@@ -115,13 +115,13 @@ def tc_first_work_day() -> TestCaseData:
     """Test case data for the first work day of the year (1st January 2025)."""
     return TestCaseData(
         datetime=dt.datetime(year=2025, month=1, day=1, hour=18),
-        date_evt_times=[
-            dt.time(hour=7, minute=45),
-            dt.time(hour=9, minute=50),
-            dt.time(hour=10, minute=0),
-            dt.time(hour=12, minute=30),
-            dt.time(hour=13, minute=15),
-            dt.time(hour=17, minute=10),
+        date_events=[
+            (dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
+            (dt.time(hour=9, minute=50), ClockAction.CLOCK_OUT),
+            (dt.time(hour=10, minute=0), ClockAction.CLOCK_IN),
+            (dt.time(hour=12, minute=30), ClockAction.CLOCK_OUT),
+            (dt.time(hour=13, minute=15), ClockAction.CLOCK_IN),
+            (dt.time(hour=17, minute=10), ClockAction.CLOCK_OUT),
         ],
         date_schedule=dt.timedelta(hours=8, minutes=17),
         date_worked=dt.timedelta(hours=8, minutes=30),
@@ -153,13 +153,13 @@ def tc_month_closing():
     """
     return TestCaseData(
         datetime=dt.datetime(year=2025, month=1, day=31, hour=18),
-        date_evt_times=[
-            dt.time(hour=7, minute=45),
-            dt.time(hour=9, minute=50),
-            dt.time(hour=10, minute=0),
-            dt.time(hour=12, minute=30),
-            dt.time(hour=13, minute=15),
-            dt.time(hour=17, minute=40),
+        date_events=[
+            (dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
+            (dt.time(hour=9, minute=50), ClockAction.CLOCK_OUT),
+            (dt.time(hour=10, minute=0), ClockAction.CLOCK_IN),
+            (dt.time(hour=12, minute=30), ClockAction.CLOCK_OUT),
+            (dt.time(hour=13, minute=15), ClockAction.CLOCK_IN),
+            (dt.time(hour=17, minute=40), ClockAction.CLOCK_OUT),
         ],
         date_schedule=dt.timedelta(hours=8, minutes=17),
         date_worked=dt.timedelta(hours=9),
@@ -191,10 +191,10 @@ def tc_clocked_in():
     """
     return TestCaseData(
         datetime=dt.datetime(year=2025, month=2, day=11, hour=11),
-        date_evt_times=[
-            dt.time(hour=7, minute=45),
-            dt.time(hour=9, minute=50),
-            dt.time(hour=10, minute=0),
+        date_events=[
+            (dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
+            (dt.time(hour=9, minute=50), ClockAction.CLOCK_OUT),
+            (dt.time(hour=10, minute=0), ClockAction.CLOCK_IN),
         ],
         date_schedule=dt.timedelta(hours=8, minutes=17),
         date_worked=dt.timedelta(hours=3, minutes=5),
@@ -226,16 +226,15 @@ def tc_work_at_midnight():
     return TestCaseData(
         # The time can be arbitrarily chosen, the last clock-out is registered
         datetime=dt.datetime(year=2025, month=1, day=7, hour=21),
-        date_evt_times=[
-            dt.time(hour=7, minute=45),
-            dt.time(hour=9, minute=50),
-            dt.time(hour=10, minute=0),
-            dt.time(hour=12, minute=30),
-            dt.time(hour=13, minute=15),
-            dt.time(hour=15, minute=0),
-            dt.time(hour=22, minute=0),
-            # Clock-out at midnight, clock-in at midnight the next day
-            dt.time(hour=0, minute=0),
+        date_events=[
+            (dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
+            (dt.time(hour=9, minute=50), ClockAction.CLOCK_OUT),
+            (dt.time(hour=10, minute=0), ClockAction.CLOCK_IN),
+            (dt.time(hour=12, minute=30), ClockAction.CLOCK_OUT),
+            (dt.time(hour=13, minute=15), ClockAction.CLOCK_IN),
+            (dt.time(hour=15, minute=0), ClockAction.CLOCK_OUT),
+            (dt.time(hour=22, minute=0), ClockAction.CLOCK_IN),
+            (dt.time(hour=0, minute=0), ClockAction.MIDNIGHT_ROLLOVER),
         ],
         date_schedule=dt.timedelta(hours=8, minutes=17),
         date_worked=dt.timedelta(hours=8, minutes=20),
@@ -306,10 +305,11 @@ def test_get_clock_events(factory: TimeTrackerFactory, testcase: TestCaseData):
     expected ones.
     """
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime) as tracker:
-        evt_times = [
-            evt.time if evt else None for evt in tracker.get_clocks(testcase.datetime)
+        events = [
+            (evt.time, evt.action) if evt else None
+            for evt in tracker.get_clocks(testcase.datetime)
         ]
-        assert evt_times == testcase.date_evt_times
+        assert events == testcase.date_events
 
 
 def test_is_clocked_in(
@@ -484,10 +484,11 @@ def test_get_read_only(factory: TimeTrackerFactory, testcase: TestCaseData):
         # Time Tracker interface
         assert tracker.opening_vacation_days == 22
 
-        evt_times = [
-            evt.time if evt else None for evt in tracker.get_clocks(testcase.datetime)
+        events = [
+            (evt.time, evt.action) if evt else None
+            for evt in tracker.get_clocks(testcase.datetime)
         ]
-        assert evt_times == testcase.date_evt_times
+        assert events == testcase.date_events
 
         assert tracker.get_vacation(testcase.datetime) == testcase.date_vacation
         # TODO: tracker.get_attendance_error()

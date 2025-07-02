@@ -17,7 +17,7 @@ Contact: info@mecacerf.ch
 # Standard libraries
 import logging
 import datetime as dt
-from typing import TypeVar, Callable
+from typing import TypeVar, Callable, Union
 
 # Third-party libraries
 import openpyxl
@@ -105,13 +105,26 @@ LOC_EXPECTED_DAY_SCHEDULE = "A40"
 LOC_REMAINING_VACATION = "A41"
 LOC_YTD_BALANCE = "A42"  # Year-to-date balance
 
-################################################
-#   Spreadsheets time tracker implementation   #
-################################################
+########################################################################
+#                           Other constants                            #
+########################################################################
 
 T = TypeVar("T")  # For generic methods
 
 CLOSED_ERROR_MSG = "Cannot manipulate a closed tracker."
+
+
+class SpecialTime(Enum):
+    """Special times the spreadsheet may hold"""
+
+    MIDNIGHT_ROLLOVER = "24:00"
+
+
+ClockTime = Union[dt.time, SpecialTime]
+
+########################################################################
+#               Spreadsheets time tracker implementation               #
+########################################################################
 
 
 class SheetTimeTracker(TimeTrackerAnalyzer):
@@ -314,10 +327,10 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         `self._col_last_clock_out`
 
         Args:
-            cell (Any): Openpyxl cell
+            cell (Any): Openpyxl cell.
 
         Returns:
-            ClockAction: Clock action for the cell
+            ClockAction: Clock action for the cell.
 
         Raises:
             TimeTrackerValueException: Given cell out of expected range.
@@ -528,7 +541,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         Convert the given value to a `datetime.timedelta` if necessary.
 
         Args:
-            value (Any): Input value
+            value (Any): Input value.
 
         Returns:
             datetime.timedelta: Converted value.
@@ -543,20 +556,25 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         raise ValueError(f"Cannot convert {type(value).__name__} to timedelta.")
 
-    def __to_time(self, value: Any) -> dt.time:
+    def __to_time(self, value: Any) -> ClockTime:
         """
         Convert the given value to a `datetime.time` if necessary.
 
         Args:
-            value (Any): Input value
+            value (Any): Input value.
 
         Returns:
-            datetime.time: Converted value.
+            ClockTime: Converted value as a dt.time or a SpecialTime.
         """
         if isinstance(value, dt.time):
             # Passthrough
             return value
         if isinstance(value, dt.datetime):
+            # The midnight rollover, noted 24:00 in the cell, is interpreted by
+            # Openpyxl as midnight on the 01.01.1900.
+            if value == dt.datetime(1900, 1, 1, 0, 0):
+                return SpecialTime.MIDNIGHT_ROLLOVER
+
             return dt.time(hour=value.hour, minute=value.minute, second=value.second)
 
         raise ValueError(f"Cannot convert {type(value).__name__} to time.")
@@ -567,7 +585,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         as 0.0.
 
         Args:
-            value (Any): Input value
+            value (Any): Input value.
 
         Returns:
             float: Converted value.
@@ -579,6 +597,43 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             return float(value)
 
         raise ValueError(f"Cannot convert {type(value).__name__} to float.")
+
+    ## Utility methods ##
+
+    def __get_clock_event(self, cell: Any) -> Optional[ClockEvent]:
+        """
+        Try to convert the cell content to a `ClockEvent`. The cell must
+        contain a time in the `hh:mm` format or must be empty.
+
+        Args:
+            cell (Any): Openpyxl cell.
+
+        Returns:
+            Optional[ClockEvent]: A `ClockEvent` if the cell has a parsable
+                value or `None` otherwise.
+
+        Raises:
+            TimeTrackerValueException: Conversion unsupported for the
+                cell value.
+            TimeTrackerValueException: Given cell out of expected range.
+        """
+        if cell is None or cell.value is None:
+            return None  # Cell is empty, no clock event registered
+
+        evt_time = self.__cast(cell.value, self.__to_time)
+
+        if isinstance(evt_time, dt.time):
+            # Standard clock-in / clock-out
+            action = self.__get_clock_action_for_cell(cell)
+        else:
+            # Handle a special time
+            if evt_time == SpecialTime.MIDNIGHT_ROLLOVER:
+                evt_time = dt.time(hour=0, minute=0)
+                action = ClockAction.MIDNIGHT_ROLLOVER
+            else:
+                raise TimeTrackerValueException(f"Unhandled special time {evt_time}.")
+
+        return ClockEvent(time=evt_time, action=action)
 
     ## General employee's properties access ##
 
@@ -655,11 +710,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
             # Create and append a ClockEvent if a time is available in the cell,
             # otherwise just append None in the clock events list
-            if cell and cell.value is not None:
-                evt_time = self.__cast(cell.value, self.__to_time)
-                event = ClockEvent(
-                    time=evt_time, action=self.__get_clock_action_for_cell(cell)
-                )
+            event = self.__get_clock_event(cell)
+
             clock_events.append(event)
 
         # Return the events list without the trailing None values

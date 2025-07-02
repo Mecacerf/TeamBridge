@@ -108,9 +108,9 @@ class ClockAction(Enum):
 
     CLOCK_IN = 0  # The employee starts working
     CLOCK_OUT = 1  # The employee finishes working
+    MIDNIGHT_ROLLOVER = 2  # The employee is working at midnight
 
     def __str__(self):
-        # Return `clock-in` or `clock-out` as a user friendly description
         return self.name.lower().replace("_", "-")
 
 
