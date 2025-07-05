@@ -25,11 +25,12 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 from abc import ABC, abstractmethod
-from typing import Optional, Type, Any
+from typing import Optional, Type, Any, ClassVar
 from types import TracebackType
-from dataclasses import dataclass
-from enum import Enum
+from dataclasses import dataclass, field
+from enum import Enum, auto
 import datetime as dt
+from threading import Lock
 
 ########################################################################
 #              Time tracker related errors declaration                 #
@@ -106,9 +107,8 @@ class TimeTrackerCloseException(TimeTrackerException):
 class ClockAction(Enum):
     """Clock actions enumeration."""
 
-    CLOCK_IN = 0  # The employee starts working
-    CLOCK_OUT = 1  # The employee finishes working
-    MIDNIGHT_ROLLOVER = 2  # The employee is working at midnight
+    CLOCK_IN = auto()  # The employee starts working
+    CLOCK_OUT = auto()  # The employee finishes working
 
     def __str__(self):
         return self.name.lower().replace("_", "-")
@@ -122,12 +122,45 @@ class ClockEvent:
     Attributes:
         time (datetime.time): Time in the day at which the event occurred.
         action (ClockAction): Related clock action.
+
+    Factory:
+        midnight_rollover(): Create a midnight rollover special event.
     """
 
     time: dt.time
     action: ClockAction
+    _midnight_rollover: bool = field(default=False, repr=True, compare=True)
+
+    # Class attributes
+    _midnight_rollover_instance: ClassVar["Optional[ClockEvent]"] = None
+    _singleton_lock: ClassVar[Lock] = Lock()
+
+    @classmethod
+    def midnight_rollover(cls) -> "ClockEvent":
+        """
+        Get a midnight rollover clock-out event. This is a singleton
+        with thread-safe access.
+
+        This special `ClockEvent` type is used to end a day where an
+        employee was still working at midnight. The next day must start
+        with a clock-in event at midnight.
+        """
+        # Create the singleton instance if not existing
+        if cls._midnight_rollover_instance is None:
+            with cls._singleton_lock:
+                # Double check before entering the critical section
+                if cls._midnight_rollover_instance is None:
+                    cls._midnight_rollover_instance = cls(
+                        time=dt.time(0, 0),
+                        action=ClockAction.CLOCK_OUT,
+                        _midnight_rollover=True,
+                    )
+
+        return cls._midnight_rollover_instance
 
     def __str__(self):
+        if self._midnight_rollover:
+            return "midnight-rollover at 24:00"
         return f"{self.action} at {self.time.strftime('%H:%M')}"
 
 

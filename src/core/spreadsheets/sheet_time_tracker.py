@@ -17,11 +17,12 @@ Contact: info@mecacerf.ch
 # Standard libraries
 import logging
 import datetime as dt
-from typing import TypeVar, Callable, Union
+from typing import TypeVar, Callable, cast
 
 # Third-party libraries
 import openpyxl
 from openpyxl.utils import column_index_from_string as col_idx
+from openpyxl.utils.datetime import from_excel  # type: ignore
 
 # Internal imports
 from core.time_tracker import *
@@ -114,13 +115,11 @@ T = TypeVar("T")  # For generic methods
 CLOSED_ERROR_MSG = "Cannot manipulate a closed tracker."
 
 
-class SpecialTime(Enum):
+class _SpecialTime(Enum):
     """Special times the spreadsheet may hold"""
 
-    MIDNIGHT_ROLLOVER = "24:00"
+    MIDNIGHT_ROLLOVER = auto()  # Spreadsheet cell value is "24:00"
 
-
-ClockTime = Union[dt.time, SpecialTime]
 
 ########################################################################
 #               Spreadsheets time tracker implementation               #
@@ -546,6 +545,12 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         Returns:
             datetime.timedelta: Converted value.
         """
+        if isinstance(value, (float, int)):
+            # Handle specific case where the value has been set but not reparsed
+            # by openpyxl, which results in a time still being represented as
+            # a fraction of days (a number).
+            value = cast(Any, from_excel(value))
+
         if isinstance(value, dt.timedelta):
             # Passthrough
             return value
@@ -556,7 +561,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         raise ValueError(f"Cannot convert {type(value).__name__} to timedelta.")
 
-    def __to_time(self, value: Any) -> ClockTime:
+    def __to_time(self, value: Any) -> dt.time | _SpecialTime:
         """
         Convert the given value to a `datetime.time` if necessary.
 
@@ -564,18 +569,29 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             value (Any): Input value.
 
         Returns:
-            ClockTime: Converted value as a dt.time or a SpecialTime.
+            Union[dt.time, _SpecialTime]: Converted value as a `dt.time`
+                or a `_SpecialTime` value.
         """
+        if isinstance(value, (float, int)):
+            # Handle specific case where the value has been set but not reparsed
+            # by openpyxl, which results in a time still being represented as
+            # a fraction of days (a number).
+            value = cast(Any, from_excel(value))
+
         if isinstance(value, dt.time):
             # Passthrough
             return value
         if isinstance(value, dt.datetime):
             # The midnight rollover, noted 24:00 in the cell, is interpreted by
-            # Openpyxl as midnight on the 01.01.1900.
-            if value == dt.datetime(1900, 1, 1, 0, 0):
-                return SpecialTime.MIDNIGHT_ROLLOVER
+            # Openpyxl as midnight on the 01.01.1900. While it makes sense that
+            # the time is midnight, it's not so clear why the date is
+            # 01.01.1900. To prevent compatibility issues, only check that the
+            # datetime refers to midnight and assume it is a midnight rollover
+            # value.
+            if value.hour == 0 and value.minute == 0:
+                return _SpecialTime.MIDNIGHT_ROLLOVER
 
-            return dt.time(hour=value.hour, minute=value.minute, second=value.second)
+            # Other datetimes are not supported.
 
         raise ValueError(f"Cannot convert {type(value).__name__} to time.")
 
@@ -625,15 +641,34 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         if isinstance(evt_time, dt.time):
             # Standard clock-in / clock-out
             action = self.__get_clock_action_for_cell(cell)
+            clk_evt = ClockEvent(evt_time, action)
         else:
-            # Handle a special time
-            if evt_time == SpecialTime.MIDNIGHT_ROLLOVER:
-                evt_time = dt.time(hour=0, minute=0)
-                action = ClockAction.MIDNIGHT_ROLLOVER
+            # Handle a special time value
+            if evt_time == _SpecialTime.MIDNIGHT_ROLLOVER:
+                clk_evt = ClockEvent.midnight_rollover()
             else:
                 raise TimeTrackerValueException(f"Unhandled special time {evt_time}.")
 
-        return ClockEvent(time=evt_time, action=action)
+        return clk_evt
+
+    def __set_clock_event(self, cell: Any, event: ClockEvent):
+        """
+        Set the cell value based on the given `ClockEvent`.
+
+        Changes are not saved.
+
+        Args:
+            cell (Any): Openpyxl cell to write into.
+            event (ClockEvent): ClockEvent to write in the cell.
+        """
+        if event is ClockEvent.midnight_rollover():
+            # Write the special time value "24:00"
+            cell.value = 1.0  # One full day
+        else:
+            # Write a standard time value
+            cell.value = dt.time(
+                hour=event.time.hour, minute=event.time.minute, second=0
+            )
 
     ## General employee's properties access ##
 
@@ -756,10 +791,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
             if cell.value is None:
                 # The slot is available, write the clock time in HH:MM format
-                cell.number_format = "HH:MM"
-                cell.value = dt.time(
-                    hour=event.time.hour, minute=event.time.minute, second=0
-                )  # type: ignore
+                self.__set_clock_event(cell, event)
 
                 # Save the workbook and automatically invalidate a previous
                 # data analysis
@@ -770,6 +802,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
                     f"in sheet '{sheet_idx}' : "
                     f"'{event}' in '{cell.coordinate}'."
                 )
+
                 return
 
         raise TimeTrackerWriteException(
@@ -806,12 +839,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         for col_idx, evt in enumerate(events, self._col_first_clock_in):
             cell = month_sheet.cell(row=date_row, column=col_idx)
-            cell.number_format = "HH:MM"
 
             if evt:
-                cell.value = dt.time(
-                    hour=evt.time.hour, minute=evt.time.minute, second=0
-                )  # type: ignore
+                self.__set_clock_event(cell, evt)
             else:
                 cell.value = None
 
