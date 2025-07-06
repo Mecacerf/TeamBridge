@@ -1053,9 +1053,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         return self.__read_month_cell_value(month, self._cell_month_vacation, float)
 
     def read_year_vacation(self) -> float:
-        return self.opening_vacation_days - self.read_remaining_vacation()
+        return self.opening_vacation_days - self.read_year_remaining_vacation()
 
-    def read_remaining_vacation(self) -> float:
+    def read_year_remaining_vacation(self) -> float:
         # Warning: to get the remaining vacation days for the whole year, read
         # the value from the December sheet. This way the value is updated
         # even if vacations are planned for future months.

@@ -552,7 +552,7 @@ def test_year_vacation(factory: TimeTrackerFactory, testcase: TestCaseData):
         tracker.analyze(testcase.datetime)
 
         year_vacation = tracker.read_year_vacation()
-        rem_vacation = tracker.read_remaining_vacation()
+        rem_vacation = tracker.read_year_remaining_vacation()
 
         assert year_vacation == approx(testcase.year_vacation)
         assert rem_vacation == approx(testcase.rem_vacation)

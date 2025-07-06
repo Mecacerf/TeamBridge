@@ -1051,7 +1051,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         pass
 
     @abstractmethod
-    def read_remaining_vacation(self) -> float:
+    def read_year_remaining_vacation(self) -> float:
         """
         Get the number of vacation days the employee still has available
         (not yet planned or used) this year.
