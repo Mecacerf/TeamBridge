@@ -22,6 +22,7 @@ from typing import TypeVar, Callable, cast
 # Third-party libraries
 import openpyxl
 from openpyxl.utils import column_index_from_string as col_idx
+from openpyxl.utils import coordinate_to_tuple
 from openpyxl.utils.datetime import from_excel  # type: ignore
 
 # Internal imports
@@ -71,6 +72,11 @@ CELL_TIME = "A22"
 # Formula evaluation test cell
 CELL_EVALUATED = "A23"
 
+# Error <> description table
+CELL_ERROR_TABLE_ID = "A52"  # First error ID row
+COL_ERROR_TABLE_DESC = "B"  # Column to get error description
+MAX_ERROR_NBR = 10  # Just to give an iteration limit
+
 ## Next cells give the locations of different information in the other
 ## sheets. It allows to support dynamic per sheet locations and improve
 ## flexibility in production.
@@ -105,6 +111,7 @@ LOC_MONTH_PAID_ABSENCE = "A39"
 LOC_EXPECTED_DAY_SCHEDULE = "A40"
 LOC_REMAINING_VACATION = "A41"
 LOC_YTD_BALANCE = "A42"  # Year-to-date balance
+LOC_GLOBAL_ERROR = "A43"
 
 ########################################################################
 #                           Other constants                            #
@@ -207,6 +214,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         self._cell_exp_day_schedule = str(sheet[LOC_EXPECTED_DAY_SCHEDULE].value)
         self._cell_remaining_vacation = str(sheet[LOC_REMAINING_VACATION].value)
         self._cell_ytd_balance = str(sheet[LOC_YTD_BALANCE].value)
+        self._cell_global_error = str(sheet[LOC_GLOBAL_ERROR].value)
 
         # Verify that all month sheets are available
         # (spreadsheet integrity check)
@@ -633,6 +641,25 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         raise ValueError(f"Cannot convert {type(value).__name__} to int.")
 
+    def __to_str_none_safe(self, value: Any) -> str:
+        """
+        Convert the given value to a string. A `None` value is
+        interpreted as an empty string.
+
+        Args:
+            value (Any): Input value.
+
+        Returns:
+            str: Converted value.
+        """
+        if value is None:
+            return ""
+
+        if isinstance(value, str):
+            return value
+
+        raise ValueError(f"Cannot convert {type(value).__name__} to str.")
+
     ## Utility methods ##
 
     def __get_clock_event(self, cell: Any) -> Optional[ClockEvent]:
@@ -914,6 +941,39 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             self._workbook_raw, date, self._col_day_soft_error, self.__to_int_none_safe
         )
 
+    def get_attendance_error_desc(self, error_id: int) -> str:
+        """
+        Look up the description corresponding to a given error ID
+        in the error ID <> description table of the raw workbook.
+        """
+        assert not self._closed, CLOSED_ERROR_MSG
+
+        start_row, col_id = coordinate_to_tuple(CELL_ERROR_TABLE_ID)
+        col_desc = col_idx(COL_ERROR_TABLE_DESC)
+
+        sheet = self._workbook_raw.worksheets[SHEET_INIT]
+
+        for row in sheet.iter_rows(
+            min_row=start_row,
+            max_row=start_row + MAX_ERROR_NBR,
+            min_col=col_id,
+            max_col=col_desc,
+            values_only=True,
+        ):
+            current_id = row[0]
+
+            if current_id is None:
+                break
+
+            current_id = self.__cast(current_id, int)
+            if current_id == error_id:
+                description = row[col_desc - col_id]
+                return self.__cast(description, self.__to_str_none_safe)
+
+        raise TimeTrackerValueException(
+            f"No description found for error ID {error_id}."
+        )
+
     ## Time Tracker Analyzer methods ##
 
     def _analyze_internal(self):
@@ -1064,6 +1124,13 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
     def read_year_to_date_balance(self) -> dt.timedelta:
         return self.__read_month_cell_value(
             self._target_dt, self._cell_ytd_balance, self.__to_timedelta
+        )
+
+    def read_year_attendance_error(self) -> Optional[int]:
+        # As for the vacations, read the December sheet that contains the very
+        # last error value.
+        return self.__read_month_cell_value(
+            12, self._cell_global_error, self.__to_int_none_safe
         )
 
     def save(self):

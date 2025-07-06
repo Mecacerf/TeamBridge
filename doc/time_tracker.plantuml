@@ -38,6 +38,7 @@ class "TimeTracker" {
   {abstract}get_paid_absence(date: dt.date) -> float
   {abstract}set_attendance_error(date: dt.date, error_id: Optional[int]) -> None
   {abstract}get_attendance_error(date: dt.date) -> Optional[int]
+  {abstract}get_attendance_error_desc(error_id: int) -> str
   {abstract}save() -> None
 }
 
@@ -70,6 +71,7 @@ class "TimeTrackerAnalyzer" {
   {abstract}read_year_remaining_vacation() -> float
   {abstract}read_year_to_date_balance() -> dt.timedelta
   read_year_to_yesterday_balance() -> dt.timedelta
+  {abstract}read_year_attendance_error() -> Optional[int]
 }
 
 note left

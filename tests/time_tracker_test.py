@@ -40,6 +40,7 @@ from core.time_tracker import (
     TimeTrackerAnalysisException,
     TimeTrackerWriteException,
     TimeTrackerReadException,
+    TimeTrackerValueException,
 )
 
 # Time tracker factories
@@ -78,7 +79,7 @@ def factory(request: FixtureRequest, arrange_assets: None) -> TimeTrackerFactory
 
 
 @dataclass
-class TestCaseData:
+class CaseData:
     """
     Structure for a test case data. The structure holds the test date
     and time and the expected values for that datetime.
@@ -107,16 +108,16 @@ class TestCaseData:
 
 
 @pytest.fixture
-def testcase(request: FixtureRequest) -> TestCaseData:
+def testcase(request: FixtureRequest) -> CaseData:
     """Get a test case data by its fixture name."""
     name = request.param
     return request.getfixturevalue(name)
 
 
 @pytest.fixture
-def tc_first_work_day() -> TestCaseData:
+def tc_first_work_day() -> CaseData:
     """Test case data for the first work day of the year (1st January 2025)."""
-    return TestCaseData(
+    return CaseData(
         datetime=dt.datetime(year=2025, month=1, day=1, hour=18),
         date_events=[
             ClockEvent(dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
@@ -157,7 +158,7 @@ def tc_month_closing():
     Test case data for the 31.01.25 after the last employee's clock out
     event.
     """
-    return TestCaseData(
+    return CaseData(
         datetime=dt.datetime(year=2025, month=1, day=31, hour=18),
         date_events=[
             ClockEvent(dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
@@ -198,7 +199,7 @@ def tc_clocked_in():
     working (clocked in). The test date and time is the 11.02.25 at 11h.
     No clock events exist in the dataset after this date.
     """
-    return TestCaseData(
+    return CaseData(
         datetime=dt.datetime(year=2025, month=2, day=11, hour=11),
         date_events=[
             ClockEvent(dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
@@ -235,7 +236,7 @@ def tc_work_at_midnight():
     actually registered at 24:00:00, which is read as 00:00 by the
     time tracker.
     """
-    return TestCaseData(
+    return CaseData(
         # The time can be arbitrarily chosen, the last clock-out is registered
         datetime=dt.datetime(year=2025, month=1, day=7, hour=21),
         date_events=[
@@ -274,7 +275,7 @@ def tc_vacation():
     """
     Test case data for a day where the employee is on vacation.
     """
-    return TestCaseData(
+    return CaseData(
         # The time can be arbitrarily chosen, the last clock-out is registered
         datetime=dt.datetime(year=2025, month=1, day=23, hour=15),
         date_events=[],
@@ -304,7 +305,7 @@ def tc_sickness():
     """
     Test case data for a day where the employee is on paid absence.
     """
-    return TestCaseData(
+    return CaseData(
         # The time can be arbitrarily chosen, the last clock-out is registered
         datetime=dt.datetime(year=2025, month=1, day=30, hour=15),
         date_events=[],
@@ -334,7 +335,7 @@ def tc_sickness():
 ########################################################################
 
 
-def test_open(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_open(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
     Open the time tracker using a context manager and check that expected
     attributes exist.
@@ -345,7 +346,7 @@ def test_open(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
         assert tracker.firstname == TEST_EMPLOYEE_FIRSTNAME
 
 
-def test_basic_info(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_basic_info(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
     Open the time tracker and check basic employee information.
     """
@@ -356,7 +357,7 @@ def test_basic_info(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData
         assert tracker.opening_balance == dt.timedelta(hours=2)
 
 
-def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
     Verifies that the data analysis allows to access the reading
     functions.
@@ -374,7 +375,7 @@ def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
     ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
     indirect=True,
 )
-def test_get_clock_events(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_get_clock_events(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Get the clock events for the date and check they are the same as the
     expected ones.
@@ -385,8 +386,8 @@ def test_get_clock_events(factory: TimeTrackerFactory, testcase: TestCaseData):
 
 def test_is_clocked_in(
     factory: TimeTrackerFactory,
-    tc_clocked_in: TestCaseData,
-    tc_first_work_day: TestCaseData,
+    tc_clocked_in: CaseData,
+    tc_first_work_day: CaseData,
 ):
     """
     Open the time tracker at a date that is still in progress and verify
@@ -403,7 +404,7 @@ def test_is_clocked_in(
     ["tc_first_work_day", "tc_vacation", "tc_sickness"],
     indirect=True,
 )
-def test_get_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_get_day_data(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Get the date information that doesn't require an analysis and verify
     they have the expected values.
@@ -412,10 +413,12 @@ def test_get_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
         day_absence = tracker.get_paid_absence(testcase.datetime)
         day_vacation = tracker.get_vacation(testcase.datetime)
         day_error_soft = tracker.get_attendance_error(testcase.datetime)
+        day_error_desc = tracker.get_attendance_error_desc(testcase.date_error_soft)
 
         assert day_absence == approx(testcase.date_absence)
         assert day_vacation == approx(testcase.date_vacation)
         assert day_error_soft == testcase.date_error_soft
+        assert day_error_desc == TEST_ERRORS_TABLE[testcase.date_error_soft]
 
 
 @pytest.mark.parametrize(
@@ -423,7 +426,7 @@ def test_get_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
     ["tc_first_work_day"],  # Only one test case is enough
     indirect=True,
 )
-def test_get_day_data_readonly(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_get_day_data_readonly(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Get the date information that doesn't require an analysis and verify
     they have the expected values. Open the tracker in read-only mode.
@@ -432,10 +435,12 @@ def test_get_day_data_readonly(factory: TimeTrackerFactory, testcase: TestCaseDa
         day_absence = tracker.get_paid_absence(testcase.datetime)
         day_vacation = tracker.get_vacation(testcase.datetime)
         day_error_soft = tracker.get_attendance_error(testcase.datetime)
+        day_error_desc = tracker.get_attendance_error_desc(testcase.date_error_soft)
 
         assert day_absence == approx(testcase.date_absence)
         assert day_vacation == approx(testcase.date_vacation)
         assert day_error_soft == testcase.date_error_soft
+        assert day_error_desc == TEST_ERRORS_TABLE[testcase.date_error_soft]
 
 
 @pytest.mark.parametrize(
@@ -450,7 +455,7 @@ def test_get_day_data_readonly(factory: TimeTrackerFactory, testcase: TestCaseDa
     ],
     indirect=True,
 )
-def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_read_day_data(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Analyze the time tracker for the given date and read the day
     information. Verifies the read values are equal to the expected ones
@@ -486,7 +491,7 @@ def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
     ],
     indirect=True,
 )
-def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_read_month_data(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Analyze the time tracker for the given date and read the month
     information. Verifies the read values are equal to the expected ones
@@ -518,7 +523,7 @@ def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
     ],
     indirect=True,
 )
-def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Analyze the time tracker for the given date and read the year-to-
     date and year-to-yesterday balances. Verifies that they are equal
@@ -542,7 +547,7 @@ def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: TestCaseDat
     ],
     indirect=True,
 )
-def test_year_vacation(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_year_vacation(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Analyze the time tracker for the given date and read the total
     year vacation and the remaining vacation. Verifies that they are
@@ -562,7 +567,7 @@ def test_year_vacation(factory: TimeTrackerFactory, testcase: TestCaseData):
         assert year_vacation + rem_vacation == approx(tracker.opening_vacation_days)
 
 
-def test_register_evt(factory: TimeTrackerFactory, tc_clocked_in: TestCaseData):
+def test_register_evt(factory: TimeTrackerFactory, tc_clocked_in: CaseData):
     """
     Register a clock-out event to finish the work day. Verify it has been
     registered by comparing with the last clock event of the day.
@@ -575,7 +580,7 @@ def test_register_evt(factory: TimeTrackerFactory, tc_clocked_in: TestCaseData):
         tracker.save()  # Just to see the test result in the test cache
 
 
-def test_write_evts(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_write_evts(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
     Write a set of clock events for the day and verify they have been
     registered.
@@ -596,7 +601,7 @@ def test_write_evts(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData
         tracker.save()  # Just to see the test result in the test cache
 
 
-def test_save(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_save(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
     Register a new clock event for a date, save and close
     the time tracker. Reopen it and verify the clock event still exists.
@@ -616,7 +621,7 @@ def test_save(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
     ["tc_first_work_day"],  # Only one test is enough to check errors
     indirect=True,
 )
-def test_readonly_exc(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_readonly_exc(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Open the time tracker in read-only mode and check setters and
     `read_` methods are not accessible.
@@ -655,11 +660,28 @@ def test_error_employee(factory: TimeTrackerFactory):
         tracker.analyze(DT_02_01_25)
         assert tracker.read_day_attendance_error(DT_01_01_25) == ERROR_INVALID
         assert tracker.read_day_attendance_error(DT_02_01_25) == 0
+        assert tracker.read_year_attendance_error() == ERROR_INVALID
         # The missing entry error doesn't show up for current day
 
         tracker.analyze(DT_03_01_25)
         assert tracker.read_day_attendance_error(DT_01_01_25) == ERROR_INVALID
         assert tracker.read_day_attendance_error(DT_02_01_25) == ERROR_MISSING_ENTRY
+        assert tracker.read_year_attendance_error() == ERROR_INVALID
+
+
+def test_error_description(factory: TimeTrackerFactory):
+    """
+    Check the lookup table function works.
+    """
+    DT_01_01_25 = dt.datetime(year=TEST_ERROR_EMPLOYEE_YEAR, month=1, day=1, hour=16)
+
+    with factory.create(TEST_ERROR_EMPLOYEE_ID, DT_01_01_25) as tracker:
+
+        for id, desc in TEST_ERRORS_TABLE.items():
+            assert tracker.get_attendance_error_desc(id) == desc
+
+        with pytest.raises(TimeTrackerValueException):
+            tracker.get_attendance_error_desc(-1)
 
 
 # TODO: integration tests / edge case tests

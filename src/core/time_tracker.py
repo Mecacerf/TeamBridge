@@ -621,6 +621,23 @@ class TimeTracker(Employee, ABC):
         pass
 
     @abstractmethod
+    def get_attendance_error_desc(self, error_id: int) -> str:
+        """
+        Get the description for the given error identifier.
+
+        Args:
+            error_id (int): Error identifier.
+
+        Returns:
+            str: Error description.
+
+        Raises:
+            TimeTrackerValueException: No description associated with
+                given identifier.
+        """
+        pass
+
+    @abstractmethod
     def save(self):
         """
         Save the modifications on the time trackers repository.
@@ -1142,3 +1159,24 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         year_to_date = self.read_year_to_date_balance()
         day_balance = self.read_day_balance(self.target_datetime.date())
         return year_to_date - day_balance
+
+    def read_year_attendance_error(self) -> Optional[int]:
+        """
+        Read the global attendance error for the year. It returns the
+        most severe error from all days.
+
+        In most cases, using an `AttendanceValidator` is preferred over
+        interacting directly with these low-level methods.
+
+        Returns:
+            Optional[int]: Detected attendance error for the year or
+                `None` if no error is found.
+
+        Raises:
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
+        """
+        pass
