@@ -614,6 +614,25 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         raise ValueError(f"Cannot convert {type(value).__name__} to float.")
 
+    def __to_int_none_safe(self, value: Any) -> int:
+        """
+        Convert the given value to an integer. A `None` value is
+        interpreted as 0.
+
+        Args:
+            value (Any): Input value.
+
+        Returns:
+            int: Converted value.
+        """
+        if value is None:
+            return 0
+
+        if isinstance(value, int):
+            return int(value)
+
+        raise ValueError(f"Cannot convert {type(value).__name__} to int.")
+
     ## Utility methods ##
 
     def __get_clock_event(self, cell: Any) -> Optional[ClockEvent]:
@@ -837,7 +856,16 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         msgs: list[str] = []
 
-        for col_idx, evt in enumerate(events, self._col_first_clock_in):
+        # Whatever the events list size, all cells are overridden.
+        # Note: the range stop value is exclusive while last clock out column
+        # index is inclusive, reason why one is added.
+        evts_rng = range(self._col_first_clock_in, self._col_last_clock_out + 1)
+        # Pads with None events
+        clk_evts = events + [None] * (len(evts_rng) - len(events))
+
+        assert len(evts_rng) == self.max_clock_events_per_day
+
+        for col_idx, evt in zip(evts_rng, clk_evts):
             cell = month_sheet.cell(row=date_row, column=col_idx)
 
             if evt:
@@ -883,7 +911,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
     def get_attendance_error(self, date: dt.date | dt.datetime) -> Optional[int]:
         return self.__get_month_day_cell_value(
-            self._workbook_raw, date, self._col_day_soft_error, int
+            self._workbook_raw, date, self._col_day_soft_error, self.__to_int_none_safe
         )
 
     ## Time Tracker Analyzer methods ##
@@ -964,7 +992,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         except Exception:
             # Reset the state to step 1
             # target_dt is set to None by the superclass on exception, which
-            # set the `analyzed` property to False
+            # sets the `analyzed` property to False
             self.__close_eval_workbook()
             raise
 

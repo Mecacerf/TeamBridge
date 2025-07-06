@@ -783,10 +783,6 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         date before relying on the returned value, especially when
         reading a date before the `target_datetime.date()`.
 
-        TODO: Clarify the behavior when clock events are registered for
-        a future date relative to `target_datetime.date()`. Is the
-        worked time always 00:00 or are they computed?
-
         This method is only available when the `analyzed` property is
         `True`.
 

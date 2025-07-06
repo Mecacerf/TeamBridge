@@ -20,6 +20,10 @@ TEST_EMPLOYEE_FIRSTNAME = "Meca"
 # Spreadsheet file under test
 TEST_SPREADSHEET_FILE = f"{TEST_EMPLOYEE_ID}-unit-test.xlsx"
 
+# Error employee identifier
+TEST_ERROR_EMPLOYEE_ID = "222"
+TEST_ERROR_EMPLOYEE_YEAR = 2025
+
 # Tests assets source folder
 TEST_ASSETS_SRC_FOLDER = "tests/assets/"
 # Tests assets destination folder
