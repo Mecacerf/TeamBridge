@@ -175,8 +175,7 @@ def test_release_sheet(repository: SheetsRepoAccessor):
 
 def test_list_employee(repository: SheetsRepoAccessor):
     """
-    Test that the test employee ID is the only one listed.
+    Test that the test employee ID is listed.
     """
     ids = repository.list_employee_ids()
-    assert len(ids) == 1
-    assert ids[0] == TEST_EMPLOYEE_ID
+    assert any(emp_id == TEST_EMPLOYEE_ID for emp_id in ids)

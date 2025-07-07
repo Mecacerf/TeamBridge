@@ -338,18 +338,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         Returns:
             ClockAction: Clock action for the cell.
-
-        Raises:
-            TimeTrackerValueException: Given cell out of expected range.
         """
-        if (
-            cell.column < self._col_first_clock_in
-            or cell.column > self._col_last_clock_out
-        ):
-            raise TimeTrackerValueException(
-                f"Cell column {cell.column} is out of the range "
-                f"[{self._col_first_clock_in}; {self._col_last_clock_out}]."
-            )
+        assert self._col_first_clock_in <= cell.column <= self._col_last_clock_out
 
         # Follow the sequence 0: clock-in, 1: cock-out, 2: clock-in, etc.
         even = ((cell.column - self._col_first_clock_in) % 2) == 0
@@ -677,7 +667,6 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         Raises:
             TimeTrackerValueException: Conversion unsupported for the
                 cell value.
-            TimeTrackerValueException: Given cell out of expected range.
         """
         if cell is None or cell.value is None:
             return None  # Cell is empty, no clock event registered
