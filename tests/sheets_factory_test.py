@@ -47,6 +47,8 @@ def test_list_employee_ids(factory: SheetTimeTrackerFactory):
         "777",  #  unit-test
         "888",  #  Alberto
         "999",  #  Roberto
+        "222",  #  unit-test-error
+        "333"   #  Wrong version
     ]
 
     assert set(actual) == set(expected)

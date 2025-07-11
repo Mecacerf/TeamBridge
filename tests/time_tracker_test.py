@@ -40,6 +40,9 @@ from core.time_tracker import (
     TimeTrackerAnalysisException,
     TimeTrackerWriteException,
     TimeTrackerReadException,
+    TimeTrackerValueException,
+    TimeTrackerSaveException,
+    TimeTrackerDateException,
 )
 
 # Time tracker factories
@@ -78,7 +81,7 @@ def factory(request: FixtureRequest, arrange_assets: None) -> TimeTrackerFactory
 
 
 @dataclass
-class TestCaseData:
+class CaseData:
     """
     Structure for a test case data. The structure holds the test date
     and time and the expected values for that datetime.
@@ -86,13 +89,17 @@ class TestCaseData:
 
     datetime: dt.datetime
 
-    date_evt_times: list[dt.time]
+    date_events: list[ClockEvent]
     date_schedule: dt.timedelta
     date_worked: dt.timedelta
     date_balance: dt.timedelta
     date_vacation: float
+    date_absence: float
+    date_error_soft: int
+    date_error_sys: int
 
     month_schedule: dt.timedelta
+    month_daily_schedule: dt.timedelta
     month_worked: dt.timedelta
     month_balance: dt.timedelta
     month_vacation: float
@@ -104,34 +111,38 @@ class TestCaseData:
 
 
 @pytest.fixture
-def testcase(request: FixtureRequest) -> TestCaseData:
+def testcase(request: FixtureRequest) -> CaseData:
     """Get a test case data by its fixture name."""
     name = request.param
     return request.getfixturevalue(name)
 
 
 @pytest.fixture
-def tc_first_work_day() -> TestCaseData:
+def tc_first_work_day() -> CaseData:
     """Test case data for the first work day of the year (1st January 2025)."""
-    return TestCaseData(
+    return CaseData(
         datetime=dt.datetime(year=2025, month=1, day=1, hour=18),
-        date_evt_times=[
-            dt.time(hour=7, minute=45),
-            dt.time(hour=9, minute=50),
-            dt.time(hour=10, minute=0),
-            dt.time(hour=12, minute=30),
-            dt.time(hour=13, minute=15),
-            dt.time(hour=17, minute=10),
+        date_events=[
+            ClockEvent(dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
+            ClockEvent(dt.time(hour=9, minute=50), ClockAction.CLOCK_OUT),
+            ClockEvent(dt.time(hour=10, minute=0), ClockAction.CLOCK_IN),
+            ClockEvent(dt.time(hour=12, minute=30), ClockAction.CLOCK_OUT),
+            ClockEvent(dt.time(hour=13, minute=15), ClockAction.CLOCK_IN),
+            ClockEvent(dt.time(hour=17, minute=10), ClockAction.CLOCK_OUT),
         ],
         date_schedule=dt.timedelta(hours=8, minutes=17),
         date_worked=dt.timedelta(hours=8, minutes=30),
         date_balance=dt.timedelta(minutes=13),
         date_vacation=0.0,
+        date_absence=0.0,
+        date_error_soft=0,
+        date_error_sys=0,
         # Scheduled time, worked time and vacation for the month don't depend
         # on the date. They are always the sum for the whole month, even though
         # the test datetime is for the 1st.
         month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
         month_worked=dt.timedelta(hours=167, minutes=35),
+        month_daily_schedule=dt.timedelta(hours=8, minutes=17),
         month_vacation=1.5,
         # Balance does depend on the test datetime. It is the same as the day
         # balance since the test date is the 01.01.25.
@@ -151,25 +162,29 @@ def tc_month_closing():
     Test case data for the 31.01.25 after the last employee's clock out
     event.
     """
-    return TestCaseData(
+    return CaseData(
         datetime=dt.datetime(year=2025, month=1, day=31, hour=18),
-        date_evt_times=[
-            dt.time(hour=7, minute=45),
-            dt.time(hour=9, minute=50),
-            dt.time(hour=10, minute=0),
-            dt.time(hour=12, minute=30),
-            dt.time(hour=13, minute=15),
-            dt.time(hour=17, minute=40),
+        date_events=[
+            ClockEvent(dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
+            ClockEvent(dt.time(hour=9, minute=50), ClockAction.CLOCK_OUT),
+            ClockEvent(dt.time(hour=10, minute=0), ClockAction.CLOCK_IN),
+            ClockEvent(dt.time(hour=12, minute=30), ClockAction.CLOCK_OUT),
+            ClockEvent(dt.time(hour=13, minute=15), ClockAction.CLOCK_IN),
+            ClockEvent(dt.time(hour=17, minute=40), ClockAction.CLOCK_OUT),
         ],
         date_schedule=dt.timedelta(hours=8, minutes=17),
         date_worked=dt.timedelta(hours=9),
         date_balance=dt.timedelta(minutes=43),
         date_vacation=0.0,
+        date_absence=0.0,
+        date_error_soft=0,
+        date_error_sys=0,
         # Scheduled time, worked time and vacation for the month don't depend
         # on the date. They are always the sum for the whole month, even though
         # the test datetime is for the 1st.
         month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
         month_worked=dt.timedelta(hours=167, minutes=35),
+        month_daily_schedule=dt.timedelta(hours=8, minutes=17),
         month_vacation=1.5,
         # Balance does depend on the test datetime but relates to the whole
         # month since the test date is the 31.01.25.
@@ -189,20 +204,24 @@ def tc_clocked_in():
     working (clocked in). The test date and time is the 11.02.25 at 11h.
     No clock events exist in the dataset after this date.
     """
-    return TestCaseData(
+    return CaseData(
         datetime=dt.datetime(year=2025, month=2, day=11, hour=11),
-        date_evt_times=[
-            dt.time(hour=7, minute=45),
-            dt.time(hour=9, minute=50),
-            dt.time(hour=10, minute=0),
+        date_events=[
+            ClockEvent(dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
+            ClockEvent(dt.time(hour=9, minute=50), ClockAction.CLOCK_OUT),
+            ClockEvent(dt.time(hour=10, minute=0), ClockAction.CLOCK_IN),
         ],
         date_schedule=dt.timedelta(hours=8, minutes=17),
         date_worked=dt.timedelta(hours=3, minutes=5),
         date_balance=dt.timedelta(hours=-5, minutes=-12),
         date_vacation=0.0,
+        date_absence=0.0,
+        date_error_soft=0,
+        date_error_sys=0,
         # Scheduled, vacation and worked time doesn't depend on current date
         month_schedule=dt.timedelta(hours=161, minutes=31, seconds=30),
         month_worked=dt.timedelta(hours=55, minutes=55),
+        month_daily_schedule=dt.timedelta(hours=8, minutes=17),
         month_vacation=0.5,
         # Month balance, year-to-date and year-to-yesterday depend on current date
         month_balance=dt.timedelta(hours=-2, minutes=-4),
@@ -223,27 +242,30 @@ def tc_work_at_midnight():
     actually registered at 24:00:00, which is read as 00:00 by the
     time tracker.
     """
-    return TestCaseData(
+    return CaseData(
         # The time can be arbitrarily chosen, the last clock-out is registered
         datetime=dt.datetime(year=2025, month=1, day=7, hour=21),
-        date_evt_times=[
-            dt.time(hour=7, minute=45),
-            dt.time(hour=9, minute=50),
-            dt.time(hour=10, minute=0),
-            dt.time(hour=12, minute=30),
-            dt.time(hour=13, minute=15),
-            dt.time(hour=15, minute=0),
-            dt.time(hour=22, minute=0),
-            # Clock-out at midnight, clock-in at midnight the next day
-            dt.time(hour=0, minute=0),
+        date_events=[
+            ClockEvent(dt.time(hour=7, minute=45), ClockAction.CLOCK_IN),
+            ClockEvent(dt.time(hour=9, minute=50), ClockAction.CLOCK_OUT),
+            ClockEvent(dt.time(hour=10, minute=0), ClockAction.CLOCK_IN),
+            ClockEvent(dt.time(hour=12, minute=30), ClockAction.CLOCK_OUT),
+            ClockEvent(dt.time(hour=13, minute=15), ClockAction.CLOCK_IN),
+            ClockEvent(dt.time(hour=15, minute=0), ClockAction.CLOCK_OUT),
+            ClockEvent(dt.time(hour=22, minute=0), ClockAction.CLOCK_IN),
+            ClockEvent.midnight_rollover(),
         ],
         date_schedule=dt.timedelta(hours=8, minutes=17),
         date_worked=dt.timedelta(hours=8, minutes=20),
         date_balance=dt.timedelta(hours=0, minutes=3),
         date_vacation=0.0,
+        date_absence=0.0,
+        date_error_soft=0,
+        date_error_sys=0,
         # Scheduled, vacation and worked time doesn't depend on current date
         month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
         month_worked=dt.timedelta(hours=167, minutes=35),
+        month_daily_schedule=dt.timedelta(hours=8, minutes=17),
         month_vacation=1.5,
         # Month balance, year-to-date and year-to-yesterday depend on current date
         month_balance=dt.timedelta(hours=1, minutes=30),
@@ -255,12 +277,74 @@ def tc_work_at_midnight():
     )
 
 
+@pytest.fixture
+def tc_vacation():
+    """
+    Test case data for a day where the employee is on vacation.
+    """
+    return CaseData(
+        # The time can be arbitrarily chosen, the last clock-out is registered
+        datetime=dt.datetime(year=2025, month=1, day=23, hour=15),
+        date_events=[],
+        date_schedule=dt.timedelta(hours=0, minutes=0),
+        date_worked=dt.timedelta(hours=0, minutes=0),
+        date_balance=dt.timedelta(hours=0, minutes=0),
+        date_vacation=1.0,
+        date_absence=0.0,
+        date_error_soft=0,
+        date_error_sys=0,
+        # Scheduled, vacation and worked time doesn't depend on current date
+        month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
+        month_worked=dt.timedelta(hours=167, minutes=35),
+        month_daily_schedule=dt.timedelta(hours=8, minutes=17),
+        month_vacation=1.5,
+        # Month balance, year-to-date and year-to-yesterday depend on current date
+        month_balance=dt.timedelta(hours=-4, minutes=-32),
+        ytd_balance=dt.timedelta(hours=-2, minutes=-32),
+        yty_balance=dt.timedelta(hours=-2, minutes=-32),
+        # Year / remaining vacation doesn't depend on current date
+        year_vacation=2.0,
+        rem_vacation=20,
+    )
+
+
+@pytest.fixture
+def tc_sickness():
+    """
+    Test case data for a day where the employee is on paid absence.
+    """
+    return CaseData(
+        # The time can be arbitrarily chosen, the last clock-out is registered
+        datetime=dt.datetime(year=2025, month=1, day=30, hour=15),
+        date_events=[],
+        date_schedule=dt.timedelta(hours=0, minutes=0),
+        date_worked=dt.timedelta(hours=0, minutes=0),
+        date_balance=dt.timedelta(hours=0, minutes=0),
+        date_vacation=0.0,
+        date_absence=1.0,
+        date_error_soft=0,
+        date_error_sys=0,
+        # Scheduled, vacation and worked time doesn't depend on current date
+        month_schedule=dt.timedelta(hours=169, minutes=48, seconds=30),
+        month_worked=dt.timedelta(hours=167, minutes=35),
+        month_daily_schedule=dt.timedelta(hours=8, minutes=17),
+        month_vacation=1.5,
+        # Month balance, year-to-date and year-to-yesterday depend on current date
+        month_balance=dt.timedelta(hours=-2, minutes=-56, seconds=-30),
+        ytd_balance=dt.timedelta(hours=0, minutes=-56, seconds=-30),
+        yty_balance=dt.timedelta(hours=0, minutes=-56, seconds=-30),
+        # Year / remaining vacation doesn't depend on current date
+        year_vacation=2.0,
+        rem_vacation=20,
+    )
+
+
 ########################################################################
 #                            Unit tests                                #
 ########################################################################
 
 
-def test_open(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_open(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
     Open the time tracker using a context manager and check that expected
     attributes exist.
@@ -271,7 +355,7 @@ def test_open(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
         assert tracker.firstname == TEST_EMPLOYEE_FIRSTNAME
 
 
-def test_basic_info(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_basic_info(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
     Open the time tracker and check basic employee information.
     """
@@ -282,7 +366,7 @@ def test_basic_info(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData
         assert tracker.opening_balance == dt.timedelta(hours=2)
 
 
-def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
     Verifies that the data analysis allows to access the reading
     functions.
@@ -300,22 +384,19 @@ def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
     ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
     indirect=True,
 )
-def test_get_clock_events(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_get_clock_events(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Get the clock events for the date and check they are the same as the
     expected ones.
     """
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime) as tracker:
-        evt_times = [
-            evt.time if evt else None for evt in tracker.get_clocks(testcase.datetime)
-        ]
-        assert evt_times == testcase.date_evt_times
+        assert tracker.get_clocks(testcase.datetime) == testcase.date_events
 
 
 def test_is_clocked_in(
     factory: TimeTrackerFactory,
-    tc_clocked_in: TestCaseData,
-    tc_first_work_day: TestCaseData,
+    tc_clocked_in: CaseData,
+    tc_first_work_day: CaseData,
 ):
     """
     Open the time tracker at a date that is still in progress and verify
@@ -329,10 +410,61 @@ def test_is_clocked_in(
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
+    ["tc_first_work_day", "tc_vacation", "tc_sickness"],
     indirect=True,
 )
-def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_get_day_data(factory: TimeTrackerFactory, testcase: CaseData):
+    """
+    Get the date information that doesn't require an analysis and verify
+    they have the expected values.
+    """
+    with factory.create(TEST_EMPLOYEE_ID, testcase.datetime) as tracker:
+        day_absence = tracker.get_paid_absence(testcase.datetime)
+        day_vacation = tracker.get_vacation(testcase.datetime)
+        day_error_soft = tracker.get_attendance_error(testcase.datetime)
+        day_error_desc = tracker.get_attendance_error_desc(testcase.date_error_soft)
+
+        assert day_absence == approx(testcase.date_absence)
+        assert day_vacation == approx(testcase.date_vacation)
+        assert day_error_soft == testcase.date_error_soft
+        assert day_error_desc == TEST_ERRORS_TABLE[testcase.date_error_soft]
+
+
+@pytest.mark.parametrize(
+    "testcase",
+    ["tc_first_work_day"],  # Only one test case is enough
+    indirect=True,
+)
+def test_get_day_data_readonly(factory: TimeTrackerFactory, testcase: CaseData):
+    """
+    Get the date information that doesn't require an analysis and verify
+    they have the expected values. Open the tracker in read-only mode.
+    """
+    with factory.create(TEST_EMPLOYEE_ID, testcase.datetime, readonly=True) as tracker:
+        day_absence = tracker.get_paid_absence(testcase.datetime)
+        day_vacation = tracker.get_vacation(testcase.datetime)
+        day_error_soft = tracker.get_attendance_error(testcase.datetime)
+        day_error_desc = tracker.get_attendance_error_desc(testcase.date_error_soft)
+
+        assert day_absence == approx(testcase.date_absence)
+        assert day_vacation == approx(testcase.date_vacation)
+        assert day_error_soft == testcase.date_error_soft
+        assert day_error_desc == TEST_ERRORS_TABLE[testcase.date_error_soft]
+
+
+@pytest.mark.parametrize(
+    "testcase",
+    [
+        "tc_first_work_day",
+        "tc_clocked_in",
+        "tc_month_closing",
+        "tc_work_at_midnight",
+        "tc_vacation",
+        "tc_sickness",
+    ],
+    indirect=True,
+)
+def test_read_day_data(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Analyze the time tracker for the given date and read the day
     information. Verifies the read values are equal to the expected ones
@@ -344,12 +476,12 @@ def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
         day_schedule = tracker.read_day_schedule(testcase.datetime)
         day_balance = tracker.read_day_balance(testcase.datetime)
         day_worked_time = tracker.read_day_worked_time(testcase.datetime)
-        day_vacation = tracker.get_vacation(testcase.datetime)
+        day_error_sys = tracker.read_day_attendance_error(testcase.datetime)
 
         assert day_schedule == testcase.date_schedule
         assert day_balance == testcase.date_balance
         assert day_worked_time == testcase.date_worked
-        assert day_vacation == approx(testcase.date_vacation)
+        assert day_error_sys == testcase.date_error_sys
 
         # Check that the relation between scheduled time, worked time and
         # balance is respected
@@ -358,10 +490,17 @@ def test_read_day_data(factory: TimeTrackerFactory, testcase: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
+    [
+        "tc_first_work_day",
+        "tc_clocked_in",
+        "tc_month_closing",
+        "tc_work_at_midnight",
+        "tc_vacation",
+        "tc_sickness",
+    ],
     indirect=True,
 )
-def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_read_month_data(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Analyze the time tracker for the given date and read the month
     information. Verifies the read values are equal to the expected ones
@@ -371,11 +510,13 @@ def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
         tracker.analyze(testcase.datetime)
 
         month_schedule = tracker.read_month_schedule(testcase.datetime)
+        month_daily_schedule = tracker.read_month_expected_daily_schedule(testcase.datetime)
         month_balance = tracker.read_month_balance(testcase.datetime)
         month_worked_time = tracker.read_month_worked_time(testcase.datetime)
         month_vacation = tracker.read_month_vacation(testcase.datetime)
 
         assert month_schedule == testcase.month_schedule
+        assert month_daily_schedule == testcase.month_daily_schedule
         assert month_balance == testcase.month_balance
         assert month_worked_time == testcase.month_worked
         assert month_vacation == approx(testcase.month_vacation)
@@ -383,10 +524,17 @@ def test_read_month_data(factory: TimeTrackerFactory, testcase: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
+    [
+        "tc_first_work_day",
+        "tc_clocked_in",
+        "tc_month_closing",
+        "tc_work_at_midnight",
+        "tc_vacation",
+        "tc_sickness",
+    ],
     indirect=True,
 )
-def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Analyze the time tracker for the given date and read the year-to-
     date and year-to-yesterday balances. Verifies that they are equal
@@ -400,10 +548,17 @@ def test_year_to_date_balance(factory: TimeTrackerFactory, testcase: TestCaseDat
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
+    [
+        "tc_first_work_day",
+        "tc_clocked_in",
+        "tc_month_closing",
+        "tc_work_at_midnight",
+        "tc_vacation",
+        "tc_sickness",
+    ],
     indirect=True,
 )
-def test_year_vacation(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_year_vacation(factory: TimeTrackerFactory, testcase: CaseData):
     """
     Analyze the time tracker for the given date and read the total
     year vacation and the remaining vacation. Verifies that they are
@@ -413,7 +568,7 @@ def test_year_vacation(factory: TimeTrackerFactory, testcase: TestCaseData):
         tracker.analyze(testcase.datetime)
 
         year_vacation = tracker.read_year_vacation()
-        rem_vacation = tracker.read_remaining_vacation()
+        rem_vacation = tracker.read_year_remaining_vacation()
 
         assert year_vacation == approx(testcase.year_vacation)
         assert rem_vacation == approx(testcase.rem_vacation)
@@ -423,7 +578,7 @@ def test_year_vacation(factory: TimeTrackerFactory, testcase: TestCaseData):
         assert year_vacation + rem_vacation == approx(tracker.opening_vacation_days)
 
 
-def test_register_evt(factory: TimeTrackerFactory, tc_clocked_in: TestCaseData):
+def test_register_evt(factory: TimeTrackerFactory, tc_clocked_in: CaseData):
     """
     Register a clock-out event to finish the work day. Verify it has been
     registered by comparing with the last clock event of the day.
@@ -433,28 +588,31 @@ def test_register_evt(factory: TimeTrackerFactory, tc_clocked_in: TestCaseData):
     with factory.create(TEST_EMPLOYEE_ID, tc_clocked_in.datetime) as tracker:
         tracker.register_clock(tc_clocked_in.datetime, event)
         assert tracker.get_clocks(tc_clocked_in.datetime)[-1] == event
+        tracker.save()  # Just to see the test result in the test cache
 
 
-def test_write_evts(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_write_evts(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
     Write a set of clock events for the day and verify they have been
     registered.
     """
     evts: list[Optional[ClockEvent]] = [
         None,  # Missing first event
-        ClockEvent(dt.time(hour=10), ClockAction.CLOCK_OUT),
-        ClockEvent(dt.time(hour=10, minute=15), ClockAction.CLOCK_IN),
-        ClockEvent(dt.time(hour=13), ClockAction.CLOCK_OUT),
-        ClockEvent(dt.time(hour=14), ClockAction.CLOCK_IN),
-        ClockEvent(dt.time(hour=16), ClockAction.CLOCK_OUT),
+        ClockEvent(dt.time(hour=10, minute=15), ClockAction.CLOCK_OUT),
+        ClockEvent(dt.time(hour=22, minute=18), ClockAction.CLOCK_IN),
+        ClockEvent.midnight_rollover(),  # Still working at midnight
     ]
+    # Note that evts is intentionally smaller than the existing events. It
+    # allows to check that write_clocks() correctly overrides all existing
+    # entries.
 
     with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
         tracker.write_clocks(tc_first_work_day.datetime, evts)
         assert tracker.get_clocks(tc_first_work_day.datetime) == evts
+        tracker.save()  # Just to see the test result in the test cache
 
 
-def test_save(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
+def test_save(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
     Register a new clock event for a date, save and close
     the time tracker. Reopen it and verify the clock event still exists.
@@ -471,154 +629,255 @@ def test_save(factory: TimeTrackerFactory, tc_first_work_day: TestCaseData):
 
 @pytest.mark.parametrize(
     "testcase",
-    ["tc_first_work_day", "tc_clocked_in", "tc_month_closing", "tc_work_at_midnight"],
+    ["tc_first_work_day"],  # Only one test is enough to check errors
     indirect=True,
 )
-def test_get_read_only(factory: TimeTrackerFactory, testcase: TestCaseData):
+def test_readonly_exc(factory: TimeTrackerFactory, testcase: CaseData):
     """
-    Open the time tracker in read-only mode and check getters work.
+    Open the time tracker in read-only mode and check setters and
+    `read_` methods are not accessible.
     """
     with factory.create(TEST_EMPLOYEE_ID, testcase.datetime, readonly=True) as tracker:
-        # Employee interface
-        assert tracker.firstname == TEST_EMPLOYEE_FIRSTNAME
-        # Time Tracker interface
-        assert tracker.opening_vacation_days == 22
-
-        evt_times = [
-            evt.time if evt else None for evt in tracker.get_clocks(testcase.datetime)
-        ]
-        assert evt_times == testcase.date_evt_times
-
-        assert tracker.get_vacation(testcase.datetime) == testcase.date_vacation
-        # TODO: tracker.get_attendance_error()
-
         with pytest.raises(TimeTrackerWriteException):
             tracker.set_vacation(testcase.datetime, 0.5)
         with pytest.raises(TimeTrackerWriteException):
             tracker.register_clock(
                 testcase.datetime,
-                ClockEvent(testcase.datetime.time(), ClockAction.CLOCK_IN),
+                ClockEvent.midnight_rollover(),
             )
         with pytest.raises(TimeTrackerWriteException):
-            tracker.write_clocks(
-                testcase.datetime, tracker.get_clocks(testcase.datetime)
-            )
+            tracker.write_clocks(testcase.datetime, list(testcase.date_events))
 
-        # TimeTrackerAnalyzer interface
         with pytest.raises(TimeTrackerAnalysisException):
             tracker.analyze(testcase.datetime)
         with pytest.raises(TimeTrackerReadException):
             tracker.read_day_schedule(testcase.datetime)
 
-
-# def test_midnight(factory: TimeTrackerFactory):
-#     """
-#     Continue the day started on 11.02.2025 and work at midnight.
-#     """
-#     with factory.create(TEST_EMPLOYEE_ID, 2025) as tracker:
-#         tracker.register_clock(dt.date(2025, 2, 11),
-#                                ClockEvent(dt.time(24), ClockAction.CLOCK_OUT))
-#         tracker.save()
+        with pytest.raises(TimeTrackerSaveException):
+            tracker.save()
 
 
-# TODO: integration tests / edge case tests
+def test_error_employee(factory: TimeTrackerFactory):
+    """
+    Open the error employee and read the errors for the 01.01.25 and
+    02.01.25.
+    """
+    DT_01_01_25 = dt.datetime(year=TEST_ERROR_EMPLOYEE_YEAR, month=1, day=1, hour=16)
+    DT_02_01_25 = dt.datetime(year=TEST_ERROR_EMPLOYEE_YEAR, month=1, day=2, hour=16)
+    DT_03_01_25 = dt.datetime(year=TEST_ERROR_EMPLOYEE_YEAR, month=1, day=3, hour=16)
+
+    ERROR_MISSING_ENTRY = 30
+    ERROR_ENTRY = 50
+
+    with factory.create(TEST_ERROR_EMPLOYEE_ID, DT_02_01_25) as tracker:
+
+        tracker.analyze(DT_02_01_25)
+        assert tracker.read_day_attendance_error(DT_01_01_25) == ERROR_ENTRY
+        
+        pytest.xfail("Waiting for vacation and paid absence to be input checked")
+        assert tracker.read_day_attendance_error(DT_03_01_25) == ERROR_ENTRY
+
+        # The missing entry error doesn't show up for current day
+        assert tracker.read_day_attendance_error(DT_02_01_25) == 0
+        assert tracker.read_year_attendance_error() == ERROR_ENTRY
+
+        tracker.analyze(DT_03_01_25)
+        assert tracker.read_day_attendance_error(DT_01_01_25) == ERROR_ENTRY
+        assert tracker.read_day_attendance_error(DT_02_01_25) == ERROR_MISSING_ENTRY
+
+        pytest.xfail("Waiting for vacation and paid absence to be input checked")
+        assert tracker.read_day_attendance_error(DT_03_01_25) == ERROR_ENTRY
+
+        assert tracker.read_year_attendance_error() == ERROR_ENTRY
+
+        with pytest.raises(TimeTrackerValueException):
+            tracker.get_clocks(DT_01_01_25)
+        
+        with pytest.raises(TimeTrackerValueException):
+            tracker.get_vacation(DT_03_01_25)
+        with pytest.raises(TimeTrackerValueException):
+            tracker.get_paid_absence(DT_03_01_25)
 
 
-# @pytest.mark.skip(reason="Not implemented")
-# def test_clock_event_register_and_evaluate(factory: TimeTrackerFactory):
-#     with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
-#         event = ClockEvent(time=dt.time(9, 0), action=ClockAction.CLOCK_IN)
-#         tracker.register_clock(event)
-#         tracker.evaluate()
-#         assert tracker.readable
-#         events = tracker.get_clock_events()
-#         assert events[0] == event
+def test_error_description(factory: TimeTrackerFactory):
+    """
+    Check the lookup table function works.
+    """
+    DT_01_01_25 = dt.datetime(year=TEST_ERROR_EMPLOYEE_YEAR, month=1, day=1, hour=16)
+
+    with factory.create(TEST_ERROR_EMPLOYEE_ID, DT_01_01_25) as tracker:
+
+        for id, desc in TEST_ERRORS_TABLE.items():
+            assert tracker.get_attendance_error_desc(id) == desc
+
+        with pytest.raises(TimeTrackerValueException):
+            tracker.get_attendance_error_desc(-1)
 
 
-# @pytest.mark.skip(reason="Not implemented")
-# def test_day_schedule_and_balance(factory: TimeTrackerFactory):
-#     with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
-#         tracker.evaluate()
-#         schedule = tracker.read_day_schedule()
-#         worked = tracker.read_day_worked_time()
-#         balance = tracker.read_day_balance()
-#         assert isinstance(schedule, dt.timedelta)
-#         assert isinstance(worked, dt.timedelta)
-#         assert isinstance(balance, dt.timedelta)
+def test_set_paid_absence(factory: TimeTrackerFactory, tc_sickness: CaseData):
+    """
+    Modify the paid absence ratio on the test date and check the
+    scheduled time changes as expected.
+    """
+    with factory.create(TEST_EMPLOYEE_ID, tc_sickness.datetime) as tracker:
+
+        tracker.set_paid_absence(tc_sickness.datetime, 0.0)
+        assert tracker.get_paid_absence(tc_sickness.datetime) == approx(0.0)
+
+        tracker.analyze(tc_sickness.datetime)
+        schedule = tracker.read_day_schedule(tc_sickness.datetime)
+        assert schedule == tracker.opening_day_schedule
+
+        tracker.set_paid_absence(tc_sickness.datetime, 0.5)
+        tracker.analyze(tc_sickness.datetime)
+        schedule = tracker.read_day_schedule(tc_sickness.datetime)
+        assert schedule == (tracker.opening_day_schedule / 2)
 
 
-# @pytest.mark.skip(reason="Not implemented")
-# def test_day_vacation(factory: TimeTrackerFactory):
-#     with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
-#         tracker.evaluate()
-#         vacation = tracker.read_day_vacation()
-#         assert 0.0 <= vacation <= 1.0
+def test_set_vacation(factory: TimeTrackerFactory, tc_vacation: CaseData):
+    """
+    Modify the vacation ratio on the test date and verify the scheduled
+    time changes as expected. Check the vacation counter as well.
+    """
+    with factory.create(TEST_EMPLOYEE_ID, tc_vacation.datetime) as tracker:
+
+        tracker.set_vacation(tc_vacation.datetime, 0.0)
+        assert tracker.get_vacation(tc_vacation.datetime) == approx(0.0)
+
+        tracker.analyze(tc_vacation.datetime)
+        schedule = tracker.read_day_schedule(tc_vacation.datetime)
+        assert schedule == tracker.opening_day_schedule
+
+        tracker.set_vacation(tc_vacation.datetime, 0.5)
+        tracker.analyze(tc_vacation.datetime)
+        schedule = tracker.read_day_schedule(tc_vacation.datetime)
+        assert schedule == (tracker.opening_day_schedule / 2)
+
+        month_vacation = tracker.read_month_vacation(tc_vacation.datetime)
+        assert month_vacation == approx(tc_vacation.month_vacation - 0.5)
+        year_vacation = tracker.read_year_vacation()
+        assert year_vacation == approx(tc_vacation.year_vacation - 0.5)
 
 
-# @pytest.mark.skip(reason="Not implemented")
-# def test_year_to_yesterday_balance(factory: TimeTrackerFactory):
-#     with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
-#         tracker.evaluate()
-#         ytd = tracker.read_year_to_date_balance()
-#         yty = tracker.read_year_to_yesterday_balance()
-#         assert ytd >= yty
+def test_set_attendance_error(factory: TimeTrackerFactory, tc_month_closing: CaseData):
+    """
+    Write a software error at the test date and check by reading the date
+    and the year attendance error.
+    """
+    CUSTOM_SOFT_ERROR = 10
+
+    with factory.create(TEST_EMPLOYEE_ID, tc_month_closing.datetime) as tracker:
+
+        tracker.set_attendance_error(tc_month_closing.datetime, CUSTOM_SOFT_ERROR)
+        date_error = tracker.get_attendance_error(tc_month_closing.datetime)
+        assert date_error == CUSTOM_SOFT_ERROR
+
+        tracker.analyze(tc_month_closing.datetime)
+        # Since there is no error more critical, the year error must also
+        # be CUSTOM_SOFT_ERROR
+        year_error = tracker.read_year_attendance_error()
+        assert year_error == CUSTOM_SOFT_ERROR
 
 
-# @pytest.mark.skip(reason="Not implemented")
-# def test_attendance_validator_basic(factory: TimeTrackerFactory):
-#     with factory.create(TEST_EMPLOYEE_ID, None) as tracker:
-#         tracker.evaluate()
-#         validator = AttendanceValidator(tracker)
-#         err = validator.check_date(None)
-#         assert err in (None, CLOCK_EVENT_MISSING, CLOCK_EVENTS_UNORDERED)
+def test_register_max_evts(factory: TimeTrackerFactory, tc_vacation: CaseData):
+    """
+    Register the maximal number of events for an empty date and check
+    the overflow correctly raise an error.
+    """
+    with factory.create(TEST_EMPLOYEE_ID, tc_vacation.datetime) as tracker:
+
+        # Prepare the events list and write them
+        events: list[ClockEvent | None] = []
+
+        datetime = dt.datetime.combine(tc_vacation.datetime.date(), dt.time(hour=6))
+        action = ClockAction.CLOCK_IN
+
+        for _ in range(0, tracker.max_clock_events_per_day):
+            event = ClockEvent(datetime.time(), action)
+            events.append(event)
+
+            action = (
+                ClockAction.CLOCK_OUT
+                if action is ClockAction.CLOCK_IN
+                else ClockAction.CLOCK_IN
+            )
+            datetime += dt.timedelta(minutes=5)
+
+        tracker.write_clocks(datetime, events)
+
+        # Try to write one more event and check it fails
+        overflow = ClockEvent(datetime.time(), action)
+
+        with pytest.raises(TimeTrackerWriteException):
+            tracker.register_clock(datetime, overflow)
+
+        events.append(overflow)
+        with pytest.raises(TimeTrackerWriteException):
+            tracker.write_clocks(datetime, events)
 
 
-# --- Edge case stubs below ---
+def test_reset_analyzed(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
+    """
+    Check that the `analyzed` property changes to `False` after a
+    modification is done.
+    """
+    with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
+
+        tracker.analyze(tc_first_work_day.datetime)
+        tracker.set_attendance_error(tc_first_work_day.datetime, 0)
+        assert not tracker.analyzed
+
+        tracker.analyze(tc_first_work_day.datetime)
+        tracker.set_paid_absence(tc_first_work_day.datetime, 0.0)
+        assert not tracker.analyzed
+
+        tracker.analyze(tc_first_work_day.datetime)
+        tracker.set_vacation(tc_first_work_day.datetime, 0.0)
+        assert not tracker.analyzed
+
+        tracker.analyze(tc_first_work_day.datetime)
+        tracker.register_clock(
+            tc_first_work_day.datetime,
+            ClockEvent(dt.time(hour=6), ClockAction.CLOCK_IN),
+        )
+        assert not tracker.analyzed
+
+        tracker.analyze(tc_first_work_day.datetime)
+        tracker.write_clocks(
+            tc_first_work_day.datetime,
+            [ClockEvent(dt.time(hour=6), ClockAction.CLOCK_IN)],
+        )
+        assert not tracker.analyzed
 
 
-@pytest.mark.skip(reason="Not implemented")
-def test_register_evt_at_midnight(factory: TimeTrackerFactory):
-    # Expect: possible to register at midnight
-    pass
+def test_wrong_version(factory: TimeTrackerFactory):
+    """
+    Try to open a time tracker that is not using the correct implementation
+    version.
+    """
+    with pytest.raises(TimeTrackerOpenException):
+        with factory.create(TEST_WRONG_VERSION_ID, TEST_WRONG_VERSION_YEAR):
+            assert False, "Should have failed"
 
 
-@pytest.mark.skip(reason="Not implemented")
-def test_clock_event_out_of_order(factory: TimeTrackerFactory):
-    # Expect: validator detects unordered events
-    pass
+def test_date_out_of_year(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
+    """
+    Verify that an error is raised when trying to access a date out of
+    the time tracker's year.
+    """
+    with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
+        tracker.analyze(tc_first_work_day.datetime)
 
+        ref = tc_first_work_day.datetime
+        wrong_date = dt.date(year=ref.year - 1, month=ref.month, day=ref.day)
 
-@pytest.mark.skip(reason="Not implemented")
-def test_missing_clock_out(factory: TimeTrackerFactory):
-    # Expect: validator detects missing clock-out
-    pass
-
-
-@pytest.mark.skip(reason="Not implemented")
-def test_register_more_than_max_events(factory: TimeTrackerFactory):
-    # Expect: TimeTrackerWriteException raised
-    pass
-
-
-@pytest.mark.skip(reason="Not implemented")
-def test_access_read_methods_before_evaluation(factory: TimeTrackerFactory):
-    # Expect: TimeTrackerReadException raised
-    pass
-
-
-@pytest.mark.skip(reason="Not implemented")
-def test_set_data_datetime_invalidates_readable(factory: TimeTrackerFactory):
-    # Expect: readable becomes False after data_datetime is changed
-    pass
-
-
-@pytest.mark.skip(reason="Not implemented")
-def test_vacation_calculation_with_future_dates(factory: TimeTrackerFactory):
-    # Ensure vacation read logic includes future dates correctly
-    pass
-
-
-@pytest.mark.skip(reason="Not implemented")
-def test_context_manager_closes_tracker(factory: TimeTrackerFactory):
-    # Expect: no exception raised when closing
-    pass
+        with pytest.raises(TimeTrackerDateException):
+            tracker.get_clocks(wrong_date)
+        with pytest.raises(TimeTrackerDateException):
+            tracker.read_day_schedule(wrong_date)
+        with pytest.raises(TimeTrackerDateException):
+            tracker.read_month_schedule(wrong_date)
+        with pytest.raises(TimeTrackerDateException):
+            tracker.analyze(
+                dt.datetime.combine(wrong_date, tc_first_work_day.datetime.time())
+            )

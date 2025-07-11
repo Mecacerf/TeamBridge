@@ -17,11 +17,13 @@ Contact: info@mecacerf.ch
 # Standard libraries
 import logging
 import datetime as dt
-from typing import TypeVar, Callable
+from typing import TypeVar, Callable, cast
 
 # Third-party libraries
 import openpyxl
 from openpyxl.utils import column_index_from_string as col_idx
+from openpyxl.utils import coordinate_to_tuple
+from openpyxl.utils.datetime import from_excel  # type: ignore
 
 # Internal imports
 from core.time_tracker import *
@@ -70,6 +72,11 @@ CELL_TIME = "A22"
 # Formula evaluation test cell
 CELL_EVALUATED = "A23"
 
+# Error <> description table
+CELL_ERROR_TABLE_ID = "A52"  # First error ID row
+COL_ERROR_TABLE_DESC = "B"  # Column to get error description
+MAX_ERROR_NBR = 10  # Just to give an iteration limit
+
 ## Next cells give the locations of different information in the other
 ## sheets. It allows to support dynamic per sheet locations and improve
 ## flexibility in production.
@@ -104,14 +111,26 @@ LOC_MONTH_PAID_ABSENCE = "A39"
 LOC_EXPECTED_DAY_SCHEDULE = "A40"
 LOC_REMAINING_VACATION = "A41"
 LOC_YTD_BALANCE = "A42"  # Year-to-date balance
+LOC_GLOBAL_ERROR = "A43"
 
-################################################
-#   Spreadsheets time tracker implementation   #
-################################################
+########################################################################
+#                           Other constants                            #
+########################################################################
 
 T = TypeVar("T")  # For generic methods
 
 CLOSED_ERROR_MSG = "Cannot manipulate a closed tracker."
+
+
+class _SpecialTime(Enum):
+    """Special times the spreadsheet may hold"""
+
+    MIDNIGHT_ROLLOVER = auto()  # Spreadsheet cell value is "24:00"
+
+
+########################################################################
+#               Spreadsheets time tracker implementation               #
+########################################################################
 
 
 class SheetTimeTracker(TimeTrackerAnalyzer):
@@ -195,6 +214,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         self._cell_exp_day_schedule = str(sheet[LOC_EXPECTED_DAY_SCHEDULE].value)
         self._cell_remaining_vacation = str(sheet[LOC_REMAINING_VACATION].value)
         self._cell_ytd_balance = str(sheet[LOC_YTD_BALANCE].value)
+        self._cell_global_error = str(sheet[LOC_GLOBAL_ERROR].value)
 
         # Verify that all month sheets are available
         # (spreadsheet integrity check)
@@ -314,22 +334,12 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         `self._col_last_clock_out`
 
         Args:
-            cell (Any): Openpyxl cell
+            cell (Any): Openpyxl cell.
 
         Returns:
-            ClockAction: Clock action for the cell
-
-        Raises:
-            TimeTrackerValueException: Given cell out of expected range.
+            ClockAction: Clock action for the cell.
         """
-        if (
-            cell.column < self._col_first_clock_in
-            or cell.column > self._col_last_clock_out
-        ):
-            raise TimeTrackerValueException(
-                f"Cell column {cell.column} is out of the range "
-                f"[{self._col_first_clock_in}; {self._col_last_clock_out}]."
-            )
+        assert self._col_first_clock_in <= cell.column <= self._col_last_clock_out
 
         # Follow the sequence 0: clock-in, 1: cock-out, 2: clock-in, etc.
         even = ((cell.column - self._col_first_clock_in) % 2) == 0
@@ -528,11 +538,17 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         Convert the given value to a `datetime.timedelta` if necessary.
 
         Args:
-            value (Any): Input value
+            value (Any): Input value.
 
         Returns:
             datetime.timedelta: Converted value.
         """
+        if isinstance(value, (float, int)):
+            # Handle specific case where the value has been set but not reparsed
+            # by openpyxl, which results in a time still being represented as
+            # a fraction of days (a number).
+            value = cast(Any, from_excel(value))
+
         if isinstance(value, dt.timedelta):
             # Passthrough
             return value
@@ -543,21 +559,37 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         raise ValueError(f"Cannot convert {type(value).__name__} to timedelta.")
 
-    def __to_time(self, value: Any) -> dt.time:
+    def __to_time(self, value: Any) -> dt.time | _SpecialTime:
         """
         Convert the given value to a `datetime.time` if necessary.
 
         Args:
-            value (Any): Input value
+            value (Any): Input value.
 
         Returns:
-            datetime.time: Converted value.
+            Union[dt.time, _SpecialTime]: Converted value as a `dt.time`
+                or a `_SpecialTime` value.
         """
+        if isinstance(value, (float, int)):
+            # Handle specific case where the value has been set but not reparsed
+            # by openpyxl, which results in a time still being represented as
+            # a fraction of days (a number).
+            value = cast(Any, from_excel(value))
+
         if isinstance(value, dt.time):
             # Passthrough
             return value
         if isinstance(value, dt.datetime):
-            return dt.time(hour=value.hour, minute=value.minute, second=value.second)
+            # The midnight rollover, noted 24:00 in the cell, is interpreted by
+            # Openpyxl as midnight on the 01.01.1900. While it makes sense that
+            # the time is midnight, it's not so clear why the date is
+            # 01.01.1900. To prevent compatibility issues, only check that the
+            # datetime refers to midnight and assume it is a midnight rollover
+            # value.
+            if value.hour == 0 and value.minute == 0:
+                return _SpecialTime.MIDNIGHT_ROLLOVER
+
+            # Other datetimes are not supported.
 
         raise ValueError(f"Cannot convert {type(value).__name__} to time.")
 
@@ -567,7 +599,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         as 0.0.
 
         Args:
-            value (Any): Input value
+            value (Any): Input value.
 
         Returns:
             float: Converted value.
@@ -579,6 +611,99 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             return float(value)
 
         raise ValueError(f"Cannot convert {type(value).__name__} to float.")
+
+    def __to_int_none_safe(self, value: Any) -> int:
+        """
+        Convert the given value to an integer. A `None` value is
+        interpreted as 0.
+
+        Args:
+            value (Any): Input value.
+
+        Returns:
+            int: Converted value.
+        """
+        if value is None:
+            return 0
+
+        if isinstance(value, int):
+            return int(value)
+
+        raise ValueError(f"Cannot convert {type(value).__name__} to int.")
+
+    def __to_str_none_safe(self, value: Any) -> str:
+        """
+        Convert the given value to a string. A `None` value is
+        interpreted as an empty string.
+
+        Args:
+            value (Any): Input value.
+
+        Returns:
+            str: Converted value.
+        """
+        if value is None:
+            return ""
+
+        if isinstance(value, str):
+            return value
+
+        raise ValueError(f"Cannot convert {type(value).__name__} to str.")
+
+    ## Utility methods ##
+
+    def __get_clock_event(self, cell: Any) -> Optional[ClockEvent]:
+        """
+        Try to convert the cell content to a `ClockEvent`. The cell must
+        contain a time in the `hh:mm` format or must be empty.
+
+        Args:
+            cell (Any): Openpyxl cell.
+
+        Returns:
+            Optional[ClockEvent]: A `ClockEvent` if the cell has a parsable
+                value or `None` otherwise.
+
+        Raises:
+            TimeTrackerValueException: Conversion unsupported for the
+                cell value.
+        """
+        if cell is None or cell.value is None:
+            return None  # Cell is empty, no clock event registered
+
+        evt_time = self.__cast(cell.value, self.__to_time)
+
+        if isinstance(evt_time, dt.time):
+            # Standard clock-in / clock-out
+            action = self.__get_clock_action_for_cell(cell)
+            clk_evt = ClockEvent(evt_time, action)
+        else:
+            # Handle a special time value
+            if evt_time == _SpecialTime.MIDNIGHT_ROLLOVER:
+                clk_evt = ClockEvent.midnight_rollover()
+            else:
+                raise TimeTrackerValueException(f"Unhandled special time {evt_time}.")
+
+        return clk_evt
+
+    def __set_clock_event(self, cell: Any, event: ClockEvent):
+        """
+        Set the cell value based on the given `ClockEvent`.
+
+        Changes are not saved.
+
+        Args:
+            cell (Any): Openpyxl cell to write into.
+            event (ClockEvent): ClockEvent to write in the cell.
+        """
+        if event is ClockEvent.midnight_rollover():
+            # Write the special time value "24:00"
+            cell.value = 1.0  # One full day
+        else:
+            # Write a standard time value
+            cell.value = dt.time(
+                hour=event.time.hour, minute=event.time.minute, second=0
+            )
 
     ## General employee's properties access ##
 
@@ -655,11 +780,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
             # Create and append a ClockEvent if a time is available in the cell,
             # otherwise just append None in the clock events list
-            if cell and cell.value is not None:
-                evt_time = self.__cast(cell.value, self.__to_time)
-                event = ClockEvent(
-                    time=evt_time, action=self.__get_clock_action_for_cell(cell)
-                )
+            event = self.__get_clock_event(cell)
+
             clock_events.append(event)
 
         # Return the events list without the trailing None values
@@ -704,10 +826,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
             if cell.value is None:
                 # The slot is available, write the clock time in HH:MM format
-                cell.number_format = "HH:MM"
-                cell.value = dt.time(
-                    hour=event.time.hour, minute=event.time.minute, second=0
-                )  # type: ignore
+                self.__set_clock_event(cell, event)
 
                 # Save the workbook and automatically invalidate a previous
                 # data analysis
@@ -718,6 +837,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
                     f"in sheet '{sheet_idx}' : "
                     f"'{event}' in '{cell.coordinate}'."
                 )
+
                 return
 
         raise TimeTrackerWriteException(
@@ -752,14 +872,20 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         msgs: list[str] = []
 
-        for col_idx, evt in enumerate(events, self._col_first_clock_in):
+        # Whatever the events list size, all cells are overridden.
+        # Note: the range stop value is exclusive while last clock out column
+        # index is inclusive, reason why one is added.
+        evts_rng = range(self._col_first_clock_in, self._col_last_clock_out + 1)
+        # Pads with None events
+        clk_evts = events + [None] * (len(evts_rng) - len(events))
+
+        assert len(evts_rng) == self.max_clock_events_per_day
+
+        for col_idx, evt in zip(evts_rng, clk_evts):
             cell = month_sheet.cell(row=date_row, column=col_idx)
-            cell.number_format = "HH:MM"
 
             if evt:
-                cell.value = dt.time(
-                    hour=evt.time.hour, minute=evt.time.minute, second=0
-                )  # type: ignore
+                self.__set_clock_event(cell, evt)
             else:
                 cell.value = None
 
@@ -801,7 +927,40 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
     def get_attendance_error(self, date: dt.date | dt.datetime) -> Optional[int]:
         return self.__get_month_day_cell_value(
-            self._workbook_raw, date, self._col_day_soft_error, int
+            self._workbook_raw, date, self._col_day_soft_error, self.__to_int_none_safe
+        )
+
+    def get_attendance_error_desc(self, error_id: int) -> str:
+        """
+        Look up the description corresponding to a given error ID
+        in the error ID <> description table of the raw workbook.
+        """
+        assert not self._closed, CLOSED_ERROR_MSG
+
+        start_row, col_id = coordinate_to_tuple(CELL_ERROR_TABLE_ID)
+        col_desc = col_idx(COL_ERROR_TABLE_DESC)
+
+        sheet = self._workbook_raw.worksheets[SHEET_INIT]
+
+        for row in sheet.iter_rows(
+            min_row=start_row,
+            max_row=start_row + MAX_ERROR_NBR,
+            min_col=col_id,
+            max_col=col_desc,
+            values_only=True,
+        ):
+            current_id = row[0]
+
+            if current_id is None:
+                break
+
+            current_id = self.__cast(current_id, int)
+            if current_id == error_id:
+                description = row[col_desc - col_id]
+                return self.__cast(description, self.__to_str_none_safe)
+
+        raise TimeTrackerValueException(
+            f"No description found for error ID {error_id}."
         )
 
     ## Time Tracker Analyzer methods ##
@@ -882,7 +1041,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         except Exception:
             # Reset the state to step 1
             # target_dt is set to None by the superclass on exception, which
-            # set the `analyzed` property to False
+            # sets the `analyzed` property to False
             self.__close_eval_workbook()
             raise
 
@@ -943,9 +1102,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         return self.__read_month_cell_value(month, self._cell_month_vacation, float)
 
     def read_year_vacation(self) -> float:
-        return self.opening_vacation_days - self.read_remaining_vacation()
+        return self.opening_vacation_days - self.read_year_remaining_vacation()
 
-    def read_remaining_vacation(self) -> float:
+    def read_year_remaining_vacation(self) -> float:
         # Warning: to get the remaining vacation days for the whole year, read
         # the value from the December sheet. This way the value is updated
         # even if vacations are planned for future months.
@@ -954,6 +1113,13 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
     def read_year_to_date_balance(self) -> dt.timedelta:
         return self.__read_month_cell_value(
             self._target_dt, self._cell_ytd_balance, self.__to_timedelta
+        )
+
+    def read_year_attendance_error(self) -> Optional[int]:
+        # As for the vacations, read the December sheet that contains the very
+        # last error value.
+        return self.__read_month_cell_value(
+            12, self._cell_global_error, self.__to_int_none_safe
         )
 
     def save(self):

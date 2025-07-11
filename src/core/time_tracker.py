@@ -25,11 +25,12 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 from abc import ABC, abstractmethod
-from typing import Optional, Type, Any
+from typing import Optional, Type, Any, ClassVar
 from types import TracebackType
-from dataclasses import dataclass
-from enum import Enum
+from dataclasses import dataclass, field
+from enum import Enum, auto
 import datetime as dt
+from threading import Lock
 
 ########################################################################
 #              Time tracker related errors declaration                 #
@@ -106,11 +107,10 @@ class TimeTrackerCloseException(TimeTrackerException):
 class ClockAction(Enum):
     """Clock actions enumeration."""
 
-    CLOCK_IN = 0  # The employee starts working
-    CLOCK_OUT = 1  # The employee finishes working
+    CLOCK_IN = auto()  # The employee starts working
+    CLOCK_OUT = auto()  # The employee finishes working
 
     def __str__(self):
-        # Return `clock-in` or `clock-out` as a user friendly description
         return self.name.lower().replace("_", "-")
 
 
@@ -122,12 +122,45 @@ class ClockEvent:
     Attributes:
         time (datetime.time): Time in the day at which the event occurred.
         action (ClockAction): Related clock action.
+
+    Factory:
+        midnight_rollover(): Create a midnight rollover special event.
     """
 
     time: dt.time
     action: ClockAction
+    _midnight_rollover: bool = field(default=False, repr=True, compare=True)
+
+    # Class attributes
+    _midnight_rollover_instance: ClassVar["Optional[ClockEvent]"] = None
+    _singleton_lock: ClassVar[Lock] = Lock()
+
+    @classmethod
+    def midnight_rollover(cls) -> "ClockEvent":
+        """
+        Get a midnight rollover clock-out event. This is a singleton
+        with thread-safe access.
+
+        This special `ClockEvent` type is used to end a day where an
+        employee was still working at midnight. The next day must start
+        with a clock-in event at midnight.
+        """
+        # Create the singleton instance if not existing
+        if cls._midnight_rollover_instance is None:
+            with cls._singleton_lock:
+                # Double check before entering the critical section
+                if cls._midnight_rollover_instance is None:
+                    cls._midnight_rollover_instance = cls(
+                        time=dt.time(0, 0),
+                        action=ClockAction.CLOCK_OUT,
+                        _midnight_rollover=True,
+                    )
+
+        return cls._midnight_rollover_instance
 
     def __str__(self):
+        if self._midnight_rollover:
+            return "midnight-rollover at 24:00"
         return f"{self.action} at {self.time.strftime('%H:%M')}"
 
 
@@ -588,6 +621,23 @@ class TimeTracker(Employee, ABC):
         pass
 
     @abstractmethod
+    def get_attendance_error_desc(self, error_id: int) -> str:
+        """
+        Get the description for the given error identifier.
+
+        Args:
+            error_id (int): Error identifier.
+
+        Returns:
+            str: Error description.
+
+        Raises:
+            TimeTrackerValueException: No description associated with
+                given identifier.
+        """
+        pass
+
+    @abstractmethod
     def save(self):
         """
         Save the modifications on the time trackers repository.
@@ -749,10 +799,6 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         In summary, always check that no attendance error exists for the
         date before relying on the returned value, especially when
         reading a date before the `target_datetime.date()`.
-
-        TODO: Clarify the behavior when clock events are registered for
-        a future date relative to `target_datetime.date()`. Is the
-        worked time always 00:00 or are they computed?
 
         This method is only available when the `analyzed` property is
         `True`.
@@ -1022,7 +1068,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         pass
 
     @abstractmethod
-    def read_remaining_vacation(self) -> float:
+    def read_year_remaining_vacation(self) -> float:
         """
         Get the number of vacation days the employee still has available
         (not yet planned or used) this year.
@@ -1113,3 +1159,24 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         year_to_date = self.read_year_to_date_balance()
         day_balance = self.read_day_balance(self.target_datetime.date())
         return year_to_date - day_balance
+
+    def read_year_attendance_error(self) -> Optional[int]:
+        """
+        Read the global attendance error for the year. It returns the
+        most severe error from all days.
+
+        In most cases, using an `AttendanceValidator` is preferred over
+        interacting directly with these low-level methods.
+
+        Returns:
+            Optional[int]: Detected attendance error for the year or
+                `None` if no error is found.
+
+        Raises:
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
+        """
+        pass

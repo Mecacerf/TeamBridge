@@ -17,16 +17,14 @@ Set-Location -Path (Get-Item $PSScriptRoot).Parent.FullName
 $venvDir = ".venv"
 
 # Check if the virtual environment exists
-if(!(Test-Path $venvDir))
-{
+if (!(Test-Path $venvDir)) {
     Write-Output "Virtual environment not found. Creating one..."
     python -m venv $venvDir
 }
 
 # Activate the virtual environment
 $venvActivate = ".\$venvDir\Scripts\Activate.ps1"
-if(Test-Path $venvActivate) 
-{
+if (Test-Path $venvActivate) {
     Write-Output "Activating virtual environment..."
     & $venvActivate
 
@@ -34,7 +32,7 @@ if(Test-Path $venvActivate)
     python -m pip install --upgrade pip
 
     # Install dependencies
-    pip install -r requirements.txt
+    pip install -U -r requirements.txt
 
     # Build teambridge from the spec file
     pyinstaller deploy\\TeamBridge.exe.spec --clean --workpath deploy\\build --distpath deploy\\dist
@@ -45,7 +43,6 @@ if(Test-Path $venvActivate)
     # Deactivate the virtual environment
     deactivate
 }
-else 
-{
+else {
     Write-Error "Failed to find activation script!"
 }

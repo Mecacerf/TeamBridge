@@ -152,10 +152,12 @@ def evaluate_calc(file_path: pathlib.Path):
     # placed in the cache folder, instead of directly replacing the original
     # one. This way the original document doesn't get corrupted if an error
     # occurs. The replacement (file move) is done only on success.
+    # https://help.libreoffice.org/latest/km/text/shared/guide/start_parameters.html
     command = [
         _libreoffice_path,  # LibreOffice executable path
-        "--headless",  # Run in headless (no GUI) mode
-        "--calc",  # Open in spreadsheet mode
+        "--headless",
+        "--norestore",
+        "--nolockcheck",
         "--convert-to",
         "xlsx",  # Convert to XLSX format
         "--outdir",

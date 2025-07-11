@@ -20,6 +20,14 @@ TEST_EMPLOYEE_FIRSTNAME = "Meca"
 # Spreadsheet file under test
 TEST_SPREADSHEET_FILE = f"{TEST_EMPLOYEE_ID}-unit-test.xlsx"
 
+# Error employee identifier
+TEST_ERROR_EMPLOYEE_ID = "222"
+TEST_ERROR_EMPLOYEE_YEAR = 2025
+
+# Wrong version employee identifier
+TEST_WRONG_VERSION_ID = "333"
+TEST_WRONG_VERSION_YEAR = 2025
+
 # Tests assets source folder
 TEST_ASSETS_SRC_FOLDER = "tests/assets/"
 # Tests assets destination folder
@@ -27,3 +35,13 @@ TEST_ASSETS_DST_FOLDER = ".test-cache/assets/"
 
 # Test sheets repository folder
 TEST_REPOSITORY_ROOT = str(Path(TEST_ASSETS_DST_FOLDER) / "repository")
+
+# Errors identifiers and descriptions table
+TEST_ERRORS_TABLE = {
+    0: "",
+    10: "plus de 6h sans pause",
+    20: "horaire bloc non respecté",
+    30: "timbrage manquant",
+    40: "incohérence chronologie",
+    50: "saisie incorrecte",
+}

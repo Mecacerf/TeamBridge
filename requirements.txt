@@ -2,8 +2,13 @@ Kivy==2.3.1
 Kivy_examples==2.3.1
 numpy==2.2.5
 opencv_python==4.11.0.86
-openpyxl==3.1.5
 pyzbar==0.1.9
 screen_brightness_control==0.24.2
+
+# Get my own openpyxl version based on 3.1.5 with corrected 
+# double-save issue
+git+https://github.com/deerbast/openpyxl-fork.git@fix-openpyxl-issue
+# Pillow needed by openpyxl to manage images in spreadsheets
+pillow==11.3.0
 
 PyInstaller
