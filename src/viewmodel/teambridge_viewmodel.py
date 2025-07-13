@@ -322,6 +322,8 @@ class _InitialState(_IViewModelState):
                 cam_idx=self.fsm.camera_idx, scan_rate=self.fsm.camera_scan_rate
             )
 
+            self.fsm.model.start_attendance_list_task(dt.datetime.now())
+
         except RuntimeError:
             logger.warning(
                 "Failed to open the barcode scanner. It appears to be "

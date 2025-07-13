@@ -15,6 +15,8 @@ Contact: info@mecacerf.ch
 import pytest
 import logging
 import os
+import datetime as dt
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
@@ -34,7 +36,17 @@ def factory(arrange_assets: None) -> SheetTimeTrackerFactory:
     """
     Get a `SheetTimeTrackerFactory` instance for the test.
     """
-    return SheetTimeTrackerFactory(repository_path=TEST_REPOSITORY_ROOT)
+    factory = SheetTimeTrackerFactory(repository_path=TEST_REPOSITORY_ROOT)
+    factory._setup(TEST_REPOSITORY_ROOT)  # Make sure to reset the singleton
+    return factory
+
+
+def test_not_dir(arrange_assets: None):
+    """
+    Verify that a sheet factory cannot be created using a file as repository.
+    """
+    with pytest.raises(NotADirectoryError):
+        SheetTimeTrackerFactory(Path(TEST_REPOSITORY_ROOT) / TEST_SPREADSHEET_FILE)
 
 
 def test_list_employee_ids(factory: SheetTimeTrackerFactory):
@@ -48,7 +60,49 @@ def test_list_employee_ids(factory: SheetTimeTrackerFactory):
         "888",  #  Alberto
         "999",  #  Roberto
         "222",  #  unit-test-error
-        "333"   #  Wrong version
+        "333",  #  Wrong version
+    ]
+
+    assert set(actual) == set(expected)
+
+
+def test_list_employee_ids_year(factory: SheetTimeTrackerFactory):
+    """
+    Check that the factory returns the expected employee ids for the
+    year 2025.
+    """
+    actual = factory.list_employee_ids(filter_year=2025)
+    expected = [
+        "888",  #  Alberto
+        "999",  #  Roberto
+        # Employees in root folder are always returned
+        "777",  #  unit-test
+        "222",  #  unit-test-error
+        "333",  #  Wrong version
+    ]
+
+    assert set(actual) == set(expected)
+
+
+def test_list_employee_ids_new_year(factory: SheetTimeTrackerFactory):
+    """
+    Check that the factory returns the expected employee ids for a year
+    that is not yet registered.
+    """
+    # Correct the folder name 2000 -> 2020
+    os.replace(
+        Path(TEST_REPOSITORY_ROOT) / "2000-error",
+        Path(TEST_REPOSITORY_ROOT) / "2020-ok",
+    )
+
+    actual = factory.list_employee_ids(filter_year=dt.date(2020, 1, 1))
+    expected = [
+        "888",  #  Alberto
+        "111",  #  Marcello
+        # Employees in root folder are always returned
+        "777",  #  unit-test
+        "222",  #  unit-test-error
+        "333",  #  Wrong version
     ]
 
     assert set(actual) == set(expected)
@@ -127,6 +181,29 @@ def test_alberto_wrong_folder(factory: SheetTimeTrackerFactory):
 
     with factory.create(ALBERTO_ID, 2020) as tracker:
         assert tracker.tracked_year == 2020
+
+
+def test_root_repo_wrong_year(factory: SheetTimeTrackerFactory):
+    """
+    Try to open a tracker from the root repository by specifying the
+    wrong year.
+    """
+    with pytest.raises(TimeTrackerOpenException, match="Cannot find a file"):
+        factory.create(TEST_EMPLOYEE_ID, 1969)
+
+
+def test_remove_year_folder(factory: SheetTimeTrackerFactory):
+    """
+    Remove a year folder and verify the factory doesn't try to return
+    it.
+    """
+    with factory.create(ALBERTO_ID, 2024) as tracker:
+        assert tracker.tracked_year == 2024
+
+    shutil.rmtree(Path(TEST_REPOSITORY_ROOT) / "2024", ignore_errors=False)
+
+    with pytest.raises(TimeTrackerOpenException, match="2024"):
+        factory.create(ALBERTO_ID, 2024)
 
 
 def test_concurrent_create(factory: SheetTimeTrackerFactory):

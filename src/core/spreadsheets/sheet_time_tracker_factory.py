@@ -18,6 +18,8 @@ import logging
 from pathlib import Path
 import re
 import threading
+import datetime as dt
+from typing import Optional
 
 # Internal libraries
 from core.time_tracker import (
@@ -61,15 +63,16 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
                 spreadsheets repository.
 
         Raises:
-            RuntimeError: If the provided path is not a directory.
+            NotADirectoryError: If the provided path is not a directory.
         """
         self._repo_root = Path(repository_path)
         if not self._repo_root.is_dir():
-            raise RuntimeError(f"{repository_path} is not a folder.")
+            raise NotADirectoryError(f"{repository_path} is not a directory.")
 
         # Default root accessor
         self._root_accessor = self.__create_accessor(self._repo_root)
 
+        # Repository scan lock and flag
         self._scan_lock = threading.Lock()
         self._scan_ready = threading.Event()
         self._scan_ready.set()
@@ -78,25 +81,39 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
         self._year_accessors: dict[int, SheetsRepoAccessor] = {}
         self.__scan_once()
 
+    def __create_accessor(self, folder: Path):
+        return SheetsRepoAccessor(remote_repository=str(folder.resolve()))
+
     def __scan_once(self):
         """
         Ensure proper synchronization if multiple threads are trying to
         scan the repository simultaneously.
         """
-        # If scan ready is set, no thread is currently scanning
         if self._scan_ready.is_set():
-            with self._scan_lock:
-                if self._scan_ready.is_set():  # Double check in lock
-                    # This is the very first thread that needs to perform a
-                    # scan
+            # Try to be the one who scans
+            if self._scan_lock.acquire(blocking=False):
+                try:
+                    logger.info(
+                        "Starting repository "
+                        f"'{self._root_accessor.remote_repository}' scan "
+                        f"on thread '{threading.current_thread().name}'."
+                    )
+
                     self._scan_ready.clear()
                     try:
                         self.__scan_repo()
                     finally:
                         self._scan_ready.set()
-                    return
+                finally:
+                    self._scan_lock.release()
 
-        # Another thread is scanning, just wait for it to finish
+                return
+
+        # Another thread is scanning, just wait for it to complete
+        logger.debug(
+            f"Thread {threading.current_thread().name} is waiting "
+            "for repository scan to be complete."
+        )
         self._scan_ready.wait()
 
     def __scan_repo(self):
@@ -157,34 +174,132 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
             }."
         )
 
-    def __create_accessor(self, folder: Path):
-        return SheetsRepoAccessor(remote_repository=str(folder.resolve()))
+    def __select_accessor(self, year: Optional[int]) -> Optional[SheetsRepoAccessor]:
+        """
+        Select the accessor for the specified year or the root accessor
+        if year is `None`.
+
+        If no accessor exists for the specified year, a repository scan
+        is performed to check if the folders structure has changed. A new
+        accessor may therefore be registered dynamically.
+
+        When an accessor is found for the specified year, its availability
+        is checked before it is returned. This mechanism ensures the
+        accessor can be safely used. When the availability check fails,
+        a repository scan is also performed to update the folders
+        structure, which allows to dynamically remove an accessor for a
+        deleted folder.
+
+        Args:
+            year (Optional[int]): Target year or `None` to select the root.
+
+        Returns:
+            Optional[SheetsRepoAccessor]: Selected accessor or `None` if
+                not found / unavailable.
+        """
+        accessor: Optional[SheetsRepoAccessor] = None
+
+        if year is None:
+            accessor = self._root_accessor
+        elif year in self._year_accessors:
+            accessor = self._year_accessors[year]
+        else:
+            logger.debug(f"No accessor registered for year {year}.")
+            self.__scan_once()
+            accessor = self._year_accessors.get(year, None)
+
+        if accessor is None:
+            return None
+
+        if accessor.check_repo_available():
+            return accessor
+
+        logger.debug(
+            f"The remote repository '{accessor.remote_repository}' seems unavailable."
+        )
+        self.__scan_once()
+
+        # The rescan does not change anything to accessor's availability. It
+        # only allows to remove it from the cache if the folder no longer exists.
+        return None
+
+    def __create_tracker(
+        self,
+        accessor: SheetsRepoAccessor,
+        employee_id: str,
+        year: int,
+        readonly: bool,
+        strict: bool = True,
+    ) -> Optional[SheetTimeTracker]:
+        """
+        Create a `SheetTimeTracker` safely.
+
+        The `tracked_year` of the tracker is checked to ensure it matches
+        the expected year. This mechanism prevents user errors, where
+        a file has been placed in a wrong folder (thus attributed to the
+        wrong accessor).
+
+        When `strict` is `True`, a year mismatch raises an exception.
+        When not set, `None` is returned without exception.
+
+        Args:
+            accessor (SheetsRepoAccessor): Accessor to use to open the file.
+            employee_id (str): Employee's tracker id.
+            year (int): Expected accessor's year.
+            readonly (bool): Whether the tracker must be opened in read-only
+                mode.
+            strict (bool): Whether to raise an exception on year mismatch.
+
+        Returns:
+            Optional[SheetTimeTracker]: Created tracker or `None` if year
+                mismatches and `strict` is `True`.
+
+        Raises:
+            TimeTrackerOpenException: Raised on year mismatch when
+                `strict` is `True`.
+        """
+        tracker = SheetTimeTracker(employee_id, accessor=accessor, readonly=readonly)
+
+        # Sanity check tracked year
+        tracked_year = tracker.tracked_year
+        if tracked_year == year:
+            return tracker
+
+        cause = None
+        try:
+            tracker.close()
+        except TimeTrackerCloseException as e:
+            cause = e
+
+        if not strict and cause is None:
+            return None
+
+        raise TimeTrackerOpenException(
+            f"Year mismatch: a tracker for employee '{employee_id}' "
+            f"in year {tracked_year} "
+            f"was found in the folder targeting year {year}."
+        ) from cause  # The cause shows if the closing failed
 
     def _create(
-        self, employee_id: str, year: int, readonly: bool, may_rescan: bool = True
+        self, employee_id: str, year: int, readonly: bool, root_search: bool = False
     ) -> TimeTrackerAnalyzer:
         """
-        Create and return a time tracker instance for a given employee and year.
-
-        Logic:
-        1. If the year is already known (cached in self._year_accessors),
-        try to access the corresponding folder and check if the employee
-        ID is listed. If so, return a SheetTimeTracker for that employee
+        Create and return a time tracker instance for a given employee
         and year.
-        2. If the year is not yet cached or the employee ID is not found,
-        and if `may_rescan` is True, perform a repository rescan to refresh
-        year mappings and retry step 1 (without rescanning again).
-        3. If the employee ID is still not found, check the fallback "root"
-        accessor. If found, return a SheetTimeTracker using the root accessor.
-        4. If the employee ID is not found in any valid location, raise
-        an exception.
+
+        The repository indexing is updated dynamically if year folders
+        are added or removed during runtime. The function starts by
+        searching in the year folders and fallbacks to the root repository
+        if no tracker is found. The `tracked_year` property of the tracker
+        is always compared to the given year to ensure no user error
+        exists.
 
         Args:
             employee_id (str): Unique identifier for the employee.
             year (int): Year to look up the employee's data.
             readonly (bool): Whether to open the tracker in readonly mode.
-            may_rescan (bool): Whether to perform a repository rescan if
-                data is missing (internal use).
+            root_search (bool): Whether to search in the year folders or
+                in the root repository.
 
         Returns:
             TimeTrackerAnalyzer: A tracker object for the given employee
@@ -195,71 +310,58 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
                 the given inputs or the opening failed.
             See chained exceptions for details.
         """
-        # Step 1: year is registered in accessors cache
-        if year in self._year_accessors:
-            accessor = self._year_accessors[year]  #  Read is atomic
+        accessor = self.__select_accessor(None if root_search else year)
 
-            # Attempt to create a time tracker only if ID is listed
-            if employee_id in accessor.list_employee_ids():
-                tracker = SheetTimeTracker(
-                    employee_id, accessor=accessor, readonly=readonly
-                )
-
-                # Sanity check tracked year
-                tracked_year = tracker.tracked_year
-                if tracked_year != year:
-
-                    cause = None
-                    try:
-                        tracker.close()
-                    except TimeTrackerCloseException as e:
-                        cause = e
-
-                    raise TimeTrackerOpenException(
-                        f"Year mismatch: a tracker for employee '{employee_id}' "
-                        f"in year {tracked_year} "
-                        f"was found in the folder targeting year {year}."
-                    ) from cause  # The cause shows if the closing failed
-
+        # Attempt to create a time tracker only if ID is listed
+        if accessor is not None and employee_id in accessor.list_employee_ids():
+            # If searching in the root repo, strict is False to allow years
+            # mixing
+            tracker = self.__create_tracker(
+                accessor, employee_id, year, readonly, strict=not root_search
+            )
+            if tracker is not None:
                 return tracker
 
-        # Step 2: year not registered or missing entry for given ID
-        # Try to perform a repository scan if allowed
-        if may_rescan:
+        # Recursive call in root folder if nothing found in year folders
+        if not root_search:
             logger.debug(
-                f"Accessor for employee '{employee_id}' at year {year} not found. "
-                "Try to update the cache..."
+                f"Search employee '{employee_id}' at year {year} "
+                "in root repository..."
             )
-
-            self.__scan_once()
-            # Retry the case 1
-            return self._create(employee_id, year, readonly, may_rescan=False)
-
-        # Step 3: try to search in the root accessor
-        logger.debug(
-            f"Last attempt to find employee '{employee_id}' at year {year} "
-            "in root repository..."
-        )
-
-        if employee_id in self._root_accessor.list_employee_ids():
-            return SheetTimeTracker(
-                employee_id, accessor=self._root_accessor, readonly=readonly
-            )
+            return self._create(employee_id, year, readonly, root_search=True)
 
         raise TimeTrackerOpenException(
             f"Cannot find a file for employee '{employee_id}' at year {year}."
         )
 
-    def list_employee_ids(self) -> list[str]:
+    def list_employee_ids(
+        self, filter_year: int | dt.date | dt.datetime | None = None
+    ) -> list[str]:
         """
-        Return a deduplicated list of all employee IDs found across
-        all unsorted repository accessors.
+        List registered employee ids for the given year. If `filter_year`
+        is `None`, all employee ids are listed. Employee ids from the
+        root folder are always listed.
+
+        This call may trigger a repository scan if `filter_year` is not
+        indexed.
         """
-        accessors: list[SheetsRepoAccessor] = [self._root_accessor] + list(
-            self._year_accessors.values()
-        )
+        if isinstance(filter_year, (dt.date, dt.datetime)):
+            filter_year = filter_year.year
+
+        selected_years: list[int | None] = [None]
+        if filter_year is None:
+            # No year filter, select all years
+            selected_years += list(self._year_accessors.keys())
+        elif isinstance(filter_year, int):
+            # Select targeted accessor
+            selected_years += [filter_year]
+        else:
+            assert False, f"filter_year is {type(filter_year)}: {filter_year}."
 
         ids: set[str] = set()
-        for accessor in accessors:
-            ids.update(accessor.list_employee_ids())
+        for year in selected_years:
+            accessor = self.__select_accessor(year)
+            if accessor is not None:
+                ids.update(accessor.list_employee_ids())
+
         return sorted(ids)  # Return ids in a predictable order
