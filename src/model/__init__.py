@@ -14,7 +14,7 @@ from .teambridge_scheduler import *
 
 __all__ = [
     "IModelMessage",
-    "IEmployeeMessage",
+    "EmployeeInfo",
     "EmployeeEvent",
     "EmployeeData",
     "ModelError",

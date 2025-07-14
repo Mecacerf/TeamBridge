@@ -276,36 +276,32 @@ class TeamBridgeScheduler:
 
     def __attendance_list_task(self, datetime: dt.datetime) -> IModelMessage:
         """
-        Fetch employees attendance list.
+        Fetch employees attendance list for given date and time.
         """
-        logger.info("Fetch attendance list..")
         start_ts = time.time()
 
-        def fetch_clocked_in(employee_id: str) -> tuple[str, Optional[bool]]:
+        def fetch(id: str) -> tuple[EmployeeInfo, Optional[bool]]:
             """
             Check if the employee with given identifier is currently
-            clocked in.
+            clocked in and return its state.
             """
             try:
-                with self._factory.create(
-                    employee_id, datetime, readonly=True
-                ) as tracker:
-                    return (employee_id, tracker.is_clocked_in(datetime))
+                with self._factory.create(id, datetime, readonly=True) as tracker:
+                    clocked_in = tracker.is_clocked_in(datetime)
+                    info = EmployeeInfo(tracker.name, tracker.firstname, id)
+                    return info, clocked_in
+
             except TimeTrackerException:
-                logger.error(
-                    f"Error occurred fetching employee '{employee_id}'.", exc_info=True
-                )
-                return (employee_id, None)
+                return EmployeeInfo(id, "", ""), None
 
-        # Retrieve all registered employees ids in the target year
-        ids = self._factory.list_employee_ids(datetime)
+        # Fetch all registered employees for the given year
+        result: list[tuple[EmployeeInfo, Optional[bool]]] = []
+        for id in self._factory.list_employee_ids(datetime):
+            result.append(fetch(id))
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            # Wrap in list to evaluate the generator
-            results = list(pool.map(fetch_clocked_in, ids))
-
-        delta_ts = time.time() - start_ts
-        logger.debug(f"Fetched {len(ids)} employees in {delta_ts:.2f}s.")
-        logger.info(" | ".join([f"{id}: {status}" for id, status in results]))
-
-        return ModelError(0, "")
+        return AttendanceList(
+            present=[info for info, clocked_in in result if clocked_in is True],
+            absent=[info for info, clocked_in in result if clocked_in is False],
+            unknown=[info.id for info, clocked_in in result if clocked_in is None],
+            fetch_time=time.time() - start_ts
+        )
