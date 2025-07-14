@@ -19,7 +19,7 @@ Contact: info@mecacerf.ch
 import logging
 import datetime as dt
 import time
-from enum import Enum
+from enum import Enum, auto
 from abc import ABC
 from typing import cast
 
@@ -41,6 +41,9 @@ EMPLOYEE_REGEX_GROUP = 1
 # Timeout in seconds to prevent double-scanning the same ID
 SCAN_ID_TIMEOUT = 10.0
 
+# Timeout for the attendance list task
+ATTENDANCE_LIST_TIMEOUT = 60.0
+
 
 class ViewModelAction(Enum):
     """
@@ -52,13 +55,15 @@ class ViewModelAction(Enum):
     """
 
     # Move to clock in/out waiting state
-    CLOCK_ACTION = 0
+    CLOCK_ACTION = auto()
     # Move to consultation waiting state
-    CONSULTATION = 1
+    CONSULTATION = auto()
+    # Perform an attendance list fetch
+    ATTENDANCE_LIST = auto()
     # Leave the current state, move to waiting for clock action state
-    RESET_TO_CLOCK_ACTION = 2
+    RESET_TO_CLOCK_ACTION = auto()
     # Leave the current state, move to waiting for consultation action state
-    RESET_TO_CONSULTATION = 3
+    RESET_TO_CONSULTATION = auto()
     # Default action
     DEFAULT_ACTION = CLOCK_ACTION
 
@@ -381,6 +386,8 @@ class _WaitClockActionState(_IViewModelState):
         if self.fsm.next_action == ViewModelAction.CONSULTATION:
             # Move to waiting for consultation action
             return _WaitConsultationActionState()
+        elif self.fsm.next_action == ViewModelAction.ATTENDANCE_LIST:
+            return _LoadAttendanceList()
 
         # Check if an employee ID is available
         if self.fsm.scanner.available():
@@ -429,6 +436,8 @@ class _WaitConsultationActionState(_IViewModelState):
         if self.fsm.next_action == ViewModelAction.CLOCK_ACTION:
             # Move to waiting for consultation action
             return _WaitClockActionState()
+        elif self.fsm.next_action == ViewModelAction.ATTENDANCE_LIST:
+            return _LoadAttendanceList()
 
         # Check if an employee ID is available
         if self.fsm.scanner.available():
@@ -663,6 +672,121 @@ class _ConsultationSuccessState(_IViewModelState):
         abs_minutes = abs(total_minutes)
         hours, minutes = divmod(abs_minutes, 60)
         return f"{sign}{hours:02}:{minutes:02}"
+
+
+class _LoadAttendanceList(_IViewModelState):
+    """
+    Role:
+        Load the attendance list.
+    Entry:
+        - When the next action is ATTENDANCE_LIST
+    Exit:
+        - When the attendance list task is finished
+        - When the timeout is elapsed
+    """
+
+    def entry(self):
+        # Schedule the attendance list task
+        self._handle = self.fsm.model.start_attendance_list_task(dt.datetime.now())
+        # Prepare a task watchdog
+        self._timeout = time.time() + ATTENDANCE_LIST_TIMEOUT
+
+    def do(self) -> Optional[IStateBehavior]:
+        # Check task result
+        if self.fsm.model.available(self._handle):
+            result = self.fsm.model.get_result(self._handle)
+
+            if result and isinstance(result, AttendanceList):
+                return _ShowAttendanceList(result)
+            return _ErrorState()
+
+        # Check watchdog
+        if time.time() > self._timeout:
+            return _ErrorState()
+
+    def exit(self):
+        self.fsm.model.drop(self._handle)
+
+
+class _ShowAttendanceList(_IViewModelState):
+    """
+    Role:
+        Show the attendance list.
+    Entry:
+        - After the attendance list has been loaded.
+    Exit:
+        - When the next action is reset
+        - When the timeout is elapsed
+    """
+
+    def __init__(self, result: AttendanceList):
+        super().__init__()
+        self._result = result
+
+    def entry(self):
+        # Prepare timeout
+        self._timeout = time.time() + ATTENDANCE_LIST_TIMEOUT
+        # Show results
+        logger.info(f"Fetched attendance list in {self._result.fetch_time:.2f} sec.")
+        logger.info(
+            f"Present: {", ".join([info.firstname for info in self._result.present])}."
+        )
+        logger.info(
+            f"Absent: {", ".join([info.firstname for info in self._result.absent])}."
+        )
+        logger.info(f"Unknown: {", ".join(list(self._result.unknown))}.")
+
+    def do(self) -> Optional[IStateBehavior]:
+        # Leave the state on reset signal or timeout
+        if self.fsm.next_action == ViewModelAction.RESET_TO_CLOCK_ACTION:
+            return _WaitClockActionState()
+        elif self.fsm.next_action == ViewModelAction.RESET_TO_CONSULTATION:
+            return _WaitConsultationActionState()
+        elif time.time() > self._timeout:
+            return _WaitClockActionState()
+
+    @property
+    def panel_title_text(self):
+        return "Liste des présences"
+
+    @property
+    def panel_content_text(self):
+        """
+        Format the attendance list to be shown in the panel.
+        """
+        from math import ceil
+
+        MAX_COL_SIZE = 10
+        COL_SPACING = 8
+
+        names = [f"{info.firstname} {info.name}" for info in self._result.present] + [
+            f"??? {employee_id}" for employee_id in self._result.unknown
+        ]
+
+        if len(names) == 0:
+            names = ["Il n'y a personne."]
+
+        ncols = ceil(len(names) / MAX_COL_SIZE)
+
+        # Split names in columns of MAX_COL_SIZE
+        columns = [
+            names[col * MAX_COL_SIZE : (col + 1) * MAX_COL_SIZE]
+            for col in range(ncols)
+        ]
+
+        # Pad last column with empty strings
+        columns[-1] += [""] * (MAX_COL_SIZE - len(columns[-1]))
+
+        # Use longest name as the column width
+        col_width = max([len(name) for name in names]) + COL_SPACING
+
+        # Print the names left justified
+        lines = []
+        for row in zip(*columns):
+            line = "".join([str(name).ljust(col_width) for name in row])
+            lines.append(line)
+
+        return "\n".join(lines)
 
 
 class _ErrorState(_IViewModelState):

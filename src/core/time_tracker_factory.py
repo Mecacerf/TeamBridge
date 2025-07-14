@@ -83,7 +83,9 @@ class TimeTrackerFactory(SingletonRegister, ABC):
         pass
 
     @abstractmethod
-    def list_employee_ids(self) -> list[str]:
+    def list_employee_ids(
+        self, filter_year: int | dt.date | dt.datetime | None = None
+    ) -> list[str]:
         """
         List all employee IDs registered in the system.
 

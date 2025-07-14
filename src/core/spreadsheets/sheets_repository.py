@@ -111,13 +111,16 @@ class SheetsRepoAccessor:
         """
         return self._remote_repository
 
-    @property
-    def repository_available(self) -> bool:
+    def check_repo_available(self) -> bool:
         """
         Returns:
             bool: `True` if the remote repository is available.
         """
-        return pathlib.Path(self._remote_repository).exists()
+        try:
+            self.__acquire_repository_path()
+            return True
+        except TimeoutError:
+            return False
 
     def acquire_spreadsheet_file(
         self, employee_id: str, readonly: bool = False

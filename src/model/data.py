@@ -30,14 +30,14 @@ class IModelMessage(ABC):
 
 
 @dataclass(frozen=True)
-class IEmployeeMessage(IModelMessage, ABC):
+class EmployeeInfo(IModelMessage, ABC):
     """
     Base container for employee's message.
 
     Attributes:
-        name: `str` employee's name
-        firstname: `str` employee's firstname
-        id: `str` employee's id
+        name (str): Employee's name.
+        firstname (str): Employee's firstname.
+        id (str): Employee's id.
     """
 
     name: str
@@ -46,33 +46,33 @@ class IEmployeeMessage(IModelMessage, ABC):
 
 
 @dataclass(frozen=True)
-class EmployeeEvent(IEmployeeMessage):
+class EmployeeEvent(EmployeeInfo):
     """
     Describes a clock event for an employee.
 
     Attributes:
-        name: `str` employee's name
-        firstname: `str` employee's firstname
-        id: `str` employee's id
-        clock_evt: `ClockEvent` related clock event
+        name (str): Employee's name.
+        firstname (str): Employee's firstname.
+        id (str): Employee's id.
+        clock_evt (ClockEvent): Related clock event.
     """
 
     clock_evt: ClockEvent
 
 
 @dataclass(frozen=True)
-class EmployeeData(IEmployeeMessage):
+class EmployeeData(EmployeeInfo):
     """
     Container of different information about an employee.
 
     Attributes:
-        name: `str` employee's name
-        firstname: `str` employee's firstname
-        id: `str` employee's id
-        daily_worked_time: `timedelta` employee's daily worked time
-        daily_balance: `timedelta` employee's daily balance
-        daily_scheduled_time: `timedelta` employee's daily scheduled time
-        monthly_balance: `timedelta` employee's monthly balance
+        name (str): Employee's name.
+        firstname (str): Employee's firstname.
+        id (str): Employee's id.
+        daily_worked_time (dt.timedelta): Employee's daily worked time.
+        daily_balance (dt.timedelta): Employee's daily balance.
+        daily_scheduled_time (dt.timedelta): Employee's daily scheduled time.
+        monthly_balance (dt.timedelta): Employee's monthly balance.
     """
 
     daily_worked_time: dt.timedelta
@@ -87,9 +87,27 @@ class ModelError(IModelMessage):
     Error message container.
 
     Attributes:
-        error_code: error code
-        message: error description message
+        error_code (int): Error code.
+        message (str): Error description.
     """
 
     error_code: int
     message: str
+
+
+@dataclass(frozen=True)
+class AttendanceList(IModelMessage):
+    """
+    Attendance list message container.
+
+    Attributes:
+        present (list[EmployeeInfo]): List of present employees.
+        absent (list[EmployeeInfo]): List of absent employees.
+        unkown (list[str]): List of not fetchable employees.
+        fetch_time (float): Duration of the fetching process [s].
+    """
+
+    present: list[EmployeeInfo]
+    absent: list[EmployeeInfo]
+    unknown: list[str]
+    fetch_time: float

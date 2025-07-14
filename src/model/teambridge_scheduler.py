@@ -18,6 +18,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, Future
 import datetime as dt
+import time
 
 # Internal imports
 from .data import *
@@ -56,9 +57,9 @@ class TeamBridgeScheduler:
         self._pool = ThreadPoolExecutor(
             max_workers=MAX_TASK_WORKERS, thread_name_prefix="Task-"
         )
-        # Keep track of the tasks in a dictionary
+
         self._pending_tasks: dict[int, Future[IModelMessage]] = {}
-        self._task_handle = -1  #  Attribute a unique handle per task
+        self._task_handle = -1  # Attribute a unique handle per task
 
     def start_clock_action_task(
         self,
@@ -69,17 +70,17 @@ class TeamBridgeScheduler:
         """
         Start a clock action task for the employee with given identifier.
 
-        It will post an EmployeeEvent on success or a ModelError on failure.
-        The action (clock in or out) can be specified or left None. In
-        this case, the task automatically clocks in an employee who's
-        clocked out and clocks out an employee who's clocked in at given
+        It will post an `EmployeeEvent` on success or a `ModelError` on
+        failure. The action (clock-in/out) can be specified or left `None`.
+        In this case, the task automatically clocks in an employee who's
+        clocked out and clocks out an employee who's clocked in, at given
         datetime.
 
         Args:
             employee_id (str): Employee's identifier.
             datetime (datetime.datetime): Date and time of clock action.
             action (Optional[ClockAction]): Clock action to register or
-                None to leave the task choose.
+                `None` to choose automatically.
 
         Returns:
             int: Task handle.
@@ -95,8 +96,9 @@ class TeamBridgeScheduler:
         """
         Start a consultation task for the employee with given identifier.
 
-        It will post an EmployeeData on success or a ModelError on failure.
-        The employee's data is analyzed for the given date and time.
+        It will post an `EmployeeData` on success or a `ModelError` on
+        failure. The employee's data is analyzed for the given date and
+        time.
 
         Args:
             employee_id (str): Employee's identifier.
@@ -112,6 +114,27 @@ class TeamBridgeScheduler:
         )
         return self._task_handle
 
+    def start_attendance_list_task(self, datetime: dt.datetime) -> int:
+        """
+        Start an attendance list query task for the given date and time.
+
+        The task polls all registered employees and check if they are
+        clocked in on given date and time.
+
+        Args:
+            datetime (datetime.datetime): Date and time to query employees
+                who are clocked in.
+
+        Returns:
+            int: Task handle.
+        """
+        # Submit a task on the executor and return its unique handle.
+        self._task_handle += 1
+        self._pending_tasks[self._task_handle] = self._pool.submit(
+            self.__attendance_list_task, datetime
+        )
+        return self._task_handle
+
     def available(self, handle: int) -> bool:
         """
         Check if the task identified by the given handle has finished.
@@ -119,7 +142,7 @@ class TeamBridgeScheduler:
         `False` is returned wether the task is pending or doesn't exist.
 
         Returns:
-            bool: `True` if the task result is available, False otherwise.
+            bool: `True` if the task result is available, `False` otherwise.
         """
         return handle in self._pending_tasks and self._pending_tasks[handle].done()
 
@@ -139,8 +162,6 @@ class TeamBridgeScheduler:
         if not self.available(handle):
             return None
 
-        # Pop the future object from the task dictionary, since one is
-        # available for the given handle.
         future = self._pending_tasks.pop(handle)
 
         try:
@@ -188,54 +209,44 @@ class TeamBridgeScheduler:
         # Close function when using a context manager
         self.close()
 
+    ### Tasks implementation
+
     def __clock_action_task(
         self, employee_id: str, datetime: dt.datetime, action: Optional[ClockAction]
     ) -> IModelMessage:
         """
         Clock in/out the employee at given datetime.
         """
-        tracker = None
         try:
-            with self._factory_lock:
-                tracker = self._factory.create(employee_id, datetime)
+            with self._factory.create(employee_id, datetime) as tracker:
+                # No action specified: clock-out if clocked in and
+                # clock-in if clocked out
+                if action is None:
+                    action = (
+                        ClockAction.CLOCK_OUT
+                        if tracker.is_clocked_in(datetime)
+                        else ClockAction.CLOCK_IN
+                    )
 
-            # No action specified: clock-out if clocked in and clock-in
-            # if clocked out
-            if action is None:
-                action = (
-                    ClockAction.CLOCK_OUT
-                    if tracker.is_clocked_in(datetime)
-                    else ClockAction.CLOCK_IN
+                # Create, register and save the clock event
+                clock_evt = ClockEvent(time=datetime.time(), action=action)
+                tracker.register_clock(datetime, clock_evt)
+                tracker.save()
+
+                logger.info(f"Registered a {clock_evt!s} for {tracker!s}.")
+
+                return EmployeeEvent(
+                    name=tracker.name,
+                    firstname=tracker.firstname,
+                    id=tracker.employee_id,
+                    clock_evt=clock_evt,
                 )
-
-            # Create, register and save the clock event
-            clock_evt = ClockEvent(time=datetime.time(), action=action)
-            tracker.register_clock(datetime, clock_evt)
-            tracker.save()
-
-            logger.info(f"Registered a {clock_evt!s} for {tracker!s}.")
-
-            return EmployeeEvent(
-                name=tracker.name,
-                firstname=tracker.firstname,
-                id=tracker.employee_id,
-                clock_evt=clock_evt,
-            )
 
         except TimeTrackerException as e:
             logger.error(
                 f"An exception occurred with employee '{employee_id}'", exc_info=True
             )
             return ModelError(error_code=0, message=str(e))
-
-        finally:
-            # The time tracker must always be closed
-            try:
-                if tracker:
-                    tracker.close()
-            except TimeTrackerCloseException:
-                logger.error(f"Cannot close tracker '{id}'.", exc_info=True)
-                raise
 
     def __consultation_task(
         self, employee_id: str, datetime: dt.datetime
@@ -243,23 +254,19 @@ class TeamBridgeScheduler:
         """
         Consultation of employee's information.
         """
-        tracker = None
         try:
-            with self._factory_lock:
-                tracker = self._factory.create(employee_id, datetime)
+            with self._factory.create(employee_id, datetime) as tracker:
+                tracker.analyze(datetime)
 
-            # The tracker must be analyzed at provided date and time
-            tracker.analyze(datetime)
-
-            return EmployeeData(
-                name=tracker.name,
-                firstname=tracker.firstname,
-                id=employee_id,
-                daily_worked_time=tracker.read_day_worked_time(datetime),
-                daily_balance=tracker.read_day_balance(datetime),
-                daily_scheduled_time=tracker.read_day_schedule(datetime),
-                monthly_balance=tracker.read_month_balance(datetime),
-            )
+                return EmployeeData(
+                    name=tracker.name,
+                    firstname=tracker.firstname,
+                    id=employee_id,
+                    daily_worked_time=tracker.read_day_worked_time(datetime),
+                    daily_balance=tracker.read_day_balance(datetime),
+                    daily_scheduled_time=tracker.read_day_schedule(datetime),
+                    monthly_balance=tracker.read_month_balance(datetime),
+                )
 
         except TimeTrackerException as e:
             logger.error(
@@ -267,11 +274,34 @@ class TeamBridgeScheduler:
             )
             return ModelError(error_code=0, message=str(e))
 
-        finally:
-            # The time tracker must always be closed
+    def __attendance_list_task(self, datetime: dt.datetime) -> IModelMessage:
+        """
+        Fetch employees attendance list for given date and time.
+        """
+        start_ts = time.time()
+
+        def fetch(id: str) -> tuple[EmployeeInfo, Optional[bool]]:
+            """
+            Check if the employee with given identifier is currently
+            clocked in and return its state.
+            """
             try:
-                if tracker:
-                    tracker.close()
-            except TimeTrackerCloseException:
-                logger.error(f"Cannot close tracker '{id}'.", exc_info=True)
-                raise
+                with self._factory.create(id, datetime, readonly=True) as tracker:
+                    clocked_in = tracker.is_clocked_in(datetime)
+                    info = EmployeeInfo(tracker.name, tracker.firstname, id)
+                    return info, clocked_in
+
+            except TimeTrackerException:
+                return EmployeeInfo(id, "", ""), None
+
+        # Fetch all registered employees for the given year
+        result: list[tuple[EmployeeInfo, Optional[bool]]] = []
+        for id in self._factory.list_employee_ids(datetime):
+            result.append(fetch(id))
+
+        return AttendanceList(
+            present=[info for info, clocked_in in result if clocked_in is True],
+            absent=[info for info, clocked_in in result if clocked_in is False],
+            unknown=[info.id for info, clocked_in in result if clocked_in is None],
+            fetch_time=time.time() - start_ts,
+        )

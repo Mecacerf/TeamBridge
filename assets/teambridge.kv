@@ -86,6 +86,7 @@
 <MainScreen>:
     consultation_button: consultation_button_id
     clock_button: clock_button_id
+    attendance_button: attendance_button_id
     progress_bar: progress_bar_id
     sliding_box_layout: sliding_box_layout_id
     collapse_panel_icon: collapse_panel_icon_id
@@ -184,6 +185,7 @@
                 size_hint: 0.26, 1
 
                 IconButton:
+                    id: attendance_button_id
                     source: 'assets/images/attendance.png'
                     on_press: if self.button_enabled: root.on_attendance_press()
 
@@ -299,5 +301,3 @@
                     text_size: self.size
                     font_size: self.height * 0.05
                     font_name: 'InterRegular'
-
-
