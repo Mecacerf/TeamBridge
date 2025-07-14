@@ -257,6 +257,7 @@ class MainScreen(FloatLayout):
     # Toggle buttons
     consultation_button = ObjectProperty(None)
     clock_button = ObjectProperty(None)
+    attendance_button = ObjectProperty(None)
     # Linear progress bar
     progress_bar = ObjectProperty(None)
     # Sliding box layout for information panel
@@ -326,6 +327,7 @@ class MainScreen(FloatLayout):
             "ClockSuccessState",
             "ConsultationActionState",
             "ConsultationSuccessState",
+            "ShowAttendanceList",
             "ErrorState",
         ]
         if state in activity_states:
@@ -338,6 +340,7 @@ class MainScreen(FloatLayout):
             "ConsultationSuccessState",
         ]
         self.consultation_button.button_enabled = state in enabled_states
+        self.attendance_button.button_enabled = state in enabled_states
         # Clock button is enabled in error state for acknowledgment as well
         enabled_states.append("ErrorState")
         self.clock_button.button_enabled = state in enabled_states
@@ -353,11 +356,13 @@ class MainScreen(FloatLayout):
             "ClockActionState",
             "ClockSuccessState",
             "ConsultationActionState",
+            "LoadAttendanceList",
         ]
         self.progress_bar.loading = state in loading_states
 
-        # Set the bottom panel expanded when in consultation success state
-        show_panel = state == "ConsultationSuccessState"
+        # Set the bottom panel expanded states
+        expanded_states = ["ConsultationSuccessState", "ShowAttendanceList"]
+        show_panel = state in expanded_states
         self.sliding_box_layout.expanded = show_panel
         # Show the collapse panel icon when the panel is expanded
         Animation(opacity=1.0 if show_panel else 0.0, duration=0.5).start(
@@ -368,6 +373,7 @@ class MainScreen(FloatLayout):
         state_sounds = {
             "ClockActionState": SOUND_SCANNED,
             "ConsultationActionState": SOUND_SCANNED,
+            "ShowAttendanceList": SOUND_SCANNED,
             "ClockSuccessState": SOUND_CLOCKED,
             "ErrorState": SOUND_ERROR,
         }
@@ -439,18 +445,14 @@ class MainScreen(FloatLayout):
         """
         Called when the reset button is pressed.
         """
-        self._app.set_theme(
-            DARK_THEME if self._app.get_theme() == LIGHT_THEME else LIGHT_THEME
-        )
+        self._viewmodel.next_action = ViewModelAction.ATTENDANCE_LIST
 
     def on_info_panel_press(self):
         """
         Called when the information panel is pressed to collapse it.
         """
-        # Reset to waiting state if in consultation success state.
-        if self._viewmodel.current_state.value == "ConsultationSuccessState":
-            # Send reset signal
-            self._viewmodel.next_action = ViewModelAction.RESET_TO_CLOCK_ACTION
+        logger.debug("info panel press")
+        self._viewmodel.next_action = ViewModelAction.RESET_TO_CLOCK_ACTION
 
 
 class IconButton(ButtonBehavior, RelativeLayout):

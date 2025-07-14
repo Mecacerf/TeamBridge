@@ -17,6 +17,7 @@ __all__ = [
     "EmployeeInfo",
     "EmployeeEvent",
     "EmployeeData",
+    "AttendanceList",
     "ModelError",
     "TeamBridgeScheduler",
 ]

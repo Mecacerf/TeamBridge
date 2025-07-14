@@ -303,5 +303,5 @@ class TeamBridgeScheduler:
             present=[info for info, clocked_in in result if clocked_in is True],
             absent=[info for info, clocked_in in result if clocked_in is False],
             unknown=[info.id for info, clocked_in in result if clocked_in is None],
-            fetch_time=time.time() - start_ts
+            fetch_time=time.time() - start_ts,
         )
