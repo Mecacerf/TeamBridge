@@ -22,6 +22,10 @@ import time
 from enum import Enum, auto
 from abc import ABC
 from typing import cast
+from os.path import join
+
+# Third-party libraries
+from PIL import ImageFont
 
 # Import internal modules
 from common.state_machine import *
@@ -43,6 +47,9 @@ SCAN_ID_TIMEOUT = 10.0
 
 # Timeout for the attendance list task
 ATTENDANCE_LIST_TIMEOUT = 60.0
+
+# Font used for attendance list displaying
+ATTENDANCE_LIST_FONT = join("assets", "fonts", "Inter_28pt-Regular.ttf")
 
 
 class ViewModelAction(Enum):
@@ -723,6 +730,9 @@ class _ShowAttendanceList(_IViewModelState):
         super().__init__()
         self._result = result
 
+        # Load attendance list font
+        self._font = ImageFont.truetype(ATTENDANCE_LIST_FONT, size=32)
+
     def entry(self):
         # Prepare timeout
         self._timeout = time.time() + ATTENDANCE_LIST_TIMEOUT
@@ -756,37 +766,75 @@ class _ShowAttendanceList(_IViewModelState):
         """
         from math import ceil
 
-        MAX_COL_SIZE = 10
-        COL_SPACING = 8
+        MAX_COL_ENTRIES = 12
+        MAX_COL_NUMBER = 3
+        MAX_NAME_LENGTH = 45  # In terms of space units
+        COL_SPACING = 10
 
+        # Show the names of clocked-in employees as well as unknown ones, to
+        # inform that an error occurred with this employee and the system doesn't
+        # know if he's present or absent.
         names = [f"{info.firstname} {info.name}" for info in self._result.present] + [
             f"??? {employee_id}" for employee_id in self._result.unknown
         ]
 
+        for i in range(36):
+            names.append(f"Georges Michael {i} " + ("A" * i))
+
+        # Truncate too long names
+        names = [self.__truncate(name, MAX_NAME_LENGTH) for name in names]
+
         if len(names) == 0:
             names = ["Il n'y a personne."]
 
-        ncols = ceil(len(names) / MAX_COL_SIZE)
+        max_names = MAX_COL_ENTRIES * MAX_COL_NUMBER
+        if len(names) > max_names:
+            # Replace the last name to show the list continues
+            names[max_names - 1] = f"+ {len(names) - max_names + 1} cachés..."
+
+        ncols = min(ceil(len(names) / MAX_COL_ENTRIES), MAX_COL_NUMBER)
 
         # Split names in columns of MAX_COL_SIZE
         columns = [
-            names[col * MAX_COL_SIZE : (col + 1) * MAX_COL_SIZE]
+            names[col * MAX_COL_ENTRIES : (col + 1) * MAX_COL_ENTRIES]
             for col in range(ncols)
         ]
 
         # Pad last column with empty strings
-        columns[-1] += [""] * (MAX_COL_SIZE - len(columns[-1]))
+        columns[-1] += [""] * (MAX_COL_ENTRIES - len(columns[-1]))
 
-        # Use longest name as the column width
-        col_width = max([len(name) for name in names]) + COL_SPACING
+        # Use longest name as the column width reference
+        col_width = max([self.__text_width(name) for name in names]) + COL_SPACING
 
         # Print the names left justified
         lines = []
         for row in zip(*columns):
-            line = "".join([str(name).ljust(col_width) for name in row])
+            line = "".join([self.__ljust(name, col_width) for name in row])
             lines.append(line)
 
         return "\n".join(lines)
+
+    def __text_width(self, text: str) -> float:
+        """
+        Returns the text width ratio related to the space character.
+        """
+        return self._font.getlength(text) / self._font.getlength(" ")
+
+    def __truncate(self, text: str, width: float) -> str:
+        """
+        Truncate the text to specified width.
+        """
+        for chars in range(1, len(text) + 1):
+            if self.__text_width(text[:chars]) > width:
+                # The text must be truncated
+                return text[: chars - 1] + "."
+        return text
+
+    def __ljust(self, text: str, width: float) -> str:
+        """
+        Left justify with spaces to reach given width.
+        """
+        return text + " " * max(0, round(width - self.__text_width(text)))
 
 
 class _ErrorState(_IViewModelState):
