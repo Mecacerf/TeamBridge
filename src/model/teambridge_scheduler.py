@@ -24,6 +24,7 @@ import time
 from .data import *
 from core.time_tracker import *
 from core.time_tracker_factory import TimeTrackerFactory
+from core.attendance.simple_attendance_validator import SimpleAttendanceValidator
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +257,15 @@ class TeamBridgeScheduler:
         """
         try:
             with self._factory.create(employee_id, datetime) as tracker:
-                tracker.analyze(datetime)
+                validator = SimpleAttendanceValidator()
+                status = validator.validate(tracker, datetime)
+
+                logger.info(
+                    f"Got status {status}, tracker analyzed ? {tracker.analyzed}"
+                )
+
+                if not tracker.analyzed:
+                    tracker.analyze(datetime)
 
                 return EmployeeData(
                     name=tracker.name,
