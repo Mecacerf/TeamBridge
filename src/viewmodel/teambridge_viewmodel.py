@@ -864,4 +864,4 @@ class _ErrorState(_IViewModelState):
 
     @property
     def main_subtitle_text(self):
-        return "Veuillez vous addresser à la direction"
+        return "Veuillez vous addresser au secrétariat"
