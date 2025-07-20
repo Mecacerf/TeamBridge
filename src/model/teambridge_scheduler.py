@@ -171,11 +171,11 @@ class TeamBridgeScheduler:
             # returned message is None.
             return future.result()
 
-        except Exception:
+        except Exception as e:
             logger.error(
                 "An asynchronous task didn't finished properly.", exc_info=True
             )
-            return None
+            return ModelError(0, f"Task raised {e.__class__.__name__}.")
 
     def drop(self, handle: int):
         """
