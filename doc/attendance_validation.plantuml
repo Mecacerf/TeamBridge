@@ -1,0 +1,71 @@
+@startuml attendance_validation
+
+enum "AttendanceErrorStatus" {
+  NONE
+  WARNING
+  ERROR
+
+  from_error_id(error_id: int) -> AttendanceErrorStatus
+}
+
+class "AttendanceError" <<dataclass>> {
+  error_id: int
+  description : str
+  status: AttendanceErrorStatus
+}
+
+AttendanceErrorStatus -l AttendanceError
+
+abstract class "AttendanceChecker" {
+  error_id: int
+
+  {abstract}check_date(tracker: TimeTracker, date: dt.date) -> bool
+}
+
+class "ContinuousWorkChecker" {
+  check_date(tracker: TimeTracker, date: dt.date) -> bool
+}
+
+class "ClockSequenceChecker" {
+  check_date(tracker: TimeTracker, date: dt.date) -> bool
+}
+
+ContinuousWorkChecker -u-|> AttendanceChecker
+ClockSequenceChecker -u-|> AttendanceChecker
+
+abstract class "AttendanceValidator" {
+  worse_error: Optional[AttendanceError]
+  errors_by_date: Optional[dict[dt.date, AttendanceError]]
+  AttendanceValidator(checkers: list[AttendanceChecker])
+  validate(tracker: TimeTracker, until: dt.datetime) -> AttendanceErrorStatus
+}
+
+note left
+  The `AttendanceValidator` class complements the functionality 
+  of the `TimeTrackerAnalyzer` by detecting additional types of 
+  attendance errors, such as unordered clock events or custom-
+  defined conditions like excessive daily work hours. It uses 
+  the provided `AttendanceChecker` objects for this purpose.
+
+  The `validate()` method always starts by verifying the tracker
+  errors, when a `TimeTrackerAnalyzer` is provided. The process
+  of checking additional errors using the checkers is aborted
+  if a tracker error is found, which is considered more critical.
+
+  The validator starts its analysis at the last date where an
+  error was detected (last validation anchor), according to the 
+  tracker in use, and checks all dates until the given date. It 
+  moves the last validation anchor pointer as far as possible, 
+  until a warning/error is found. 
+
+  Warnings and errors are written and saved in the tracker.
+end note
+
+AttendanceChecker -u-* AttendanceValidator
+
+class SimpleAttendanceValidator {
+}
+
+SimpleAttendanceValidator -u-|> AttendanceValidator
+
+@enduml

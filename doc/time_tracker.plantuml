@@ -1,6 +1,6 @@
 @startuml time_tracker
 
-class "Employee" {
+abstract class "Employee" {
   employee_id: str
   {abstract}name: str
   {abstract}firstname: str
@@ -21,12 +21,13 @@ note left
   used to automatically manage resource lifecycle.
 end note
 
-class "TimeTracker" {
+abstract class "TimeTracker" {
   {abstract}tracked_year: int
   {abstract}opening_day_schedule: dt.timedelta
   {abstract}opening_balance: dt.timedelta
   {abstract}opening_vacation_days: float
   {abstract}max_clock_events_per_day: int
+  {abstract}max_continuous_work_hours: float
 
   {abstract}get_clocks(date: dt.date) -> list[Optional[ClockEvent]]
   {abstract}register_clock(date: dt.date, event: ClockEvent) -> None
@@ -36,9 +37,11 @@ class "TimeTracker" {
   {abstract}get_vacation(date: dt.date) -> float
   {abstract}set_paid_absence(date: dt.date, day_ratio: float) -> None
   {abstract}get_paid_absence(date: dt.date) -> float
-  {abstract}set_attendance_error(date: dt.date, error_id: Optional[int]) -> None
-  {abstract}get_attendance_error(date: dt.date) -> Optional[int]
+  {abstract}set_attendance_error(date: dt.date, error_id: int) -> None
+  {abstract}get_attendance_error(date: dt.date) -> int
   {abstract}get_attendance_error_desc(error_id: int) -> str
+  {abstract}set_last_validation_anchor(date: dt.date) -> None
+  {abstract}get_last_validation_anchor() -> dt.date
   {abstract}save() -> None
 }
 
@@ -53,7 +56,7 @@ Each `TimeTracker` instance is bound to a specific year,
 and all read or write operations must relate to that year.
 end note
 
-class "TimeTrackerAnalyzer" {
+abstract class "TimeTrackerAnalyzer" {
   {abstract}target_datetime: Optional[dt.datetime]
   analyzed: bool
   
@@ -61,7 +64,7 @@ class "TimeTrackerAnalyzer" {
   {abstract}read_day_schedule(date: dt.date) -> dt.timedelta
   {abstract}read_day_worked_time(date: dt.date) -> dt.timedelta
   {abstract}read_day_balance(date: dt.date) -> dt.timedelta
-  {abstract}read_day_attendance_error(date: dt.date) -> Optional[int]
+  {abstract}read_day_attendance_error(date: dt.date) -> int
   {abstract}read_month_expected_daily_schedule(month: int) -> dt.timedelta
   {abstract}read_month_schedule(month: int) -> dt.timedelta
   {abstract}read_month_worked_time(month: int) -> dt.timedelta
@@ -71,7 +74,7 @@ class "TimeTrackerAnalyzer" {
   {abstract}read_year_remaining_vacation() -> float
   {abstract}read_year_to_date_balance() -> dt.timedelta
   read_year_to_yesterday_balance() -> dt.timedelta
-  {abstract}read_year_attendance_error() -> Optional[int]
+  {abstract}read_year_attendance_error() -> int
 }
 
 note left
@@ -110,35 +113,6 @@ class "ClockEvent" <<dataclass>> {
 
 ClockEvent .l.> TimeTracker
 ClockAction -l* ClockEvent : action
-
-class "AttendanceError" {
-  error_id: int
-  description : str
-}
-
-class "AttendanceValidator" {
-  time_tracker: TimeTracker
-  analyze_date(date: dt.date, update: bool=False) -> Optional[AttendanceError]
-  analyze_until(date: dt.date, update: bool=False) -> dict[dt.date, AttendanceError]
-}
-
-note right
-  The `AttendanceValidator` class complements the functionality 
-  of the `TimeTrackerAnalyzer` by detecting additional types of 
-  attendance errors, such as unordered clock events or custom-
-  defined conditions like excessive daily work hours.
-
-  The `update` argument can optionally be set to `True` when 
-  analyzing for errors. When enabled, it instructs the validator 
-  to write all detected errors to the time tracker and save them.
-  
-  It is designed for extensibility — subclasses can implement 
-  additional validation rules to support custom error checks as 
-  needed.
-end note
-
-TimeTracker --o AttendanceValidator : time_tracker
-AttendanceError .> AttendanceValidator
 
 class "TimeTrackerAnalyzerFactory" <<Singleton>> {
   {abstract}create(employee_id: str, year: int, readonly: bool) -> TimeTrackerAnalyzer
