@@ -392,6 +392,18 @@ class TimeTracker(Employee, ABC):
         """
         pass
 
+    @property
+    @abstractmethod
+    def max_continuous_work_time(self) -> dt.timedelta:
+        """
+        Get the maximal number of time the employee is allowed to work
+        without a break.
+
+        Returns:
+            dt.timedelta: Maximal continuous work time.
+        """
+        pass
+
     @abstractmethod
     def get_clocks(self, date: dt.date | dt.datetime) -> list[Optional[ClockEvent]]:
         """
@@ -578,9 +590,7 @@ class TimeTracker(Employee, ABC):
         pass
 
     @abstractmethod
-    def set_attendance_error(
-        self, date: dt.date | dt.datetime, error_id: Optional[int]
-    ):
+    def set_attendance_error(self, date: dt.date | dt.datetime, error_id: int):
         """
         Set or reset an attendance error on the given date.
 
@@ -589,8 +599,7 @@ class TimeTracker(Employee, ABC):
 
         Args:
             date (datetime.date): The date to set data.
-            error_id (Optional[int]): The error ID to set or `None` to
-                reset.
+            error_id (int): The error ID to set, 0 for no error.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.
@@ -602,7 +611,7 @@ class TimeTracker(Employee, ABC):
         pass
 
     @abstractmethod
-    def get_attendance_error(self, date: dt.date | dt.datetime) -> Optional[int]:
+    def get_attendance_error(self, date: dt.date | dt.datetime) -> int:
         """
         Get an attendance error on the given date.
 
@@ -610,8 +619,7 @@ class TimeTracker(Employee, ABC):
             date (datetime.date): To date to read data.
 
         Returns:
-            Optional[int]: The error on the given date or `None` if none
-                exists.
+            int: The error on the given date, 0 for no error.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.
@@ -634,6 +642,38 @@ class TimeTracker(Employee, ABC):
         Raises:
             TimeTrackerValueException: No description associated with
                 given identifier.
+        """
+        pass
+
+    @abstractmethod
+    def set_last_validation_anchor(self, date: dt.date):
+        """
+        Set the last validation anchor date.
+
+        Args:
+            date (datetime.date): New validation anchor point.
+
+        Raises:
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerWriteException: Raised on writing error.
+            TimeTrackerSaveException: Unable to save the tracker in the
+                local cache.
+            See chained exceptions for specific failure reasons.
+        """
+        pass
+
+    @abstractmethod
+    def get_last_validation_anchor(self) -> dt.date:
+        """
+        Get the last validation anchor date.
+
+        Returns:
+            datetime.date: Last validation anchor point.
+
+        Raises:
+            TimeTrackerDateException: Date is outside the `tracked_year`.
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
         """
         pass
 
@@ -859,7 +899,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         pass
 
     @abstractmethod
-    def read_day_attendance_error(self, date: dt.date | dt.datetime) -> Optional[int]:
+    def read_day_attendance_error(self, date: dt.date | dt.datetime) -> int:
         """
         Read the attendance error on a given date.
 
@@ -882,8 +922,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
             date (datetime.date): The date to read data.
 
         Returns:
-            Optional[int]: Detected attendance error for the date or
-                `None` if no error is found.
+            int: Detected attendance error for the date.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.
@@ -1160,7 +1199,8 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         day_balance = self.read_day_balance(self.target_datetime.date())
         return year_to_date - day_balance
 
-    def read_year_attendance_error(self) -> Optional[int]:
+    @abstractmethod
+    def read_year_attendance_error(self) -> int:
         """
         Read the global attendance error for the year. It returns the
         most severe error from all days.
@@ -1169,8 +1209,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         interacting directly with these low-level methods.
 
         Returns:
-            Optional[int]: Detected attendance error for the year or
-                `None` if no error is found.
+            int: Detected attendance error for the year.
 
         Raises:
             TimeTrackerReadException: The reading methods are unavailable

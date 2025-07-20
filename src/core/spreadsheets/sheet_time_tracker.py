@@ -64,10 +64,12 @@ CELL_FIRSTNAME = "A11"
 CELL_OPENING_DAY_SCHEDULE = "A12"
 CELL_OPENING_VACATION = "A13"
 CELL_OPENING_BALANCE = "A14"
+CELL_MAX_CONTINUOUS_WORK_TIME = "A15"
 
 # These are the date and time data analysis is based on
 CELL_DATE = "A21"
 CELL_TIME = "A22"
+CELL_VALIDATION_ANCHOR_DATE = "D21"
 
 # Formula evaluation test cell
 CELL_EVALUATED = "A23"
@@ -552,6 +554,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         if isinstance(value, dt.timedelta):
             # Passthrough
             return value
+
         if isinstance(value, (dt.time, dt.datetime)):
             return dt.timedelta(
                 hours=value.hour, minutes=value.minute, seconds=value.second
@@ -579,6 +582,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         if isinstance(value, dt.time):
             # Passthrough
             return value
+
         if isinstance(value, dt.datetime):
             # The midnight rollover, noted 24:00 in the cell, is interpreted by
             # Openpyxl as midnight on the 01.01.1900. While it makes sense that
@@ -592,6 +596,24 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             # Other datetimes are not supported.
 
         raise ValueError(f"Cannot convert {type(value).__name__} to time.")
+
+    def __to_date(self, value: Any) -> dt.date:
+        """
+        Convert the given value to a date, if necessary.
+
+        Args:
+            value (Any): Input value.
+
+        Returns:
+            dt.date: Converted value.
+        """
+        if isinstance(value, dt.datetime):
+            return dt.date(value.year, value.month, value.day)
+
+        if isinstance(value, dt.date):
+            return value
+
+        raise ValueError(f"Cannot convert {type(value).__name__} to date.")
 
     def __to_float_none_safe(self, value: Any) -> float:
         """
@@ -736,6 +758,12 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
     @property
     def max_clock_events_per_day(self) -> int:
         return int(self._col_last_clock_out - self._col_first_clock_in + 1)
+
+    @property
+    def max_continuous_work_time(self) -> dt.timedelta:
+        return self.__get_init_cell_val(
+            CELL_MAX_CONTINUOUS_WORK_TIME, self.__to_timedelta
+        )
 
     ## Time Tracker read / write methods ##
 
@@ -920,12 +948,12 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             self.__to_float_none_safe,
         )
 
-    def set_attendance_error(
-        self, date: dt.date | dt.datetime, error_id: Optional[int]
-    ):
-        self.__set_month_day_cell_value(date, self._col_day_soft_error, error_id)
+    def set_attendance_error(self, date: dt.date | dt.datetime, error_id: int):
+        self.__set_month_day_cell_value(
+            date, self._col_day_soft_error, error_id or None
+        )
 
-    def get_attendance_error(self, date: dt.date | dt.datetime) -> Optional[int]:
+    def get_attendance_error(self, date: dt.date | dt.datetime) -> int:
         return self.__get_month_day_cell_value(
             self._workbook_raw, date, self._col_day_soft_error, self.__to_int_none_safe
         )
@@ -962,6 +990,26 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         raise TimeTrackerValueException(
             f"No description found for error ID {error_id}."
         )
+
+    def set_last_validation_anchor(self, date: dt.date):
+        """
+        Write the date in the init sheet cell. The workbook is saved
+        without invalidating the analysis results because this information
+        is not related to the analysis data.
+        """
+        if self.tracked_year != date.year:
+            raise TimeTrackerDateException()
+
+        init_sheet = self._workbook_raw.worksheets[SHEET_INIT]
+        init_sheet[CELL_VALIDATION_ANCHOR_DATE].value = date
+
+        try:
+            self._workbook_raw.save(self._raw_file_path)
+        except Exception as e:
+            raise TimeTrackerSaveException() from e
+
+    def get_last_validation_anchor(self) -> dt.date:
+        return self.__get_init_cell_val(CELL_VALIDATION_ANCHOR_DATE, self.__to_date)
 
     ## Time Tracker Analyzer methods ##
 
@@ -1071,8 +1119,10 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             date, self._col_day_balance, self.__to_timedelta
         )
 
-    def read_day_attendance_error(self, date: dt.date | dt.datetime) -> Optional[int]:
-        return self.__read_month_day_cell_value(date, self._col_day_sheet_error, int)
+    def read_day_attendance_error(self, date: dt.date | dt.datetime) -> int:
+        return self.__read_month_day_cell_value(
+            date, self._col_day_sheet_error, self.__to_int_none_safe
+        )
 
     def read_month_expected_daily_schedule(
         self, month: int | dt.date | dt.datetime
@@ -1115,7 +1165,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             self._target_dt, self._cell_ytd_balance, self.__to_timedelta
         )
 
-    def read_year_attendance_error(self) -> Optional[int]:
+    def read_year_attendance_error(self) -> int:
         # As for the vacations, read the December sheet that contains the very
         # last error value.
         return self.__read_month_cell_value(

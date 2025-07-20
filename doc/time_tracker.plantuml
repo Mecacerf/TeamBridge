@@ -27,7 +27,7 @@ abstract class "TimeTracker" {
   {abstract}opening_balance: dt.timedelta
   {abstract}opening_vacation_days: float
   {abstract}max_clock_events_per_day: int
-  {abstract}max_continuous_work_hours: float
+  {abstract}max_continuous_work_time: dt.timedelta
 
   {abstract}get_clocks(date: dt.date) -> list[Optional[ClockEvent]]
   {abstract}register_clock(date: dt.date, event: ClockEvent) -> None
