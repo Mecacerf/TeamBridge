@@ -4,8 +4,8 @@ File: attendance_validator.py
 Author: Bastian Cerf
 Date: 09/06/2025
 Description:
-    Provides utility functions to detect attendance errors on a provided
-    time tracker.
+    Provides classes to check for attendance errors on a time tracker's
+    data.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -85,19 +85,41 @@ class AttendanceError:
 
 
 class AttendanceChecker(ABC):
-    """ """
+    """
+    Responsible of checking a rule on the given data. The subclasses
+    implement the rule algorithm and define the related error ID.
+    """
 
     def __init__(self, error_id: int):
-        """ """
+        """
+        Set the error ID related to the checker.
+
+        Args:
+            error_id (int): The error ID.
+        """
         self._error_id = error_id
 
     @property
     def error_id(self) -> int:
+        """
+        Returns:
+            int: Related error identifier.
+        """
         return self._error_id
 
     @abstractmethod
     def check_date(self, tracker: TimeTracker, date: dt.date) -> bool:
-        """ """
+        """
+        Check if the the tracker's data for the given date is valid
+        according to the checker's rule.
+
+        Args:
+            tracker (TimeTracker): Time tracker to check.
+            date (dt.date): Date to check.
+
+        Returns:
+            bool: `True` if the error is present, `False` if not.
+        """
         pass
 
 
@@ -110,18 +132,31 @@ class AttendanceValidator(ABC):
     """
     Utility class used to validate the state of a time tracker. It takes
     a list of `AttendanceChecker` that defines the rules to check when
-    calling the `validate()` method.
+    calling the `validate()` method. The validator stores a dictionary of
+    identified errors by date for the last validated time tracker.
+
+    See the `AttendanceValidator` implementations for pre-defined rules
+    check.
     """
 
     def __init__(self, checkers: list[AttendanceChecker]):
-        """ """
+        """
+        Setup a validator with the provided checkers.
+
+        Args:
+            checkers (list[AttendanceValidator]): A list of checkers to
+                use for validation.
+        """
         self._checkers = checkers
 
         self._worse_error = None
         self._date_errors = None
 
     def __date_rng(self, start: dt.date, end: dt.date | dt.datetime):
-        """ """
+        """
+        Iterate over the dates range [start, end[. Iteration stops the
+        date before `end` (`end` exclusive).
+        """
         one_day = dt.timedelta(days=1)
 
         if isinstance(end, dt.datetime):
@@ -133,15 +168,50 @@ class AttendanceValidator(ABC):
             date += one_day
 
     def __to_error(self, tracker: TimeTracker, error_id: int) -> AttendanceError:
-        """ """
+        """
+        Returns:
+            AttendanceError: An attendance error object based on the
+                given error identifier.
+        """
         return AttendanceError(error_id, tracker.get_attendance_error_desc(error_id))
 
     def validate(
         self, tracker: TimeTracker, until: dt.datetime
     ) -> AttendanceErrorStatus:
         """
-        Search for attendance errors in the time tracker data until the
+        Perform a data validation of the provided time tracker until the
         given date.
+
+        The function starts by reading existing errors. It only performs
+        a new rules check if no existing critical error is found. A rules
+        check always starts at the validation anchor date of the tracker
+        until the given `until` date. The validation anchor date is moved
+        to the first date containing a warning/error. This mechanism
+        allows to rescan only a specified dates range and gives flexibility
+        for HR, who can decide to manually set the anchor date after a
+        manual intervention on a time tracker.
+
+        The `worse_error` and `errors_by_date` properties are available
+        after the tracker validation.
+
+        Args:
+            tracker (TimeTracker): The tracker to validate. If a
+                `TimeTrackerAnalyzer` is provided, its internal errors
+                checks are considered and available in the output errors
+                dictionary. The tracker is analyzed at `until` date but
+                may be returned unanalyzed if errors have been registered.
+            until (dt.datetime): The date until the data validation is
+                performed. The time is only used when analyzing a
+                `TimeTrackerAnalyzer`.
+
+        Returns:
+            AttendanceErrorStatus: The status of the worse error found.
+
+        Raises:
+            TimeTrackerDateException: `until` date or or validation anchor
+                date outside tracker's tracked year.
+            TimeTrackerException: Problem with the tracker, see specific
+                error and chained errors for details.
         """
         first_year_date = dt.date(tracker.tracked_year, 1, 1)
         validation_anchor_date = tracker.get_last_validation_anchor()
@@ -261,10 +331,18 @@ class AttendanceValidator(ABC):
 
     @property
     def worse_error(self) -> Optional[AttendanceError]:
-        """ """
+        """
+        Returns:
+            Optional[AttendanceError]: The worse error found or `None` if
+                no validation was performed.
+        """
         return self._worse_error
 
     @property
     def errors_by_date(self) -> Optional[dict[dt.date, AttendanceError]]:
-        """ """
+        """
+        Returns:
+            Optional[dict[dt.date, AttendanceError]]: A dictionary of all
+                errors by date, or `None` if no validation was performed.
+        """
         return self._date_errors

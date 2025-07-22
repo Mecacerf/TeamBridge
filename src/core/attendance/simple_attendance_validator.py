@@ -24,7 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 class ContinuousWorkChecker(AttendanceChecker):
-    """ """
+    """
+    Verify that the employee didn't work more than the maximum allowed
+    time without taking a break.
+    """
 
     ERROR_ID = 10
 
@@ -32,12 +35,11 @@ class ContinuousWorkChecker(AttendanceChecker):
         super().__init__(self.ERROR_ID)
 
     def check_date(self, tracker: TimeTracker, date: dt.date) -> bool:
-        """ """
         events = tracker.get_clocks(date)
         max_time = tracker.max_continuous_work_time
 
         evt_pairs = [(e1, e2) for e1, e2 in zip(events, events[1:]) if e1 and e2]
-        return any(self.__delta(e1.time, e2.time) > max_time for e1, e2 in evt_pairs)
+        return any(self.__delta(e1.time, e2.time) >= max_time for e1, e2 in evt_pairs)
 
     def __delta(self, t1: dt.time, t2: dt.time) -> dt.timedelta:
         t1_delta = dt.timedelta(hours=t1.hour, minutes=t1.minute)
@@ -46,7 +48,9 @@ class ContinuousWorkChecker(AttendanceChecker):
 
 
 class ClockSequenceChecker(AttendanceChecker):
-    """ """
+    """
+    Verify that the clock events times are ordered chronologically.
+    """
 
     ERROR_ID = 100
 
@@ -54,13 +58,16 @@ class ClockSequenceChecker(AttendanceChecker):
         super().__init__(self.ERROR_ID)
 
     def check_date(self, tracker: TimeTracker, date: dt.date) -> bool:
-        """ """
         events = [evt for evt in tracker.get_clocks(date) if evt is not None]
         return any(e1.time >= e2.time for e1, e2 in zip(events, events[1:]))
 
 
 class SimpleAttendanceValidator(AttendanceValidator):
-    """ """
+    """
+    Simple implementation of `AttendanceValidator` that checks that:
+    - The maximal continuous work duration is not exceeded.
+    - All clock events times are ordered chronologically.
+    """
 
     def __init__(self):
         super().__init__([ContinuousWorkChecker(), ClockSequenceChecker()])
