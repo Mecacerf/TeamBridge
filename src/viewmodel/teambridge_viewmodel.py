@@ -739,12 +739,17 @@ class _ShowAttendanceList(_IViewModelState):
         # Show results
         logger.info(f"Fetched attendance list in {self._result.fetch_time:.2f} sec.")
         logger.info(
-            f"Present: {", ".join([info.firstname for info in self._result.present])}."
+            f"Present: {", ".join([f"{info.firstname} {info.name} ({info.id})" 
+            for info in self._result.present])}."
         )
         logger.info(
-            f"Absent: {", ".join([info.firstname for info in self._result.absent])}."
+            f"Absent: {", ".join([f"{info.firstname} {info.name} ({info.id})" 
+            for info in self._result.absent])}."
         )
-        logger.info(f"Unknown: {", ".join(list(self._result.unknown))}.")
+        logger.info(
+            f"Unknown: {", ".join(f"{info.firstname} {info.name} ({info.id})" 
+            for info in self._result.unknown)}."
+        )
 
     def do(self) -> Optional[IStateBehavior]:
         # Leave the state on reset signal or timeout
@@ -775,7 +780,8 @@ class _ShowAttendanceList(_IViewModelState):
         # inform that an error occurred with this employee and the system doesn't
         # know if he's present or absent.
         names = [f"{info.firstname} {info.name}" for info in self._result.present] + [
-            f"??? {employee_id}" for employee_id in self._result.unknown
+            (f"??? {info.firstname} {info.name}" if info.name else f"??? ID {info.id}")
+            for info in self._result.unknown
         ]
 
         # Truncate too long names
@@ -831,7 +837,7 @@ class _ShowAttendanceList(_IViewModelState):
         """
         Left justify with spaces to reach given width.
         """
-        return text + " " * max(0, round(width - self.__text_width(text)))
+        return text + (" " * max(0, round(width - self.__text_width(text))))
 
 
 class _ErrorState(_IViewModelState):
