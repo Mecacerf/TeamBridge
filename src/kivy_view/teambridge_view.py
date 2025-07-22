@@ -451,7 +451,6 @@ class MainScreen(FloatLayout):
         """
         Called when the information panel is pressed to collapse it.
         """
-        logger.debug("info panel press")
         self._viewmodel.next_action = ViewModelAction.RESET_TO_CLOCK_ACTION
 
 

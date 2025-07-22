@@ -210,7 +210,7 @@ class SheetsRepoAccessor:
         else:
             # When opening in read/write mode, the lock file in the remote
             # repository protects the file from being opened multiple times.
-            # The file may already exists in the local cache if a previous
+            # The file may already exist in the local cache if a previous
             # operation failed and the lock file wasn't deleted, which is
             # intended. If the lock file has been acquired, that means a user
             # manually solved the issue and deleted the lock file. It is now

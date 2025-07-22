@@ -103,11 +103,11 @@ class AttendanceList(IModelMessage):
     Attributes:
         present (list[EmployeeInfo]): List of present employees.
         absent (list[EmployeeInfo]): List of absent employees.
-        unkown (list[str]): List of not fetchable employees.
+        unkown (list[EmployeeInfo]): List of not fetchable employees.
         fetch_time (float): Duration of the fetching process [s].
     """
 
     present: list[EmployeeInfo]
     absent: list[EmployeeInfo]
-    unknown: list[str]
+    unknown: list[EmployeeInfo]
     fetch_time: float

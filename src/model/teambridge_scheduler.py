@@ -171,11 +171,11 @@ class TeamBridgeScheduler:
             # returned message is None.
             return future.result()
 
-        except Exception:
+        except Exception as e:
             logger.error(
                 "An asynchronous task didn't finished properly.", exc_info=True
             )
-            return None
+            return ModelError(0, f"Task raised {e.__class__.__name__}.")
 
     def drop(self, handle: int):
         """
@@ -283,16 +283,29 @@ class TeamBridgeScheduler:
         def fetch(id: str) -> tuple[EmployeeInfo, Optional[bool]]:
             """
             Check if the employee with given identifier is currently
-            clocked in and return its state.
+            clocked in.
+
+            Returns:
+                EmployeeInfo: A dataclass with the name, firstname and
+                    employee ID. If an opening error occurs early, only
+                    the ID may be available.
+                Optional[bool]: `True` if clock-in, `False` if clocked-out
+                    and `None` if an error occurred.
             """
+            name = ""
+            firstname = ""
+            clocked_in = None
+
             try:
                 with self._factory.create(id, datetime, readonly=True) as tracker:
+                    name = tracker.name
+                    firstname = tracker.firstname
                     clocked_in = tracker.is_clocked_in(datetime)
-                    info = EmployeeInfo(tracker.name, tracker.firstname, id)
-                    return info, clocked_in
-
             except TimeTrackerException:
-                return EmployeeInfo(id, "", ""), None
+                pass
+
+            # Name and firstname may be empty if clocked_in is None
+            return EmployeeInfo(name, firstname, id), clocked_in
 
         # Fetch all registered employees for the given year
         result: list[tuple[EmployeeInfo, Optional[bool]]] = []
@@ -302,6 +315,6 @@ class TeamBridgeScheduler:
         return AttendanceList(
             present=[info for info, clocked_in in result if clocked_in is True],
             absent=[info for info, clocked_in in result if clocked_in is False],
-            unknown=[info.id for info, clocked_in in result if clocked_in is None],
+            unknown=[info for info, clocked_in in result if clocked_in is None],
             fetch_time=time.time() - start_ts,
         )
