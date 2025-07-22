@@ -51,7 +51,7 @@ class AttendanceErrorStatus(Enum):
         """
         if error_id == 0:
             return cls.NONE
-        elif error_id <= 20:
+        elif error_id < 100:
             return cls.WARNING
         else:
             return cls.ERROR

@@ -47,7 +47,7 @@ EVAL_FILE_PREFIX = "eval_"
 # Opening a spreadsheet that doesn't use this major version will fail to
 # prevent compatibity issues
 # This version may be preceded by a minor version in the form '.xx'
-EXPECTED_MAJOR_VERSION = "v180625"
+EXPECTED_MAJOR_VERSION = "v220725"
 
 # Init sheet index
 SHEET_INIT = 0
@@ -69,10 +69,10 @@ CELL_MAX_CONTINUOUS_WORK_TIME = "A15"
 # These are the date and time data analysis is based on
 CELL_DATE = "A21"
 CELL_TIME = "A22"
-CELL_VALIDATION_ANCHOR_DATE = "D21"
+CELL_VALIDATION_ANCHOR_DATE = "A23"
 
 # Formula evaluation test cell
-CELL_EVALUATED = "A23"
+CELL_EVALUATED = "A24"
 
 # Error <> description table
 CELL_ERROR_TABLE_ID = "A52"  # First error ID row
@@ -84,36 +84,36 @@ MAX_ERROR_NBR = 10  # Just to give an iteration limit
 ## flexibility in production.
 
 # January sheet index
-LOC_JANUARY_SHEET = "A24"
+LOC_JANUARY_SHEET = "A25"
 
 # Row number for the first date of the month (01.xx.xxxx)
-LOC_FIRST_MONTH_DATE_ROW = "A25"
+LOC_FIRST_MONTH_DATE_ROW = "A26"
 
 # Clock in/out times columns (left and right array delimeters)
-LOC_FIRST_CLOCK_IN_COL = "A26"
-LOC_LAST_CLOCK_OUT_COL = "A27"
+LOC_FIRST_CLOCK_IN_COL = "A27"
+LOC_LAST_CLOCK_OUT_COL = "A28"
 
 # Day related information
-LOC_DAY_SCHEDULE_COL = "A28"
-LOC_DAY_WORKED_TIME_COL = "A29"
-LOC_DAY_BALANCE_COL = "A30"
-LOC_DAY_VACATION_COL = "A31"
-LOC_DAY_PAID_ABSENCE_COL = "A32"
-LOC_DAY_SHEET_ERROR_COL = "A33"
-LOC_DAY_SOFT_ERROR_COL = "A34"
+LOC_DAY_SCHEDULE_COL = "A29"
+LOC_DAY_WORKED_TIME_COL = "A30"
+LOC_DAY_BALANCE_COL = "A31"
+LOC_DAY_VACATION_COL = "A32"
+LOC_DAY_PAID_ABSENCE_COL = "A33"
+LOC_DAY_SHEET_ERROR_COL = "A34"
+LOC_DAY_SOFT_ERROR_COL = "A35"
 
 # Month related information
-LOC_MONTH_SCHEDULE = "A35"
-LOC_MONTH_WORKED_TIME = "A36"
-LOC_MONTH_BALANCE = "A37"
-LOC_MONTH_VACATION = "A38"
-LOC_MONTH_PAID_ABSENCE = "A39"
+LOC_MONTH_SCHEDULE = "A36"
+LOC_MONTH_WORKED_TIME = "A37"
+LOC_MONTH_BALANCE = "A38"
+LOC_MONTH_VACATION = "A39"
+LOC_MONTH_PAID_ABSENCE = "A40"
 
 # General information in the month sheets
-LOC_EXPECTED_DAY_SCHEDULE = "A40"
-LOC_REMAINING_VACATION = "A41"
-LOC_YTD_BALANCE = "A42"  # Year-to-date balance
-LOC_GLOBAL_ERROR = "A43"
+LOC_EXPECTED_DAY_SCHEDULE = "A41"
+LOC_REMAINING_VACATION = "A42"
+LOC_YTD_BALANCE = "A43"  # Year-to-date balance
+LOC_GLOBAL_ERROR = "A44"
 
 ########################################################################
 #                           Other constants                            #

@@ -48,7 +48,7 @@ class ContinuousWorkChecker(AttendanceChecker):
 class ClockSequenceChecker(AttendanceChecker):
     """ """
 
-    ERROR_ID = 40
+    ERROR_ID = 100
 
     def __init__(self):
         super().__init__(self.ERROR_ID)
