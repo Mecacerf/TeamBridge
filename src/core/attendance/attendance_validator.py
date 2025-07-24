@@ -152,29 +152,6 @@ class AttendanceValidator(ABC):
         self._worse_error = None
         self._date_errors = None
 
-    def __date_rng(self, start: dt.date, end: dt.date | dt.datetime):
-        """
-        Iterate over the dates range [start, end[. Iteration stops the
-        date before `end` (`end` exclusive).
-        """
-        one_day = dt.timedelta(days=1)
-
-        if isinstance(end, dt.datetime):
-            end = end.date()
-
-        date = start
-        while date < end:
-            yield date
-            date += one_day
-
-    def __to_error(self, tracker: TimeTracker, error_id: int) -> AttendanceError:
-        """
-        Returns:
-            AttendanceError: An attendance error object based on the
-                given error identifier.
-        """
-        return AttendanceError(error_id, tracker.get_attendance_error_desc(error_id))
-
     def validate(
         self, tracker: TimeTracker, until: dt.datetime
     ) -> AttendanceErrorStatus:
@@ -213,121 +190,179 @@ class AttendanceValidator(ABC):
             TimeTrackerException: Problem with the tracker, see specific
                 error and chained errors for details.
         """
-        first_year_date = dt.date(tracker.tracked_year, 1, 1)
-        validation_anchor_date = tracker.get_last_validation_anchor()
-
-        if validation_anchor_date.year != tracker.tracked_year:
-            raise TimeTrackerDateException(
-                f"Wrong validation anchor date {validation_anchor_date}, "
-                f"expected year {tracker.tracked_year}."
-            )
-
-        logger.debug(f"Reading existing attendance errors of {tracker!s}.")
-
         date_errors: dict[dt.date, int] = {}
 
-        # 1. Read existing errors from the application
-        for date in self.__date_rng(first_year_date, until):
-            if (error := tracker.get_attendance_error(date)) > 0:
-                date_errors[date] = error
+        # Read existing errors and select the worse
+        self.__read_existing_errors(tracker, date_errors, until)
+        worse = self.__to_error(tracker, max(date_errors.values(), default=0))
 
-        # 2. Read existing errors from the tracker, if it has analyzing
-        # capabilities
-        if isinstance(tracker, TimeTrackerAnalyzer):
-            tracker.analyze(until)
-
-            # Merge with application errors
-            for date in self.__date_rng(first_year_date, until):
-                if (error := tracker.read_day_attendance_error(date)) > 0:
-                    date_errors[date] = max(date_errors.get(date, 0), error)
-
-        # 3. Find the dominant error and its status
-        worse_error = max(date_errors.values(), default=0)
-        error_status = AttendanceErrorStatus.from_error_id(worse_error)
-
-        # The worse error should be the same as returned by the analyzer
-        if isinstance(tracker, TimeTrackerAnalyzer):
-            assert tracker.read_year_attendance_error() == worse_error
-
-        logger.debug(
-            f"{tracker!s} has initially {len(date_errors)} error(s) in the "
-            f"range [{first_year_date}, {until.date()}[. Status "
-            f"{error_status.name}. "
-            f"Error IDs by date: [{", ".join([
-                f"{edt}: {eid!s}" for edt, eid in date_errors.items()
-            ])}]."
+        logger.info(
+            f"Read existing errors of {tracker!s} returned {len(date_errors)} "
+            f"error(s) and status {worse.status.name}."
         )
 
-        # 4. If not in critical error state, the application can scan for
-        # errors using the provided checkers. No scan is done if an error
-        # already exists because the data may be corrupted.
-        no_scan = error_status is AttendanceErrorStatus.ERROR
-        if no_scan:
-            logger.debug(
-                f"Skipped attendance errors scan for {tracker!s} that is in "
-                f"{error_status.name} state."
-            )
+        if worse.status is not AttendanceErrorStatus.ERROR:
+            # The application can scan for new errors
+            self.__scan_until(tracker, date_errors, until)
+            worse = self.__to_error(tracker, max(date_errors.values(), default=0))
         else:
-            logger.debug(
-                "Proceeding to application errors scan in range "
-                f"[{validation_anchor_date}, {until.date()}[."
+            logger.info(
+                f"Cannot scan for {tracker!s} errors, already in "
+                f"{worse.status.name} state."
             )
 
-            new_anchor_date = None
-            for date in self.__date_rng(validation_anchor_date, until):
-                # Get the highest error returned by the checkers
-                error = max(
-                    [
-                        checker.error_id
-                        for checker in self._checkers
-                        if checker.check_date(tracker, date)
-                    ],
-                    default=0,
-                )
-
-                # Write checker error in the tracker and move the validation
-                # anchor
-                if error > 0:
-                    tracker.set_attendance_error(date, error)
-                    # The validation anchor is moved to the first date in error
-                    if new_anchor_date is None:
-                        new_anchor_date = date
-
-                    # Merge with existing error
-                    date_errors[date] = max(date_errors.get(date, 0), error)
-
-            if new_anchor_date is None:
-                # No error, move the anchor to the last validated day
-                new_anchor_date = until.date()
-
-            tracker.set_last_validation_anchor(new_anchor_date)
-            logger.debug(f"{tracker!s} validation anchor moved to {new_anchor_date}.")
-            tracker.save()
-
-            # Update the worse error that may have increased
-            worse_error = max(date_errors.values(), default=0)
-            error_status = AttendanceErrorStatus.from_error_id(worse_error)
-
-        # 5. Save results in the validator
-        self._worse_error = self.__to_error(tracker, worse_error)
+        # Save validation results
+        self._worse_error = worse
         self._date_errors = {
             edt: self.__to_error(tracker, eid) for edt, eid in date_errors.items()
         }
 
         logger.info(
             f"Finished attendance validation of {tracker!s} "
-            f"with {len(self._date_errors)} error(s). "
-            f"Status {error_status.name}. "
-            f"Errors by date: [{", ".join([
-                f"{edt}: {eid!s}" for edt, eid in self._date_errors.items()
-            ])}]. {
-                "No rescan performed due to already existing error(s)."
-                if no_scan
-                else "Scanned range " f"[{validation_anchor_date}, {until.date()}[."
-            }"
+            f"with {len(self._date_errors)} error(s) and status "
+            f"{worse.status.name}."
         )
 
-        return error_status
+        if worse.error_id > 0:
+            logger.info(f"{tracker!s} most cirtical error is '{worse}'.")
+
+        if len(date_errors) > 0:
+            logger.info(
+                f"Summary: [{", ".join([
+                    f"{edt}: {eid!s}" for edt, eid in self._date_errors.items()
+                ])}]."
+            )
+
+        return worse.status
+
+    def __date_rng(self, start: dt.date, end: dt.date | dt.datetime):
+        """
+        Iterate over the dates range [start, end[. Iteration stops the
+        date before `end` (`end` exclusive).
+        """
+        one_day = dt.timedelta(days=1)
+
+        if isinstance(end, dt.datetime):
+            end = end.date()
+
+        date = start
+        while date < end:
+            yield date
+            date += one_day
+
+    def __to_error(self, tracker: TimeTracker, error_id: int) -> AttendanceError:
+        """
+        Returns:
+            AttendanceError: An attendance error object based on the
+                given error identifier.
+        """
+        desc = "unknown error"
+        try:
+            desc = tracker.get_attendance_error_desc(error_id)
+        except TimeTrackerValueException:
+            pass
+
+        return AttendanceError(error_id, desc)
+
+    def __read_existing_errors(
+        self, tracker: TimeTracker, date_errors: dict[dt.date, int], until: dt.datetime
+    ):
+        """
+        Read the errors that already exist in the time tracker. If a
+        `TimeTracker` is provided, only application errors are read.
+        If a `TimeTrackerAnalyzer` is provided, it is analyzed to `until`
+        datetime and internal errors are read as well. The function fills
+        the provided `date_errors` dictionary.
+        """
+        first_year_date = dt.date(year=tracker.tracked_year, month=1, day=1)
+
+        # Read existing errors from the application
+        for date in self.__date_rng(first_year_date, until):
+            if (error := tracker.get_attendance_error(date)) > 0:
+                # Merge with existing errors, if not empty
+                date_errors[date] = max(date_errors.get(date, 0), error)
+
+        # Read existing errors from the tracker, if it has analyzing capabilities
+        if isinstance(tracker, TimeTrackerAnalyzer):
+            tracker.analyze(until)
+
+            for date in self.__date_rng(first_year_date, until):
+                if (error := tracker.read_day_attendance_error(date)) > 0:
+                    # Merge with application errors
+                    date_errors[date] = max(date_errors.get(date, 0), error)
+
+        logger.debug(
+            f"{tracker!s} existing error(s) "
+            f"[{", ".join(str(err) for err in date_errors.values())}]."
+        )
+
+    def __scan_until(
+        self, tracker: TimeTracker, date_errors: dict[dt.date, int], until: dt.date
+    ):
+        """
+        Scan the dates to find errors from the last validation anchor to
+        `until` (exclusive). Each `AttendanceChecker` is tested on each
+        date of the range and the highest error is sorted. This error is
+        added to the `date_errors` dictionary and written in the tracker's
+        application errors. The tracker's validation anchor date is moved
+        to the first date with an error or to `until` if no error is found.
+        """
+        anchor_date = tracker.get_last_validation_anchor()
+
+        if anchor_date.year != tracker.tracked_year:
+            raise TimeTrackerDateException(
+                f"Wrong validation anchor date {anchor_date}, "
+                f"expected year {tracker.tracked_year}."
+            )
+
+        if isinstance(until, dt.datetime):
+            until = until.date()
+
+        if anchor_date == until:
+            logger.info(
+                f"{tracker!s} validation anchor date is already the {anchor_date}. "
+                "Nothing to scan."
+            )
+            return
+
+        new_anchor_date = None
+        for date in self.__date_rng(anchor_date, until):
+            # Apply each checker on the date and get the highest error
+            # returned
+            error = max(
+                [
+                    checker.error_id
+                    for checker in self._checkers
+                    if checker.check_date(tracker, date)
+                ],
+                default=0,
+            )
+
+            if error > 0:
+                # The validation anchor is moved to the first date in error
+                if new_anchor_date is None:
+                    new_anchor_date = date
+
+                # Write in the tracker and merge with existing errors
+                tracker.set_attendance_error(date, error)
+                date_errors[date] = max(date_errors.get(date, 0), error)
+
+        # Move the validation anchor to the new date if set, or to until
+        # if no error has been found
+        tracker.set_last_validation_anchor(new_anchor_date or until)
+        tracker.save()
+
+        if anchor_date == new_anchor_date:
+            anchor_msg = f"stays the {anchor_date} -> error {date_errors[anchor_date]}"
+        elif new_anchor_date:
+            anchor_msg = f"moved to the {new_anchor_date} -> error {date_errors[new_anchor_date]}"
+        else:
+            anchor_msg = f"moved at today {until} -> no error"
+
+        logger.info(
+            f"Scanned dates {anchor_date} to {until - dt.timedelta(days=1)} of "
+            f"{tracker!s}. Validation anchor {anchor_msg}."
+        )
 
     @property
     def worse_error(self) -> Optional[AttendanceError]:

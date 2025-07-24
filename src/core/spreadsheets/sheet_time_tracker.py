@@ -608,7 +608,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             dt.date: Converted value.
         """
         if isinstance(value, dt.datetime):
-            return dt.date(value.year, value.month, value.day)
+            return value.date()
 
         if isinstance(value, dt.date):
             return value
@@ -1001,7 +1001,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             raise TimeTrackerDateException()
 
         init_sheet = self._workbook_raw.worksheets[SHEET_INIT]
-        init_sheet[CELL_VALIDATION_ANCHOR_DATE].value = date
+        init_sheet[CELL_VALIDATION_ANCHOR_DATE].value = self.__cast(
+            date, self.__to_date
+        )
 
         try:
             self._workbook_raw.save(self._raw_file_path)
