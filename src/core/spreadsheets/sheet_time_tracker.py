@@ -47,7 +47,7 @@ EVAL_FILE_PREFIX = "eval_"
 # Opening a spreadsheet that doesn't use this major version will fail to
 # prevent compatibity issues
 # This version may be preceded by a minor version in the form '.xx'
-EXPECTED_MAJOR_VERSION = "v230725"
+EXPECTED_MAJOR_VERSION = "v250725"
 
 # Init sheet index
 SHEET_INIT = 0

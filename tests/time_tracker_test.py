@@ -676,8 +676,6 @@ def test_error_employee(factory: TimeTrackerFactory):
 
         tracker.analyze(DT_02_01_25)
         assert tracker.read_day_attendance_error(DT_01_01_25) == ERROR_ENTRY
-
-        pytest.xfail("Waiting for vacation and paid absence to be input checked")
         assert tracker.read_day_attendance_error(DT_03_01_25) == ERROR_ENTRY
 
         # The missing entry error doesn't show up for current day
@@ -687,8 +685,6 @@ def test_error_employee(factory: TimeTrackerFactory):
         tracker.analyze(DT_03_01_25)
         assert tracker.read_day_attendance_error(DT_01_01_25) == ERROR_ENTRY
         assert tracker.read_day_attendance_error(DT_02_01_25) == ERROR_MISSING_ENTRY
-
-        pytest.xfail("Waiting for vacation and paid absence to be input checked")
         assert tracker.read_day_attendance_error(DT_03_01_25) == ERROR_ENTRY
 
         assert tracker.read_year_attendance_error() == ERROR_ENTRY
