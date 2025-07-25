@@ -193,7 +193,7 @@ class AttendanceValidator(ABC):
         date_errors: dict[dt.date, int] = {}
 
         # Read existing errors and select the worse
-        self.__read_existing_errors(tracker, date_errors, until)
+        self._read_existing_errors(tracker, date_errors, until)
         worse = self.__to_error(tracker, max(date_errors.values(), default=0))
 
         logger.info(
@@ -203,7 +203,7 @@ class AttendanceValidator(ABC):
 
         if worse.status is not AttendanceErrorStatus.ERROR:
             # The application can scan for new errors
-            self.__scan_until(tracker, date_errors, until)
+            self._scan_until(tracker, date_errors, until)
             worse = self.__to_error(tracker, max(date_errors.values(), default=0))
         else:
             logger.info(
@@ -228,7 +228,7 @@ class AttendanceValidator(ABC):
 
         if len(date_errors) > 0:
             logger.info(
-                f"Summary: [{", ".join([
+                f"{tracker!s} has errors [{", ".join([
                     f"{edt}: {eid!s}" for edt, eid in self._date_errors.items()
                 ])}]."
             )
@@ -264,7 +264,7 @@ class AttendanceValidator(ABC):
 
         return AttendanceError(error_id, desc)
 
-    def __read_existing_errors(
+    def _read_existing_errors(
         self, tracker: TimeTracker, date_errors: dict[dt.date, int], until: dt.datetime
     ):
         """
@@ -296,7 +296,7 @@ class AttendanceValidator(ABC):
             f"[{", ".join(str(err) for err in date_errors.values())}]."
         )
 
-    def __scan_until(
+    def _scan_until(
         self, tracker: TimeTracker, date_errors: dict[dt.date, int], until: dt.date
     ):
         """
@@ -307,6 +307,8 @@ class AttendanceValidator(ABC):
         application errors. The tracker's validation anchor date is moved
         to the first date with an error or to `until` if no error is found.
         """
+        assert until.year == tracker.tracked_year  # Must be managed cleanly earlier
+
         anchor_date = tracker.get_last_validation_anchor()
 
         if anchor_date.year != tracker.tracked_year:
