@@ -39,9 +39,10 @@ TEST_REPOSITORY_ROOT = str(Path(TEST_ASSETS_DST_FOLDER) / "repository")
 # Errors identifiers and descriptions table
 TEST_ERRORS_TABLE = {
     0: "",
-    10: "plus de 6h sans pause",
+    10: "temps de travail sans pause dépassé",
     20: "horaire bloc non respecté",
-    30: "timbrage manquant",
-    40: "incohérence chronologie",
-    50: "saisie incorrecte",
+    30: "passage à minuit",
+    100: "incohérence chronologie",
+    110: "timbrage manquant",
+    120: "saisie incorrecte",
 }

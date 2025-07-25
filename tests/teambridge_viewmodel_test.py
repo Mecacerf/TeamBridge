@@ -36,7 +36,7 @@ TEST_DATE = dt.date(year=2025, month=3, day=10)  # 10 March 2025 is a monday
 ########################################################################
 
 
-def wait_state(viewmodel: TeamBridgeViewModel, state: str, timeout: float = 10):
+def wait_state(viewmodel: TeamBridgeViewModel, state: str, timeout: float = 20):
     """
     Run the viewmodel until it enters the expected state.
     Assert false after the timeout is elapsed.

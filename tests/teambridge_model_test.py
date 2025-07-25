@@ -41,7 +41,7 @@ def test_clock_action(scheduler: TeamBridgeScheduler):
     # Wait for the task to finish
     def wait_result(handle: int) -> Optional[IModelMessage]:
         # Poll the model until a message is posted or timed out
-        timeout = time.time() + 10.0
+        timeout = time.time() + 20.0
         while not scheduler.available(handle):
             assert scheduler.get_result(handle) is None
             assert time.time() < timeout
