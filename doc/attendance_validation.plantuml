@@ -34,8 +34,8 @@ ContinuousWorkChecker -u-|> AttendanceChecker
 ClockSequenceChecker -u-|> AttendanceChecker
 
 abstract class "AttendanceValidator" {
-  worse_error: Optional[AttendanceError]
-  errors_by_date: Optional[dict[dt.date, AttendanceError]]
+  worse_error: AttendanceError
+  errors_by_date: dict[dt.date, AttendanceError]
   AttendanceValidator(checkers: list[AttendanceChecker])
   validate(tracker: TimeTracker, until: dt.datetime) -> AttendanceErrorStatus
 }

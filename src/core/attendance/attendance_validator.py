@@ -149,9 +149,6 @@ class AttendanceValidator(ABC):
         """
         self._checkers = checkers
 
-        self._worse_error = None
-        self._date_errors = None
-
     def validate(
         self, tracker: TimeTracker, until: dt.datetime
     ) -> AttendanceErrorStatus:
@@ -367,19 +364,25 @@ class AttendanceValidator(ABC):
         )
 
     @property
-    def worse_error(self) -> Optional[AttendanceError]:
+    def worse_error(self) -> AttendanceError:
         """
         Returns:
             Optional[AttendanceError]: The worse error found or `None` if
                 no validation was performed.
         """
+        if not hasattr(self, "_worse_error"):
+            raise RuntimeError("No validation result available.")
+
         return self._worse_error
 
     @property
-    def errors_by_date(self) -> Optional[dict[dt.date, AttendanceError]]:
+    def errors_by_date(self) -> dict[dt.date, AttendanceError]:
         """
         Returns:
             Optional[dict[dt.date, AttendanceError]]: A dictionary of all
                 errors by date, or `None` if no validation was performed.
         """
+        if not hasattr(self, "_date_errors"):
+            raise RuntimeError("No validation result available.")
+
         return self._date_errors
