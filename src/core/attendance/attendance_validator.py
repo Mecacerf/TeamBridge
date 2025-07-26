@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from abc import ABC
 from enum import Enum
 import datetime as dt
+import time
 
 # Internal libraries
 from ..time_tracker import *
@@ -187,6 +188,7 @@ class AttendanceValidator(ABC):
             TimeTrackerException: Problem with the tracker, see specific
                 error and chained errors for details.
         """
+        start = time.time()
         date_errors: dict[dt.date, int] = {}
 
         # Read existing errors and select the worse
@@ -197,6 +199,9 @@ class AttendanceValidator(ABC):
             f"Read existing errors of {tracker!s} returned {len(date_errors)} "
             f"error(s) and status {worse.status.name}."
         )
+
+        if isinstance(tracker, TimeTrackerAnalyzer):
+            assert worse.error_id == tracker.read_year_attendance_error()
 
         if worse.status is not AttendanceErrorStatus.ERROR:
             # The application can scan for new errors
@@ -214,10 +219,12 @@ class AttendanceValidator(ABC):
             edt: self.__to_error(tracker, eid) for edt, eid in date_errors.items()
         }
 
+        elapsed = (time.time() - start) * 1000
+
         logger.info(
             f"Finished attendance validation of {tracker!s} "
             f"with {len(self._date_errors)} error(s) and status "
-            f"{worse.status.name}."
+            f"{worse.status.name} in {elapsed:.0f} ms."
         )
 
         if worse.error_id > 0:
@@ -271,6 +278,7 @@ class AttendanceValidator(ABC):
         datetime and internal errors are read as well. The function fills
         the provided `date_errors` dictionary.
         """
+        start = time.time()
         first_year_date = dt.date(year=tracker.tracked_year, month=1, day=1)
 
         # Read existing errors from the application
@@ -288,9 +296,11 @@ class AttendanceValidator(ABC):
                     # Merge with application errors
                     date_errors[date] = max(date_errors.get(date, 0), error)
 
+        elapsed = (time.time() - start) * 1000
         logger.debug(
             f"{tracker!s} existing error(s) "
-            f"[{", ".join(str(err) for err in date_errors.values())}]."
+            f"[{", ".join(str(err) for err in date_errors.values())}] "
+            f"(took {elapsed:.0f} ms)."
         )
 
     def _scan_until(
@@ -306,6 +316,7 @@ class AttendanceValidator(ABC):
         """
         assert until.year == tracker.tracked_year  # Must be managed cleanly earlier
 
+        start = time.time()
         anchor_date = tracker.get_last_validation_anchor()
 
         if anchor_date.year != tracker.tracked_year:
@@ -358,9 +369,11 @@ class AttendanceValidator(ABC):
         else:
             anchor_msg = f"moved at today {until} -> no error"
 
+        elapsed = (time.time() - start) * 1000
+
         logger.info(
             f"Scanned dates {anchor_date} to {until - dt.timedelta(days=1)} of "
-            f"{tracker!s}. Validation anchor {anchor_msg}."
+            f"{tracker!s} in {elapsed:.0f} ms. Validation anchor {anchor_msg}."
         )
 
     @property
