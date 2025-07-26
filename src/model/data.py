@@ -12,12 +12,15 @@ Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
 """
 
-from dataclasses import dataclass
+# Standard libraries
+from dataclasses import dataclass, field
+from typing import Optional
 import datetime as dt
 from abc import ABC
 
-# Internal import: ClockEvent is used as is in some dataclasses
+# Internal imports
 from core.time_tracker import ClockEvent
+from core.attendance.attendance_validator import AttendanceError
 
 
 @dataclass(frozen=True)
@@ -69,16 +72,46 @@ class EmployeeData(EmployeeInfo):
         name (str): Employee's name.
         firstname (str): Employee's firstname.
         id (str): Employee's id.
-        daily_worked_time (dt.timedelta): Employee's daily worked time.
-        daily_balance (dt.timedelta): Employee's daily balance.
-        daily_scheduled_time (dt.timedelta): Employee's daily scheduled time.
-        monthly_balance (dt.timedelta): Employee's monthly balance.
+        date_errors (dict[dt.date, AttendanceError]): Dictionary of all
+            errors found from the first of January to now.
+        dominant_error (AttendanceError): Most critical error found, if
+            its status is error, some information may be missing.
+        clocked_in (bool): `True` if the employee is clocked in.
+        day_schedule_time (dt.timedelta): Employee's day scheduled work
+            time.
+        day_worked_time (dt.timedelta): Employee's day worked time.
+        day_balance (dt.timedelta): Employee's day balance.
+        month_expected_day_schedule (dt.timedelta): Expected month's day
+            schedule.
+        month_schedule_time (dt.timedelta): Scheduled work time for the
+            month.
+        month_worked_time (dt.timedelta): Worked time in the month.
+        month_balance (dt.timedelta): Time balance for the month.
+        month_vacation (dt.timedelta): Planned vacation for the month.
+        year_vacation (float): Planned vacation for the whole year.
+        remaining_vacation (float): Remaining vacation to be planned.
+        ytd_balance (dt.timedelta): Year-to-date balance.
+        yty_balance (dt.timedelta): Year-to-yesterday balance.
+
+        The optional indicates that the value may be missing if an error
+        exists (dominant_error status is critical).
     """
 
-    daily_worked_time: dt.timedelta
-    daily_balance: dt.timedelta
-    daily_scheduled_time: dt.timedelta
-    monthly_balance: dt.timedelta
+    date_errors: dict[dt.date, AttendanceError]
+    dominant_error: AttendanceError
+    clocked_in: Optional[bool] = field(default=None)
+    day_schedule_time: Optional[dt.timedelta] = field(default=None)
+    day_worked_time: Optional[dt.timedelta] = field(default=None)
+    day_balance: Optional[dt.timedelta] = field(default=None)
+    month_expected_day_schedule: Optional[dt.timedelta] = field(default=None)
+    month_schedule_time: Optional[dt.timedelta] = field(default=None)
+    month_worked_time: Optional[dt.timedelta] = field(default=None)
+    month_balance: Optional[dt.timedelta] = field(default=None)
+    month_vacation: Optional[float] = field(default=None)
+    year_vacation: Optional[float] = field(default=None)
+    remaining_vacation: Optional[float] = field(default=None)
+    ytd_balance: Optional[dt.timedelta] = field(default=None)
+    yty_balance: Optional[dt.timedelta] = field(default=None)
 
 
 @dataclass(frozen=True)

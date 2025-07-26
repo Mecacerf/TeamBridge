@@ -24,6 +24,7 @@ import time
 from .data import *
 from core.time_tracker import *
 from core.time_tracker_factory import TimeTrackerFactory
+from core.attendance.attendance_validator import AttendanceErrorStatus
 from core.attendance.simple_attendance_validator import SimpleAttendanceValidator
 
 logger = logging.getLogger(__name__)
@@ -260,10 +261,18 @@ class TeamBridgeScheduler:
                 validator = SimpleAttendanceValidator()
                 status = validator.validate(tracker, datetime)
 
-                logger.info(
-                    f"Got status {status}, tracker analyzed ? {tracker.analyzed}"
-                )
+                if status is AttendanceErrorStatus.ERROR:
+                    # Cannot read tracker values
+                    return EmployeeData(
+                        name=tracker.name,
+                        firstname=tracker.firstname,
+                        id=employee_id,
+                        date_errors=validator.errors_by_date,
+                        dominant_error=validator.worse_error,
+                    )
 
+                # The tracker might not be analyzed if the validate method
+                # performed some write operations
                 if not tracker.analyzed:
                     tracker.analyze(datetime)
 
@@ -271,10 +280,23 @@ class TeamBridgeScheduler:
                     name=tracker.name,
                     firstname=tracker.firstname,
                     id=employee_id,
-                    daily_worked_time=tracker.read_day_worked_time(datetime),
-                    daily_balance=tracker.read_day_balance(datetime),
-                    daily_scheduled_time=tracker.read_day_schedule(datetime),
-                    monthly_balance=tracker.read_month_balance(datetime),
+                    date_errors=validator.errors_by_date,
+                    dominant_error=validator.worse_error,
+                    clocked_in=tracker.is_clocked_in(datetime),
+                    day_schedule_time=tracker.read_day_schedule(datetime),
+                    day_worked_time=tracker.read_day_worked_time(datetime),
+                    day_balance=tracker.read_day_balance(datetime),
+                    month_expected_day_schedule=tracker.read_month_expected_daily_schedule(
+                        datetime
+                    ),
+                    month_schedule_time=tracker.read_month_schedule(datetime),
+                    month_worked_time=tracker.read_month_worked_time(datetime),
+                    month_balance=tracker.read_month_balance(datetime),
+                    month_vacation=tracker.read_month_vacation(datetime),
+                    year_vacation=tracker.read_year_vacation(),
+                    remaining_vacation=tracker.read_year_remaining_vacation(),
+                    ytd_balance=tracker.read_year_to_date_balance(),
+                    yty_balance=tracker.read_year_to_yesterday_balance(),
                 )
 
         except TimeTrackerException as e:
