@@ -34,8 +34,8 @@ ContinuousWorkChecker -u-|> AttendanceChecker
 ClockSequenceChecker -u-|> AttendanceChecker
 
 abstract class "AttendanceValidator" {
-  worse_error: AttendanceError
-  errors_by_date: dict[dt.date, AttendanceError]
+  dominant_error: AttendanceError
+  month_errors: dict[dt.date, AttendanceError]
   AttendanceValidator(checkers: list[AttendanceChecker])
   validate(tracker: TimeTracker, until: dt.datetime) -> AttendanceErrorStatus
 }
@@ -44,8 +44,8 @@ note left
   The `AttendanceValidator` class complements the functionality 
   of the `TimeTrackerAnalyzer` by detecting additional types of 
   attendance errors, such as unordered clock events or custom-
-  defined conditions like excessive daily work hours. It uses 
-  the provided `AttendanceChecker` objects for this purpose.
+  defined conditions like excessive continuous work hours. It 
+  uses the provided `AttendanceChecker` objects for this purpose.
 
   The `validate()` method always starts by verifying the tracker
   errors, when a `TimeTrackerAnalyzer` is provided. The process

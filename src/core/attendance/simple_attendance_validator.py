@@ -15,10 +15,11 @@ Contact: info@mecacerf.ch
 # Standard libraries
 import logging
 import datetime as dt
+from typing import Optional, Sequence
 
 # Internal libraries
 from .attendance_validator import AttendanceChecker, AttendanceValidator
-from core.time_tracker import TimeTracker
+from core.time_tracker import TimeTracker, ClockEvent
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,15 @@ class ContinuousWorkChecker(AttendanceChecker):
     def __init__(self):
         super().__init__(self.ERROR_ID)
 
-    def check_date(self, tracker: TimeTracker, date: dt.date) -> bool:
-        events = tracker.get_clocks(date)
+    def check_date(
+        self,
+        tracker: TimeTracker,
+        date: dt.date,
+        date_evts: Sequence[Optional[ClockEvent]],
+    ) -> bool:
         max_time = tracker.max_continuous_work_time
 
-        evt_pairs = [(e1, e2) for e1, e2 in zip(events, events[1:]) if e1 and e2]
+        evt_pairs = [(e1, e2) for e1, e2 in zip(date_evts, date_evts[1:]) if e1 and e2]
         return any(self.__delta(e1.time, e2.time) >= max_time for e1, e2 in evt_pairs)
 
     def __delta(self, t1: dt.time, t2: dt.time) -> dt.timedelta:
@@ -57,8 +62,13 @@ class ClockSequenceChecker(AttendanceChecker):
     def __init__(self):
         super().__init__(self.ERROR_ID)
 
-    def check_date(self, tracker: TimeTracker, date: dt.date) -> bool:
-        events = [evt for evt in tracker.get_clocks(date) if evt is not None]
+    def check_date(
+        self,
+        tracker: TimeTracker,
+        date: dt.date,
+        date_evts: Sequence[Optional[ClockEvent]],
+    ) -> bool:
+        events = [evt for evt in date_evts if evt is not None]
         return any(e1.time >= e2.time for e1, e2 in zip(events, events[1:]))
 
 

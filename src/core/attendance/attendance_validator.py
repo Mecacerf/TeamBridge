@@ -19,6 +19,7 @@ from abc import ABC
 from enum import Enum
 import datetime as dt
 import time
+from typing import Sequence, Iterable
 
 # Internal libraries
 from ..time_tracker import *
@@ -109,7 +110,12 @@ class AttendanceChecker(ABC):
         return self._error_id
 
     @abstractmethod
-    def check_date(self, tracker: TimeTracker, date: dt.date) -> bool:
+    def check_date(
+        self,
+        tracker: TimeTracker,
+        date: dt.date,
+        date_evts: Sequence[Optional[ClockEvent]],
+    ) -> bool:
         """
         Check if the the tracker's data for the given date is valid
         according to the checker's rule.
@@ -117,6 +123,8 @@ class AttendanceChecker(ABC):
         Args:
             tracker (TimeTracker): Time tracker to check.
             date (dt.date): Date to check.
+            date_evts (Sequence[Optional[ClockEvent]]): Immutable list
+                of events for the date. Same as `tracker.get_clocks(date)`.
 
         Returns:
             bool: `True` if the error is present, `False` if not.
@@ -127,6 +135,22 @@ class AttendanceChecker(ABC):
 ########################################################################
 #                    Attendance validator base class                   #
 ########################################################################
+
+
+class ErrorsReadMode(Enum):
+    """
+    Enumeration of the different options to retrieve time tracker's
+    existing errors.
+    """
+
+    # Do not read errors, the dictionary stays empty
+    NO_READ = auto()
+    # Read errors in the validation range only
+    VALIDATION_RANGE_ONLY = auto()
+    # Read errors in the current month
+    MONTH_ONLY = auto()
+    # Read all errors of the year
+    WHOLE_YEAR = auto()
 
 
 class AttendanceValidator(ABC):
@@ -151,13 +175,17 @@ class AttendanceValidator(ABC):
         self._checkers = checkers
 
     def validate(
-        self, tracker: TimeTracker, until: dt.datetime
+        self,
+        tracker: TimeTracker,
+        until: dt.datetime,
+        mode: ErrorsReadMode = ErrorsReadMode.MONTH_ONLY,
     ) -> AttendanceErrorStatus:
         """
         Perform a data validation of the provided time tracker until the
         given date.
 
-        The function starts by reading existing errors. It only performs
+        The function starts by reading existing errors in the dates range
+        specified by the mode (defaults to month only). It only performs
         a new rules check if no existing critical error is found. A rules
         check always starts at the validation anchor date of the tracker
         until the given `until` date. The validation anchor date is moved
@@ -166,7 +194,7 @@ class AttendanceValidator(ABC):
         for HR, who can decide to manually set the anchor date after a
         manual intervention on a time tracker.
 
-        The `worse_error` and `errors_by_date` properties are available
+        The `dominant_error` and `date_errors` properties are available
         after the tracker validation.
 
         Args:
@@ -180,10 +208,10 @@ class AttendanceValidator(ABC):
                 `TimeTrackerAnalyzer`.
 
         Returns:
-            AttendanceErrorStatus: The status of the worse error found.
+            AttendanceErrorStatus: The status of the dominant error.
 
         Raises:
-            TimeTrackerDateException: `until` date or or validation anchor
+            TimeTrackerDateException: `until` date or validation anchor
                 date outside tracker's tracked year.
             TimeTrackerException: Problem with the tracker, see specific
                 error and chained errors for details.
@@ -191,30 +219,107 @@ class AttendanceValidator(ABC):
         start = time.time()
         date_errors: dict[dt.date, int] = {}
 
-        # Read existing errors and select the worse
-        self._read_existing_errors(tracker, date_errors, until)
-        worse = self.__to_error(tracker, max(date_errors.values(), default=0))
+        # Retrieve and check the validation anchor date
+        anchor_date = tracker.get_last_validation_anchor()
+        if anchor_date.year != tracker.tracked_year:
+            raise TimeTrackerDateException(
+                f"Wrong validation anchor date {anchor_date}, "
+                f"expected year {tracker.tracked_year}."
+            )
+
+        if until.year != tracker.tracked_year:
+            raise TimeTrackerDateException(
+                f"Wrong `until` date {until}, expected year {tracker.tracked_year}."
+            )
+
+        # If the time tracker has analyzing capabilities, prepare the results
+        # to `until` date and time.
+        if isinstance(tracker, TimeTrackerAnalyzer):
+            tracker.analyze(until)
+
+        # Select the read range based on given mode
+        # Don't forget that end_rng is exclusive
+        if mode is not ErrorsReadMode.NO_READ:
+            if mode is ErrorsReadMode.VALIDATION_RANGE_ONLY:
+                start_rng = tracker.get_last_validation_anchor()
+                end_rng = until
+            elif mode is ErrorsReadMode.MONTH_ONLY:
+                start_rng = dt.date(tracker.tracked_year, until.month, 1)
+                end_rng = dt.date(tracker.tracked_year, until.month + 1, 1)
+            elif mode is ErrorsReadMode.WHOLE_YEAR:
+                start_rng = dt.date(tracker.tracked_year, 1, 1)
+                end_rng = dt.date(tracker.tracked_year + 1, 1, 1)
+            else:
+                assert False, f"Unhandled mode {mode.name}."
+
+            logger.info(
+                f"{tracker!s} "
+                "Selected errors reading range "
+                f"[{start_rng} to {end_rng}[ (mode is {mode.name})."
+            )
+            dates_rng = self.__date_rng(start_rng, end_rng)
+
+            # This read analyses a TimeTrackerAnalyzer
+            self._read_existing_errors(tracker, date_errors, dates_rng)
+        else:
+            logger.info(f"{tracker!s} No errors read performed in {mode.name} mode.")
+
+        # Select dominant error
+        if isinstance(tracker, TimeTrackerAnalyzer):
+            # The TimeTrackerAnalyzer provides the dominant error from its
+            # internal analysis
+            dominant_id = tracker.read_year_attendance_error()
+        else:
+            # The only way to determine the dominant error is to take the
+            # highest error id in the read range
+            dominant_id = max(date_errors.values(), default=0)
+
+        dominant = self.__to_error(tracker, dominant_id)
 
         logger.info(
-            f"Read existing errors of {tracker!s} returned {len(date_errors)} "
-            f"error(s) and status {worse.status.name}."
+            f"{tracker!s} Read existing errors "
+            f"returned {len(date_errors)} "
+            f"error(s) and status {dominant.status.name}."
         )
 
-        if isinstance(tracker, TimeTrackerAnalyzer):
-            assert worse.error_id == tracker.read_year_attendance_error()
-
-        if worse.status is not AttendanceErrorStatus.ERROR:
+        # Second step: scan for new errors
+        if dominant.status is not AttendanceErrorStatus.ERROR:
             # The application can scan for new errors
-            self._scan_until(tracker, date_errors, until)
-            worse = self.__to_error(tracker, max(date_errors.values(), default=0))
+            new_anchor = self._scan_range(
+                tracker, date_errors, anchor_date, until.date()
+            )
+            if new_anchor:
+                # Update the new validation anchor date and save the
+                # modifications (new errors + anchor date)
+                tracker.set_last_validation_anchor(new_anchor)
+                tracker.save()
+
+                # Update the dominant error that may have increased after a scan
+                dominant_id = max(date_errors.values(), default=0)
+                dominant_id = max(dominant_id, dominant.error_id)
+                dominant = self.__to_error(tracker, dominant_id)
+
+                until_incl = until.date() - dt.timedelta(days=1)
+                scanned_days = (until.date() - anchor_date).days
+                if scanned_days == 1:
+                    logger.info(
+                        f"{tracker!s} Scanned the {anchor_date} for errors. "
+                        f"Validation anchor date set the {new_anchor}."
+                    )
+                else:
+                    logger.info(
+                        f"{tracker!s} Scanned from the {anchor_date} to "
+                        f"the {until_incl} ({scanned_days} days) for errors. "
+                        f"Validation anchor date set the {new_anchor}."
+                    )
         else:
             logger.info(
-                f"Cannot scan for {tracker!s} errors, already in "
-                f"{worse.status.name} state."
+                f"{tracker!s} Cannot scan for errors, already in "
+                f"{dominant.status.name} state."
             )
 
         # Save validation results
-        self._worse_error = worse
+        self._dominant_error = dominant
         self._date_errors = {
             edt: self.__to_error(tracker, eid) for edt, eid in date_errors.items()
         }
@@ -222,24 +327,26 @@ class AttendanceValidator(ABC):
         elapsed = (time.time() - start) * 1000
 
         logger.info(
-            f"Finished attendance validation of {tracker!s} "
+            f"{tracker!s} Finished attendance validation "
             f"with {len(self._date_errors)} error(s) and status "
-            f"{worse.status.name} in {elapsed:.0f} ms."
+            f"{dominant.status.name} in {elapsed:.0f} ms."
         )
 
-        if worse.error_id > 0:
-            logger.info(f"{tracker!s} most cirtical error is '{worse}'.")
+        if dominant.error_id > 0:
+            logger.info(f"{tracker!s} Most cirtical error is '{dominant}'.")
 
         if len(date_errors) > 0:
             logger.info(
-                f"{tracker!s} has errors [{", ".join([
+                f"{tracker!s} Found errors [{", ".join([
                     f"{edt}: {eid!s}" for edt, eid in self._date_errors.items()
                 ])}]."
             )
 
-        return worse.status
+        return dominant.status
 
-    def __date_rng(self, start: dt.date, end: dt.date | dt.datetime):
+    def __date_rng(
+        self, start: dt.date, end: dt.date | dt.datetime
+    ) -> Iterable[dt.date]:
         """
         Iterate over the dates range [start, end[. Iteration stops the
         date before `end` (`end` exclusive).
@@ -249,10 +356,7 @@ class AttendanceValidator(ABC):
         if isinstance(end, dt.datetime):
             end = end.date()
 
-        date = start
-        while date < end:
-            yield date
-            date += one_day
+        return [start + i * one_day for i in range((end - start).days)]
 
     def __to_error(self, tracker: TimeTracker, error_id: int) -> AttendanceError:
         """
@@ -269,81 +373,82 @@ class AttendanceValidator(ABC):
         return AttendanceError(error_id, desc)
 
     def _read_existing_errors(
-        self, tracker: TimeTracker, date_errors: dict[dt.date, int], until: dt.datetime
+        self,
+        tracker: TimeTracker,
+        date_errors: dict[dt.date, int],
+        dates_rng: Iterable[dt.date],
     ):
         """
-        Read the errors that already exist in the time tracker. If a
-        `TimeTracker` is provided, only application errors are read.
-        If a `TimeTrackerAnalyzer` is provided, it is analyzed to `until`
-        datetime and internal errors are read as well. The function fills
-        the provided `date_errors` dictionary.
+        Read the errors that already exist in the time tracker for the
+        given dates range. If a `TimeTracker` is provided, only application
+        errors are read. If a `TimeTrackerAnalyzer` is provided, it is
+        expected to be analyzed to the end date of `dates_rng` and internal
+        errors are also read.
+
+        The function fills the provided `date_errors` dictionary with all
+        errors greater than 0.
         """
         start = time.time()
-        first_year_date = dt.date(year=tracker.tracked_year, month=1, day=1)
-
-        # Read existing errors from the application
-        for date in self.__date_rng(first_year_date, until):
-            if (error := tracker.get_attendance_error(date)) > 0:
-                # Merge with existing errors, if not empty
-                date_errors[date] = max(date_errors.get(date, 0), error)
 
         # Read existing errors from the tracker, if it has analyzing capabilities
         if isinstance(tracker, TimeTrackerAnalyzer):
-            tracker.analyze(until)
+            assert tracker.analyzed
+            # Check the global error id, if 0 there is no tracker errors
+            # neither application errors to read. The iteration can be
+            # stopped.
+            if tracker.read_year_attendance_error() == 0:
+                logger.debug(
+                    f"{tracker!s} Errors iteration stopped early because the "
+                    f"{tracker.__class__.__name__} reported no dominant error."
+                )
+                return
 
-            for date in self.__date_rng(first_year_date, until):
+            for date in dates_rng:
                 if (error := tracker.read_day_attendance_error(date)) > 0:
-                    # Merge with application errors
                     date_errors[date] = max(date_errors.get(date, 0), error)
+
+        # Read existing errors from the application
+        for date in dates_rng:
+            if (error := tracker.get_attendance_error(date)) > 0:
+                # Merge with existing errors
+                date_errors[date] = max(date_errors.get(date, 0), error)
 
         elapsed = (time.time() - start) * 1000
         logger.debug(
-            f"{tracker!s} existing error(s) "
+            f"{tracker!s} Read existing error(s) in {elapsed:.0f} ms. "
+            "Results: "
             f"[{", ".join(str(err) for err in date_errors.values())}] "
-            f"(took {elapsed:.0f} ms)."
         )
 
-    def _scan_until(
-        self, tracker: TimeTracker, date_errors: dict[dt.date, int], until: dt.date
-    ):
+    def _scan_range(
+        self,
+        tracker: TimeTracker,
+        date_errors: dict[dt.date, int],
+        start_rng: dt.date,
+        end_rng: dt.date,
+    ) -> Optional[dt.date]:
         """
-        Scan the dates to find errors from the last validation anchor to
-        `until` (exclusive). Each `AttendanceChecker` is tested on each
-        date of the range and the highest error is sorted. This error is
+        Scan day-by-day to find errors from the `start_rng` date to
+        `end_rng` (exclusive). Each `AttendanceChecker` is tested on each
+        day of the range and the highest error is sorted. This error is
         added to the `date_errors` dictionary and written in the tracker's
-        application errors. The tracker's validation anchor date is moved
-        to the first date with an error or to `until` if no error is found.
+        application errors. The first day in error found in the range is
+        returned, or `end_rng` is returned if no error is found. The
+        returned value is `None` if the range is empty (start_rng >= end_rng).
         """
-        assert until.year == tracker.tracked_year  # Must be managed cleanly earlier
-
         start = time.time()
-        anchor_date = tracker.get_last_validation_anchor()
-
-        if anchor_date.year != tracker.tracked_year:
-            raise TimeTrackerDateException(
-                f"Wrong validation anchor date {anchor_date}, "
-                f"expected year {tracker.tracked_year}."
-            )
-
-        if isinstance(until, dt.datetime):
-            until = until.date()
-
-        if anchor_date == until:
-            logger.info(
-                f"{tracker!s} validation anchor date is already the {anchor_date}. "
-                "Nothing to scan."
-            )
-            return
 
         new_anchor_date = None
-        for date in self.__date_rng(anchor_date, until):
+        errors: list[int] = []
+        for date in self.__date_rng(start_rng, end_rng):
             # Apply each checker on the date and get the highest error
             # returned
+            date_evts = tracker.get_clocks(date)  # Called once before checks
             error = max(
                 [
                     checker.error_id
                     for checker in self._checkers
-                    if checker.check_date(tracker, date)
+                    if checker.check_date(tracker, date, date_evts)
                 ],
                 default=0,
             )
@@ -356,44 +461,49 @@ class AttendanceValidator(ABC):
                 # Write in the tracker and merge with existing errors
                 tracker.set_attendance_error(date, error)
                 date_errors[date] = max(date_errors.get(date, 0), error)
+                errors.append(error)
 
-        # Move the validation anchor to the new date if set, or to until
-        # if no error has been found
-        tracker.set_last_validation_anchor(new_anchor_date or until)
-        tracker.save()
+        if "date" not in locals():
+            # Iterable was empty -> nothing scanned and anchor didn't move
+            logger.debug(f"{tracker!s} Validation range is empty. No scan performed.")
+            return None
 
-        if anchor_date == new_anchor_date:
-            anchor_msg = f"stays the {anchor_date} -> error {date_errors[anchor_date]}"
-        elif new_anchor_date:
-            anchor_msg = f"moved to the {new_anchor_date} -> error {date_errors[new_anchor_date]}"
-        else:
-            anchor_msg = f"moved at today {until} -> no error"
+        # Move the validation anchor to the new anchor date if set, or to the
+        # next day to scan if no error found
+        new_anchor_date = new_anchor_date or end_rng
 
         elapsed = (time.time() - start) * 1000
-
-        logger.info(
-            f"Scanned dates {anchor_date} to {until - dt.timedelta(days=1)} of "
-            f"{tracker!s} in {elapsed:.0f} ms. Validation anchor {anchor_msg}."
+        logger.debug(
+            f"{tracker!s} Scanned for errors in {elapsed:.0f} ms. "
+            f"Results: [{", ".join(str(err) for err in errors)}]."
         )
 
+        return new_anchor_date
+
     @property
-    def worse_error(self) -> AttendanceError:
+    def dominant_error(self) -> AttendanceError:
         """
         Returns:
-            Optional[AttendanceError]: The worse error found or `None` if
-                no validation was performed.
+            Optional[AttendanceError]: The dominant error (most critical).
+
+        Raises:
+            RuntimeError: No validation result available.
         """
-        if not hasattr(self, "_worse_error"):
+        if not hasattr(self, "_dominant_error"):
             raise RuntimeError("No validation result available.")
 
-        return self._worse_error
+        return self._dominant_error
 
     @property
-    def errors_by_date(self) -> dict[dt.date, AttendanceError]:
+    def date_errors(self) -> dict[dt.date, AttendanceError]:
         """
         Returns:
             Optional[dict[dt.date, AttendanceError]]: A dictionary of all
-                errors by date, or `None` if no validation was performed.
+                errors detected by date. Depends on the selected range
+                mode.
+
+        Raises:
+            RuntimeError: No validation result available.
         """
         if not hasattr(self, "_date_errors"):
             raise RuntimeError("No validation result available.")

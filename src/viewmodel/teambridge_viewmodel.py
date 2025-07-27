@@ -665,13 +665,21 @@ class _ConsultationSuccessState(_IViewModelState):
     def panel_content_text(self):
         data = self._data
 
-        if self._data.dominant_error.status == AttendanceErrorStatus.ERROR:
+        if data.dominant_error.status == AttendanceErrorStatus.ERROR:
             # Show the error panel
             lines = [
                 "Des erreurs empêchent l'affichage correct des informations. ",
                 "Veuillez vous adresser au secrétariat.",
                 "",
             ]
+
+            # Keep only errors
+            errors = {
+                date: error
+                for date, error in data.date_errors.items()
+                if error.status is AttendanceErrorStatus.ERROR
+            }
+
             lines.append(f"\u26a0 Erreur{"" if len(data.date_errors) == 1 else "s"}:")
             lines.extend(
                 [
@@ -680,6 +688,12 @@ class _ConsultationSuccessState(_IViewModelState):
                     if err.status is AttendanceErrorStatus.ERROR
                 ]
             )
+
+            # The dominant error may not be in the scanned range
+            if len(errors) == 0:
+                lines.append(
+                    f"   \u2022 date inconnue: {data.dominant_error.description}"
+                )
         else:
             # Normal information panel
             lines = [

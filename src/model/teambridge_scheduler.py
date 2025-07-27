@@ -267,8 +267,8 @@ class TeamBridgeScheduler:
                         name=tracker.name,
                         firstname=tracker.firstname,
                         id=employee_id,
-                        date_errors=validator.errors_by_date,
-                        dominant_error=validator.worse_error,
+                        date_errors=validator.date_errors,
+                        dominant_error=validator.dominant_error,
                     )
 
                 # The tracker might not be analyzed if the validate method
@@ -280,8 +280,8 @@ class TeamBridgeScheduler:
                     name=tracker.name,
                     firstname=tracker.firstname,
                     id=employee_id,
-                    date_errors=validator.errors_by_date,
-                    dominant_error=validator.worse_error,
+                    date_errors=validator.date_errors,
+                    dominant_error=validator.dominant_error,
                     clocked_in=tracker.is_clocked_in(datetime),
                     day_schedule_time=tracker.read_day_schedule(datetime),
                     day_worked_time=tracker.read_day_worked_time(datetime),
