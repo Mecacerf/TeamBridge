@@ -151,7 +151,7 @@ class ClockEvent:
                 # Double check before entering the critical section
                 if cls._midnight_rollover_instance is None:
                     cls._midnight_rollover_instance = cls(
-                        time=dt.time(0, 0),
+                        time=dt.time(23, 59, 59, 999999),
                         action=ClockAction.CLOCK_OUT,
                         _midnight_rollover=True,
                     )

@@ -333,7 +333,7 @@ class AttendanceValidator(ABC):
         )
 
         if dominant.error_id > 0:
-            logger.info(f"{tracker!s} Most cirtical error is '{dominant}'.")
+            logger.info(f"{tracker!s} Most critical error is '{dominant}'.")
 
         if len(date_errors) > 0:
             logger.info(

@@ -60,9 +60,10 @@ def test_continuous_work_checker_ok():
         ),
     )
 
+    any_date = dt.date.today()
     checker = ContinuousWorkChecker()
     assert checker.error_id == ContinuousWorkChecker.ERROR_ID
-    assert not checker.check_date(mock, dt.datetime.now())
+    assert not checker.check_date(mock, any_date, mock.get_clocks(any_date))
 
 
 def test_continuous_work_checker_not_ok():
@@ -84,9 +85,10 @@ def test_continuous_work_checker_not_ok():
         ),
     )
 
+    any_date = dt.date.today()
     checker = ContinuousWorkChecker()
     assert checker.error_id == ContinuousWorkChecker.ERROR_ID
-    assert checker.check_date(mock, dt.datetime.now())
+    assert checker.check_date(mock, any_date, mock.get_clocks(any_date))
 
 
 def test_evts_order_ok():
@@ -109,9 +111,37 @@ def test_evts_order_ok():
         ),
     )
 
+    any_date = dt.date.today()
     checker = ClockSequenceChecker()
     assert checker.error_id == ClockSequenceChecker.ERROR_ID
-    assert not checker.check_date(mock, dt.datetime.now())
+    assert not checker.check_date(mock, any_date, mock.get_clocks(any_date))
+
+
+def test_evts_order_ok_midnight():
+    """
+    Check that the error is not present for an ordered dataset with 
+    midnight rollover.
+    """
+    mock = cast(
+        TimeTracker,
+        TimeTrackerMock(
+            [
+                ClockEvent(dt.time(hour=8), ClockAction.CLOCK_IN),
+                ClockEvent(dt.time(hour=10, minute=32), ClockAction.CLOCK_OUT),
+                None,
+                ClockEvent(dt.time(hour=11), ClockAction.CLOCK_OUT),
+                ClockEvent(dt.time(hour=11, minute=30), ClockAction.CLOCK_IN),
+                ClockEvent(dt.time(hour=17, minute=30), ClockAction.CLOCK_OUT),
+                ClockEvent(dt.time(hour=23), ClockAction.CLOCK_IN),
+                ClockEvent.midnight_rollover()
+            ]
+        ),
+    )
+
+    any_date = dt.date.today()
+    checker = ClockSequenceChecker()
+    assert checker.error_id == ClockSequenceChecker.ERROR_ID
+    assert not checker.check_date(mock, any_date, mock.get_clocks(any_date))
 
 
 def test_evts_order_not_ok():
@@ -134,6 +164,7 @@ def test_evts_order_not_ok():
         ),
     )
 
+    any_date = dt.date.today()
     checker = ClockSequenceChecker()
     assert checker.error_id == ClockSequenceChecker.ERROR_ID
-    assert checker.check_date(mock, dt.datetime.now())
+    assert checker.check_date(mock, any_date, mock.get_clocks(any_date))
