@@ -214,6 +214,9 @@ class DateRange:
             start = end
         return months
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}[{self.rng_start} to {self.rng_end}["
+
 
 DateOrDateRange = dt.date | DateRange
 """

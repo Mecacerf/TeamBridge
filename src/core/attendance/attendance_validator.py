@@ -249,7 +249,7 @@ class AttendanceValidator(ABC):
         if mode is not ErrorsReadMode.NO_READ:
             if mode is ErrorsReadMode.VALIDATION_RANGE_ONLY:
                 start_rng = tracker.get_last_validation_anchor()
-                end_rng = until
+                end_rng = until.date()
             elif mode is ErrorsReadMode.MONTH_ONLY:
                 start_rng = dt.date(tracker.tracked_year, until.month, 1)
                 end_rng = dt.date(tracker.tracked_year, until.month + 1, 1)
@@ -386,7 +386,7 @@ class AttendanceValidator(ABC):
         # Read existing errors from the tracker, if it has analyzing capabilities
         if isinstance(tracker, TimeTrackerAnalyzer):
             assert tracker.analyzed
-            
+
             # Check the global error id, if 0 there is no tracker errors
             # neither application errors to read. The iteration can be
             # stopped.
@@ -418,7 +418,7 @@ class AttendanceValidator(ABC):
         self,
         tracker: TimeTracker,
         date_errors: dict[dt.date, int],
-        date_range: DateRange
+        date_range: DateRange,
     ) -> Optional[dt.date]:
         """
         Scan day-by-day to find errors from the `start_rng` date to

@@ -428,13 +428,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         """
         assert not self._closed, CLOSED_ERROR_MSG
 
-        if isinstance(date, dt.date):
-            # Single cell read
-            day_row = self.__get_date_row(date)
-            sheet = workbook.worksheets[self.__get_month_sheet_idx(date)]
-            value = sheet.cell(row=day_row, column=col).value
-            return self.__cast(value, cast_func)
-        else:
+        if isinstance(date, DateRange):
             values: list[T] = []
             # Use iter_rows() that is optimized for block reading. Split the
             # range by month.
@@ -455,6 +449,16 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             dates = date.iter_days()
             assert len(dates) == len(values)
             return dict(zip(dates, values))
+
+        elif isinstance(date, dt.date):
+            # Single cell read
+            day_row = self.__get_date_row(date)
+            sheet = workbook.worksheets[self.__get_month_sheet_idx(date)]
+            value = sheet.cell(row=day_row, column=col).value
+            return self.__cast(value, cast_func)
+
+        else:
+            assert False, f"Date or a DateRange expected, not {type(date)}."
 
     def __read_month_cell_value(
         self,
