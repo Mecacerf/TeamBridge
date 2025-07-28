@@ -25,7 +25,7 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 from abc import ABC, abstractmethod
-from typing import Optional, Type, Any, ClassVar
+from typing import Optional, Type, Any, ClassVar, overload
 from types import TracebackType
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -162,6 +162,67 @@ class ClockEvent:
         if self._midnight_rollover:
             return "midnight-rollover at 24:00"
         return f"{self.action} at {self.time.strftime('%H:%M')}"
+
+
+########################################################################
+#                            Others classes                            #
+########################################################################
+
+
+@dataclass(frozen=True)
+class DateRange:
+    """
+    Provides utility methods to work with date range.
+    The start date is inclusive and the end date is exclusive
+    [`rng_start`, `rng_end`[.
+    """
+
+    rng_start: dt.date
+    rng_end: dt.date
+
+    def days(self) -> int:
+        """
+        Returns:
+            int: Number of days in the range.
+        """
+        return (self.rng_end - self.rng_start).days
+
+    def iter_days(self) -> list[dt.date]:
+        """
+        Returns:
+            list[dt.date]: A list of all dates in the range `rng_start`
+                (inclusive) to `rng_end` (exclusive).
+        """
+        one_day = dt.timedelta(days=1)
+        return [self.rng_start + one_day * i for i in range(self.days())]
+
+    def split_months(self) -> list["DateRange"]:
+        """
+        Returns:
+            list[DatesRange]: A list of the range split by months.
+        """
+        if self.rng_start >= self.rng_end:
+            return []
+
+        months = []
+        start = self.rng_start
+        while start < self.rng_end:
+            # Compute the first day of the next month
+            next_month = (start.replace(day=1) + dt.timedelta(days=32)).replace(day=1)
+            end = min(next_month, self.rng_end)
+            months.append(DateRange(start, end))
+            start = end
+        return months
+
+
+DateOrDateRange = dt.date | DateRange
+"""
+Alias for single date or a date range (multiple days).
+"""
+
+FloatOrPerDate = float | dict[dt.date, float]
+IntOrPerDate = int | dict[dt.date, int]
+TimedeltaOrPerDate = dt.timedelta | dict[dt.date, dt.timedelta]
 
 
 ########################################################################
@@ -312,7 +373,7 @@ class TimeTracker(Employee, ABC):
     @abstractmethod
     def tracked_year(self) -> int:
         """
-        Get the year each read or write operations must relate to.
+        Get the year each read or write operation must relate to.
 
         Note that each read or write operation attempted on another year
         will raise a `TimeTrackerDateException`.
@@ -405,7 +466,7 @@ class TimeTracker(Employee, ABC):
         pass
 
     @abstractmethod
-    def get_clocks(self, date: dt.date | dt.datetime) -> list[Optional[ClockEvent]]:
+    def get_clocks(self, date: dt.date) -> list[Optional[ClockEvent]]:
         """
         Retrieve all clock-in and clock-out events on a given date.
 
@@ -435,7 +496,7 @@ class TimeTracker(Employee, ABC):
         pass
 
     @abstractmethod
-    def register_clock(self, date: dt.date | dt.datetime, event: ClockEvent):
+    def register_clock(self, date: dt.date, event: ClockEvent):
         """
         Register a clock in/out event on the given date.
 
@@ -457,9 +518,7 @@ class TimeTracker(Employee, ABC):
         pass
 
     @abstractmethod
-    def write_clocks(
-        self, date: dt.date | dt.datetime, events: list[Optional[ClockEvent]]
-    ):
+    def write_clocks(self, date: dt.date, events: list[Optional[ClockEvent]]):
         """
         Write the given clock events list on the given date, overwriting
         existing entries.
@@ -486,7 +545,7 @@ class TimeTracker(Employee, ABC):
         """
         pass
 
-    def is_clocked_in(self, date: dt.date | dt.datetime) -> bool:
+    def is_clocked_in(self, date: dt.date) -> bool:
         """
         Check if the employee is clocked in on a given date.
 
@@ -512,7 +571,7 @@ class TimeTracker(Employee, ABC):
         )
 
     @abstractmethod
-    def set_vacation(self, date: dt.date | dt.datetime, day_ratio: float):
+    def set_vacation(self, date: dt.date, day_ratio: float):
         """
         Set the vacation ratio for the day, from 0.0 (no vacation) to
         1.0 (full-day off).
@@ -530,17 +589,24 @@ class TimeTracker(Employee, ABC):
         """
         pass
 
+    @overload
+    def get_vacation(self, date: dt.date) -> float: ...
+    @overload
+    def get_vacation(self, date: DateRange) -> dict[dt.date, float]: ...
+
     @abstractmethod
-    def get_vacation(self, date: dt.date | dt.datetime) -> float:
+    def get_vacation(self, date: DateOrDateRange) -> FloatOrPerDate:
         """
         Get the vacation ratio for the day, from 0.0 (no vacation) to
         1.0 (full-day off).
 
+        This method supports reading a single date or a block of dates.
+
         Args:
-            date (datetime.date): The date to read data.
+            date (DateOrDateRange): The date / date range to read data.
 
         Returns:
-            float: Vacation ratio for the date.
+            FloatOrPerDate: Vacation ratio per date.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.
@@ -550,7 +616,7 @@ class TimeTracker(Employee, ABC):
         pass
 
     @abstractmethod
-    def set_paid_absence(self, date: dt.date | dt.datetime, day_ratio: float):
+    def set_paid_absence(self, date: dt.date, day_ratio: float):
         """
         Set the paid absence ratio for the day, from 0.0 (no absence) to
         1.0 (full-day absence). Paid absences refer to time off that is
@@ -569,18 +635,25 @@ class TimeTracker(Employee, ABC):
         """
         pass
 
+    @overload
+    def get_paid_absence(self, date: dt.date) -> float: ...
+    @overload
+    def get_paid_absence(self, date: DateRange) -> dict[dt.date, float]: ...
+
     @abstractmethod
-    def get_paid_absence(self, date: dt.date | dt.datetime) -> float:
+    def get_paid_absence(self, date: DateOrDateRange) -> FloatOrPerDate:
         """
         Get the paid absence ratio for the day, from 0.0 (no absence) to
         1.0 (full-day absence). Paid absences refer to time off that is
         not counted as vacation, such as sick leave or accidents.
 
+        This method supports reading a single date or a block of dates.
+
         Args:
-            date (datetime.date): The date to read data.
+            date (DateOrDateRange): The date / date range to read data.
 
         Returns:
-            float: Paid absence ratio for the date.
+            FloatOrPerDate: Paid absence ratio per date.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.
@@ -590,7 +663,7 @@ class TimeTracker(Employee, ABC):
         pass
 
     @abstractmethod
-    def set_attendance_error(self, date: dt.date | dt.datetime, error_id: int):
+    def set_attendance_error(self, date: dt.date, error_id: int):
         """
         Set or reset an attendance error on the given date.
 
@@ -610,16 +683,23 @@ class TimeTracker(Employee, ABC):
         """
         pass
 
+    @overload
+    def get_attendance_error(self, date: dt.date) -> int: ...
+    @overload
+    def get_attendance_error(self, date: DateRange) -> dict[dt.date, int]: ...
+
     @abstractmethod
-    def get_attendance_error(self, date: dt.date | dt.datetime) -> int:
+    def get_attendance_error(self, date: DateOrDateRange) -> IntOrPerDate:
         """
         Get an attendance error on the given date.
 
+        This method supports reading a single date or a block of dates.
+
         Args:
-            date (datetime.date): To date to read data.
+            date (DateOrDateRange): The date / date range to read data.
 
         Returns:
-            int: The error on the given date, 0 for no error.
+            IntOrPerDate: The error per date, 0 for no error.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.
@@ -793,20 +873,27 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         """
         pass
 
+    @overload
+    def read_day_schedule(self, date: dt.date) -> dt.timedelta: ...
+    @overload
+    def read_day_schedule(self, date: DateRange) -> dict[dt.date, dt.timedelta]: ...
+
     @abstractmethod
-    def read_day_schedule(self, date: dt.date | dt.datetime) -> dt.timedelta:
+    def read_day_schedule(self, date: DateOrDateRange) -> TimedeltaOrPerDate:
         """
         Get employee's daily schedule on a given date (how much time
         he's supposed to work).
+
+        This method supports reading a single date or a block of dates.
 
         This method is only available when the `analyzed` property is
         `True`.
 
         Args:
-            date (datetime.date): The date to read data.
+            date (DateOrDateRange): The date / date range to read data.
 
         Returns:
-            datetime.timedelta: Schedule for the day as a timedelta.
+            TimedeltaOrPerDate: Schedule per date as a timedelta.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.
@@ -818,8 +905,13 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         """
         pass
 
+    @overload
+    def read_day_worked_time(self, date: dt.date) -> dt.timedelta: ...
+    @overload
+    def read_day_worked_time(self, date: DateRange) -> dict[dt.date, dt.timedelta]: ...
+
     @abstractmethod
-    def read_day_worked_time(self, date: dt.date | dt.datetime) -> dt.timedelta:
+    def read_day_worked_time(self, date: DateOrDateRange) -> TimedeltaOrPerDate:
         """
         Get employee's worked time on a given date.
 
@@ -840,14 +932,16 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         date before relying on the returned value, especially when
         reading a date before the `target_datetime.date()`.
 
+        This method supports reading a single date or a block of dates.
+
         This method is only available when the `analyzed` property is
         `True`.
 
         Args:
-            date (datetime.date): The date to read data.
+            date (DateOrDateRange): The date / date range to read data.
 
         Returns:
-            datetime.timedelta: Worked time for the day as a timedelta.
+            TimedeltaOrPerDate: Worked time per date as a timedelta.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.
@@ -859,8 +953,13 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         """
         pass
 
+    @overload
+    def read_day_balance(self, date: dt.date) -> dt.timedelta: ...
+    @overload
+    def read_day_balance(self, date: DateRange) -> dict[dt.date, dt.timedelta]: ...
+
     @abstractmethod
-    def read_day_balance(self, date: dt.date | dt.datetime) -> dt.timedelta:
+    def read_day_balance(self, date: DateOrDateRange) -> TimedeltaOrPerDate:
         """
         Get the employee's time balance on a given date.
 
@@ -879,14 +978,16 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         computed relative to `target_datetime.time()`, which involves
         the same limitations as the `read_day_worked_time()` method.
 
+        This method supports reading a single date or a block of dates.
+
         This method is only available when the `analyzed` property is
         `True`.
 
         Args:
-            date (datetime.date): The date to read data.
+            date (DateOrDateRange): The date / date range to read data.
 
         Returns:
-            datetime.timedelta: The time balance for the specified date.
+            TimedeltaOrPerDate: The time balance per date.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.
@@ -898,8 +999,13 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         """
         pass
 
+    @overload
+    def read_day_attendance_error(self, date: dt.date) -> int: ...
+    @overload
+    def read_day_attendance_error(self, date: DateRange) -> dict[dt.date, int]: ...
+
     @abstractmethod
-    def read_day_attendance_error(self, date: dt.date | dt.datetime) -> int:
+    def read_day_attendance_error(self, date: DateOrDateRange) -> IntOrPerDate:
         """
         Read the attendance error on a given date.
 
@@ -918,11 +1024,16 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         In most cases, using an `AttendanceValidator` is preferred over
         interacting directly with these low-level methods.
 
+        This method supports reading a single date or a block of dates.
+
+        This method is only available when the `analyzed` property is
+        `True`.
+
         Args:
-            date (datetime.date): The date to read data.
+            date (DateOrDateRange): The date / date range to read data.
 
         Returns:
-            int: Detected attendance error for the date.
+            IntOrPerDate: Detected error per date, 0 for no error.
 
         Raises:
             TimeTrackerDateException: Date is outside the `tracked_year`.
@@ -935,13 +1046,14 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         pass
 
     @abstractmethod
-    def read_month_expected_daily_schedule(
-        self, month: int | dt.date | dt.datetime
-    ) -> dt.timedelta:
+    def read_month_expected_daily_schedule(self, month: int | dt.date) -> dt.timedelta:
         """
         Read the standard daily work schedule on the given month, based
         on the employee's contract percentage. This value does not
         account for weekends or vacations.
+
+        This method is only available when the `analyzed` property is
+        `True`.
 
         Args:
             month (int): The month to read data.
@@ -960,7 +1072,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         pass
 
     @abstractmethod
-    def read_month_schedule(self, month: int | dt.date | dt.datetime) -> dt.timedelta:
+    def read_month_schedule(self, month: int | dt.date) -> dt.timedelta:
         """
         Get employee's schedule on the given month (how many time
         he's supposed to work in the month).
@@ -986,9 +1098,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         pass
 
     @abstractmethod
-    def read_month_worked_time(
-        self, month: int | dt.date | dt.datetime
-    ) -> dt.timedelta:
+    def read_month_worked_time(self, month: int | dt.date) -> dt.timedelta:
         """
         Get employee's worked time on the given month.
 
@@ -1022,7 +1132,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         pass
 
     @abstractmethod
-    def read_month_balance(self, month: int | dt.date | dt.datetime) -> dt.timedelta:
+    def read_month_balance(self, month: int | dt.date) -> dt.timedelta:
         """
         Read employee's balance on the given month.
 
@@ -1056,7 +1166,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         pass
 
     @abstractmethod
-    def read_month_vacation(self, month: int | dt.date | dt.datetime) -> float:
+    def read_month_vacation(self, month: int | dt.date) -> float:
         """
         Get the total number of vacation days planned on the given month.
 
@@ -1207,6 +1317,9 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
 
         In most cases, using an `AttendanceValidator` is preferred over
         interacting directly with these low-level methods.
+
+        This method is only available when the `analyzed` property is
+        `True`.
 
         Returns:
             int: Detected attendance error for the year.
