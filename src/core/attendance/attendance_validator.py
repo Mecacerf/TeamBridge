@@ -264,7 +264,7 @@ class AttendanceValidator(ABC):
                 "Selected errors reading range "
                 f"[{start_rng} to {end_rng}[ (mode is {mode.name})."
             )
-            dates_rng = self.__date_rng(start_rng, end_rng)
+            dates_rng = DateRange(start_rng, end_rng)
 
             # This read analyses a TimeTrackerAnalyzer
             self._read_existing_errors(tracker, date_errors, dates_rng)
@@ -293,7 +293,7 @@ class AttendanceValidator(ABC):
         if dominant.status is not AttendanceErrorStatus.ERROR:
             # The application can scan for new errors
             new_anchor = self._scan_range(
-                tracker, date_errors, anchor_date, until.date()
+                tracker, date_errors, DateRange(anchor_date, until.date())
             )
             if new_anchor:
                 # Update the new validation anchor date and save the
@@ -351,20 +351,6 @@ class AttendanceValidator(ABC):
 
         return dominant.status
 
-    def __date_rng(
-        self, start: dt.date, end: dt.date | dt.datetime
-    ) -> Iterable[dt.date]:
-        """
-        Iterate over the dates range [start, end[. Iteration stops the
-        date before `end` (`end` exclusive).
-        """
-        one_day = dt.timedelta(days=1)
-
-        if isinstance(end, dt.datetime):
-            end = end.date()
-
-        return [start + i * one_day for i in range((end - start).days)]
-
     def __to_error(self, tracker: TimeTracker, error_id: int) -> AttendanceError:
         """
         Returns:
@@ -383,7 +369,7 @@ class AttendanceValidator(ABC):
         self,
         tracker: TimeTracker,
         date_errors: dict[dt.date, int],
-        dates_rng: Iterable[dt.date],
+        dates_rng: DateRange,
     ):
         """
         Read the errors that already exist in the time tracker for the
@@ -400,6 +386,7 @@ class AttendanceValidator(ABC):
         # Read existing errors from the tracker, if it has analyzing capabilities
         if isinstance(tracker, TimeTrackerAnalyzer):
             assert tracker.analyzed
+            
             # Check the global error id, if 0 there is no tracker errors
             # neither application errors to read. The iteration can be
             # stopped.
@@ -410,13 +397,13 @@ class AttendanceValidator(ABC):
                 )
                 return
 
-            for date in dates_rng:
-                if (error := tracker.read_day_attendance_error(date)) > 0:
+            for date, error in tracker.read_day_attendance_error(dates_rng).items():
+                if error > 0:
                     date_errors[date] = max(date_errors.get(date, 0), error)
 
         # Read existing errors from the application
-        for date in dates_rng:
-            if (error := tracker.get_attendance_error(date)) > 0:
+        for date, error in tracker.get_attendance_error(dates_rng).items():
+            if error > 0:
                 # Merge with existing errors
                 date_errors[date] = max(date_errors.get(date, 0), error)
 
@@ -431,8 +418,7 @@ class AttendanceValidator(ABC):
         self,
         tracker: TimeTracker,
         date_errors: dict[dt.date, int],
-        start_rng: dt.date,
-        end_rng: dt.date,
+        date_range: DateRange
     ) -> Optional[dt.date]:
         """
         Scan day-by-day to find errors from the `start_rng` date to
@@ -451,7 +437,7 @@ class AttendanceValidator(ABC):
 
         new_anchor_date = None
         errors: list[int] = []
-        for date in self.__date_rng(start_rng, end_rng):
+        for date in date_range.iter_days():
             # Apply each checker on the date and get the highest error
             # returned
             date_evts = tracker.get_clocks(date)  # Called once before checks
@@ -481,7 +467,7 @@ class AttendanceValidator(ABC):
 
         # Move the validation anchor to the new anchor date if set, or to the
         # next day to scan if no error found
-        new_anchor_date = new_anchor_date or end_rng
+        new_anchor_date = new_anchor_date or date_range.rng_end
 
         elapsed = (time.time() - start) * 1000
         logger.debug(
