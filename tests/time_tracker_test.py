@@ -364,6 +364,7 @@ def test_basic_info(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
         assert tracker.opening_day_schedule == dt.timedelta(hours=8, minutes=17)
         assert tracker.opening_vacation_days == 22
         assert tracker.opening_balance == dt.timedelta(hours=2)
+        assert tracker.max_continuous_work_time == dt.timedelta(hours=6)
 
 
 def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
@@ -668,15 +669,13 @@ def test_error_employee(factory: TimeTrackerFactory):
     DT_02_01_25 = dt.datetime(year=TEST_ERROR_EMPLOYEE_YEAR, month=1, day=2, hour=16)
     DT_03_01_25 = dt.datetime(year=TEST_ERROR_EMPLOYEE_YEAR, month=1, day=3, hour=16)
 
-    ERROR_MISSING_ENTRY = 30
-    ERROR_ENTRY = 50
+    ERROR_MISSING_ENTRY = 110
+    ERROR_ENTRY = 120
 
     with factory.create(TEST_ERROR_EMPLOYEE_ID, DT_02_01_25) as tracker:
 
         tracker.analyze(DT_02_01_25)
         assert tracker.read_day_attendance_error(DT_01_01_25) == ERROR_ENTRY
-
-        pytest.xfail("Waiting for vacation and paid absence to be input checked")
         assert tracker.read_day_attendance_error(DT_03_01_25) == ERROR_ENTRY
 
         # The missing entry error doesn't show up for current day
@@ -686,8 +685,6 @@ def test_error_employee(factory: TimeTrackerFactory):
         tracker.analyze(DT_03_01_25)
         assert tracker.read_day_attendance_error(DT_01_01_25) == ERROR_ENTRY
         assert tracker.read_day_attendance_error(DT_02_01_25) == ERROR_MISSING_ENTRY
-
-        pytest.xfail("Waiting for vacation and paid absence to be input checked")
         assert tracker.read_day_attendance_error(DT_03_01_25) == ERROR_ENTRY
 
         assert tracker.read_year_attendance_error() == ERROR_ENTRY
@@ -864,7 +861,7 @@ def test_wrong_version(factory: TimeTrackerFactory):
 
 def test_date_out_of_year(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
     """
-    Verify that an error is raised when trying to access a date out of
+    Verify that an error is raised when trying to read/write a date out of
     the time tracker's year.
     """
     with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
@@ -880,6 +877,19 @@ def test_date_out_of_year(factory: TimeTrackerFactory, tc_first_work_day: CaseDa
         with pytest.raises(TimeTrackerDateException):
             tracker.read_month_schedule(wrong_date)
         with pytest.raises(TimeTrackerDateException):
+            tracker.set_last_validation_anchor(wrong_date)
+        with pytest.raises(TimeTrackerDateException):
             tracker.analyze(
                 dt.datetime.combine(wrong_date, tc_first_work_day.datetime.time())
             )
+
+
+def test_validation_anchor(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
+    """
+    Verify that the can be written and read correctly.
+    """
+    anchor_date = dt.date(tc_first_work_day.datetime.year, 5, 3)
+    with factory.create(TEST_EMPLOYEE_ID, tc_first_work_day.datetime) as tracker:
+
+        tracker.set_last_validation_anchor(anchor_date)
+        assert tracker.get_last_validation_anchor() == anchor_date

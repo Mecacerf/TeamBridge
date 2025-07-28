@@ -33,6 +33,7 @@ from common.live_data import LiveData  # For view communication
 from model import *  # Task scheduling
 from platform_io.barcode_scanner import BarcodeScanner  # Employee ID detection
 from core.time_tracker import ClockAction  # Domain model enums
+from core.attendance.attendance_validator import AttendanceErrorStatus
 
 logger = logging.getLogger(__name__)
 
@@ -662,23 +663,118 @@ class _ConsultationSuccessState(_IViewModelState):
 
     @property
     def panel_content_text(self):
-        return (
-            f"Solde journalier : {self.format_dt(self._data.daily_worked_time)}"
-            f" / {self.format_dt(self._data.daily_scheduled_time)}\n"
-            f"Balance : {self.format_dt(self._data.daily_balance)}\n"
-            f"Solde mensuel : {self.format_dt(self._data.monthly_balance)}\n"
-        )
+        data = self._data
 
-    def format_dt(self, td: Optional[dt.timedelta]):
-        # Ensure the information is available
-        if not isinstance(td, dt.timedelta):
+        if data.dominant_error.status == AttendanceErrorStatus.ERROR:
+            # Show the error panel
+            lines = [
+                "Des erreurs empêchent l'affichage correct des informations. ",
+                "Veuillez vous adresser au secrétariat.",
+                "",
+            ]
+
+            # Keep only errors
+            errors = {
+                date: error
+                for date, error in data.date_errors.items()
+                if error.status is AttendanceErrorStatus.ERROR
+            }
+
+            lines.append(f"\u26a0 Erreur{"" if len(data.date_errors) == 1 else "s"}:")
+            lines.extend(
+                [
+                    f"   \u2022 {self._fmt_date(date)}: {err.description}"
+                    for date, err in self._data.date_errors.items()
+                    if err.status is AttendanceErrorStatus.ERROR
+                ]
+            )
+
+            # The dominant error may not be in the scanned range
+            if len(errors) == 0:
+                lines.append(
+                    f"   \u2022 date inconnue: {data.dominant_error.description}"
+                )
+        else:
+            # Normal information panel
+            lines = [
+                f"\u2022 Présent: {'oui' if data.clocked_in else 'non'}",
+                f"\u2022 Balance totale: {self._fmt_dt(data.yty_balance)}",
+                f"\u2022 Balance du mois: {self._fmt_dt(data.month_balance)}",
+                f"\u2022 Temps travaillé: {self._fmt_dt(data.day_worked_time)} / {self._fmt_dt(data.day_schedule_time)}",
+                f"\u2022 Vacances ce mois: {self._fmt_days(data.month_vacation)}",
+                f"\u2022 Vacances à planifier: {self._fmt_days(data.remaining_vacation)}",
+            ]
+
+            # Add errors if any
+            if data.date_errors:
+                lines.append(
+                    f"\u26a0 Problème{"" if len(data.date_errors) == 1 else "s"}:"
+                )
+                lines.extend(
+                    [
+                        f"   \u2022 {self._fmt_date(date)}: {err.description}"
+                        for date, err in data.date_errors.items()
+                    ]
+                )
+
+        return "\n".join(lines)
+
+    def _fmt_dt(self, td: Optional[dt.timedelta]):
+        if td is None:
             return "indisponible"
-        # Available, format time
+
         total_minutes = int(td.total_seconds() // 60)
         sign = "-" if total_minutes < 0 else ""
         abs_minutes = abs(total_minutes)
         hours, minutes = divmod(abs_minutes, 60)
-        return f"{sign}{hours:02}:{minutes:02}"
+
+        if hours == 0:
+            return f"{sign}{minutes} minute{"s" if minutes > 1 else ""}"
+        elif minutes == 0:
+            return f"{sign}{hours}h"
+        return f"{sign}{hours}h{minutes:02}"
+
+    def _fmt_date(self, date: dt.date):
+        return dt.date.strftime(date, "%d.%m.%Y")
+
+    def _fmt_days(self, days: Optional[float]) -> str:
+        """
+        Format a floating number of days as a human-readable string
+        with integer and Unicode fraction components.
+        E.g., 1.26 → '1j ¼', 0.48 → '½j', 1.93 → '2j'
+        """
+        if days is None:
+            return "indisponible"
+
+        # Manual thresholds
+        thresholds = [
+            (0.875, "", 1),  # Round up
+            (0.625, "\u00be", 0),  # ¾
+            (0.375, "\u00bd", 0),  # ½
+            (0.125, "\u00bc", 0),  # ¼
+            (0.0, "", 0),  # No fraction
+        ]
+
+        integer = int(days)
+        decimal = days - integer
+
+        for threshold, symbol, increment in thresholds:
+            if decimal >= threshold:
+                fraction_symbol = symbol
+                integer += increment
+                break
+
+        parts = []
+        if integer > 0:
+            parts.append(f"{integer}j")
+            if fraction_symbol:
+                parts.append(fraction_symbol)
+        elif fraction_symbol:
+            parts.append(f"{fraction_symbol}j")
+        else:
+            parts.append("0j")
+
+        return " ".join(parts)
 
 
 class _LoadAttendanceList(_IViewModelState):

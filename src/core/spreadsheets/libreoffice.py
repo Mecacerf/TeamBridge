@@ -176,6 +176,7 @@ def evaluate_calc(file_path: pathlib.Path):
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
             f"LibreOffice subprocess failed with return code {e.returncode}.\n"
+            f"command: {command}\n"
             f"stdout: {e.stdout.decode(errors='ignore')}\n"
             f"stderr: {e.stderr.decode(errors='ignore')}"
         ) from e
@@ -186,6 +187,7 @@ def evaluate_calc(file_path: pathlib.Path):
     if not tmp_file.exists():
         raise FileNotFoundError(
             f"LibreOffice did not produce the expected output file.\n"
+            f"command: {command}\n"
             f"stdout: {result.stdout.decode(errors='ignore')}\n"
             f"stderr: {result.stderr.decode(errors='ignore')}"
         )
