@@ -23,7 +23,7 @@ from typing import TypeVar, Callable, cast
 import openpyxl
 from openpyxl.utils import column_index_from_string as col_idx
 from openpyxl.utils import coordinate_to_tuple
-from openpyxl.utils.datetime import from_excel  # type: ignore
+from openpyxl.utils.datetime import from_excel, to_excel  # type: ignore
 
 # Internal imports
 from core.time_tracker import *
@@ -578,6 +578,11 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             # by openpyxl, which results in a time still being represented as
             # a fraction of days (a number).
             value = cast(Any, from_excel(value))
+
+        if isinstance(value, dt.timedelta):
+            # A timedelta can be converted to a time or datetime by converting
+            # it to excel fromat (fraction of days) and back again to time.
+            value = cast(Any, from_excel(to_excel(value), timedelta=False))
 
         if isinstance(value, dt.time):
             # Passthrough
