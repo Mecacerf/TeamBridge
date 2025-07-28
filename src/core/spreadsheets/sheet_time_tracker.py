@@ -262,7 +262,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         Invalidate the analysis. It closes the evaluated workbook and
         clear the `target_dt` property (=`None`).
         After this call, the `analyzed` property is `False` and the
-        `read_` method are unavailable.
+        `read_` methods are unavailable.
         """
         self.__close_eval_workbook()
         self._target_dt = None
@@ -279,6 +279,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         try:
             self._workbook_raw.save(self._raw_file_path)
+            logger.debug(
+                f"[Employee '{self._employee_id}'] Workbook saved in local cache."
+            )
         except Exception as e:
             raise TimeTrackerSaveException() from e
 
@@ -509,7 +512,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         cell = month_sheet.cell(row=date_row, column=col)
         cell.value = value
 
-        self.__save_workbook()
+        self.__invalidate_analysis()
 
     ## Utility method for type safety ##
 
@@ -861,9 +864,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
                 # The slot is available, write the clock time in HH:MM format
                 self.__set_clock_event(cell, event)
 
-                # Save the workbook and automatically invalidate a previous
-                # data analysis
-                self.__save_workbook()
+                # Invalidate a previous data analysis
+                self.__invalidate_analysis()
 
                 logger.debug(
                     f"[Employee '{self._employee_id}'] Registered clock event "
@@ -924,9 +926,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
             msgs.append(f"'{evt}' in '{cell.coordinate}'")
 
-        # Save the workbook and automatically invalidate a previous
-        # data analysis
-        self.__save_workbook()
+        # Invalidate a previous data analysis
+        self.__invalidate_analysis()
 
         logger.debug(
             f"[Employee '{self._employee_id}'] Written clock events "
@@ -1194,6 +1195,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         if self._readonly:
             raise TimeTrackerSaveException("Cannot save a read-only tracker.")
 
+        # Write the raw workbook in the local cache
+        self.__save_workbook()
+
         try:
             # Only save if in read/write mode
             self._accessor.save_spreadsheet_file(self._raw_file_path)
@@ -1201,7 +1205,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         except Exception as e:
             raise TimeTrackerSaveException() from e
 
-        logger.debug(f"[Employee '{self._employee_id}'] Spreadsheet file saved.")
+        logger.debug(
+            f"[Employee '{self._employee_id}'] Spreadsheet file saved on repository."
+        )
 
     def close(self):
         """
