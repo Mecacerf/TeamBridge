@@ -19,7 +19,7 @@ from typing import Optional, Sequence
 
 # Internal libraries
 from .attendance_validator import AttendanceChecker, AttendanceValidator
-from core.time_tracker import TimeTracker, ClockEvent
+from core.time_tracker import TimeTracker, ClockEvent, ClockAction
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +43,31 @@ class ContinuousWorkChecker(AttendanceChecker):
     ) -> bool:
         max_time = tracker.max_continuous_work_time
 
+        # Pair clock-ins and clock-outs
         evt_pairs = [(e1, e2) for e1, e2 in zip(date_evts, date_evts[1:]) if e1 and e2]
-        return any(self.__delta(e1.time, e2.time) >= max_time for e1, e2 in evt_pairs)
+        dt_pairs = [
+            (dt.datetime.combine(date, e1.time), dt.datetime.combine(date, e2.time))
+            for e1, e2 in evt_pairs
+        ]
 
-    def __delta(self, t1: dt.time, t2: dt.time) -> dt.timedelta:
-        t1_delta = dt.timedelta(hours=t1.hour, minutes=t1.minute)
-        t2_delta = dt.timedelta(hours=t2.hour, minutes=t2.minute)
-        return max(dt.timedelta(0), t2_delta - t1_delta)
+        # If the last event of the day is a midnight rollover, try to pair it
+        # with the clock-out of the next day.
+        if (
+            evt_pairs
+            and evt_pairs[-1][1] is ClockEvent.midnight_rollover()
+            and date < dt.date(date.year, 12, 31)
+        ):
+            tomorrow = date + dt.timedelta(days=1)
+            tomorrow_evts = tracker.get_clocks(tomorrow)
+            # First event is a clock-in at 00:00, second is the clock-out
+            if len(tomorrow_evts) > 1 and tomorrow_evts[1]:
+                # Replace the last clock-out of the datetimes pairs
+                dt_pairs[-1] = (
+                    dt_pairs[-1][0],
+                    dt.datetime.combine(tomorrow, tomorrow_evts[1].time),
+                )
+
+        return any(dt2 - dt1 >= max_time for dt1, dt2 in dt_pairs)
 
 
 class ClockSequenceChecker(AttendanceChecker):
@@ -68,8 +86,20 @@ class ClockSequenceChecker(AttendanceChecker):
         date: dt.date,
         date_evts: Sequence[Optional[ClockEvent]],
     ) -> bool:
-        events = [evt for evt in date_evts if evt is not None]
-        return any(e1.time >= e2.time for e1, e2 in zip(events, events[1:]))
+        evts = [evt for evt in date_evts if evt is not None]
+
+        if (
+            evts
+            and evts[-1] is ClockEvent.midnight_rollover()
+            and date < dt.date(date.year, 12, 31)
+        ):
+            # The next day first event must be a clock-in at 00:00
+            tomorrow_evts = tracker.get_clocks(date + dt.timedelta(days=1))
+            clock_in = ClockEvent(dt.time(hour=0), ClockAction.CLOCK_IN)
+            if not tomorrow_evts or tomorrow_evts[0] != clock_in:
+                return True
+
+        return any(e1.time >= e2.time for e1, e2 in zip(evts, evts[1:]))
 
 
 class SimpleAttendanceValidator(AttendanceValidator):

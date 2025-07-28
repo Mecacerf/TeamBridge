@@ -131,6 +131,13 @@ class AttendanceChecker(ABC):
         """
         pass
 
+    def reset(self):
+        """
+        Reset the checker internal state. Should be called before running
+        checks on a new time tracker.
+        """
+        pass
+
 
 ########################################################################
 #                    Attendance validator base class                   #
@@ -437,6 +444,10 @@ class AttendanceValidator(ABC):
         returned value is `None` if the range is empty (start_rng >= end_rng).
         """
         start = time.time()
+
+        # Reset the checkers to their initial state
+        for checker in self._checkers:
+            checker.reset()
 
         new_anchor_date = None
         errors: list[int] = []
