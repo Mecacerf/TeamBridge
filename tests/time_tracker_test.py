@@ -37,6 +37,7 @@ from core.time_tracker_factory import TimeTrackerFactory
 from core.time_tracker import (
     ClockEvent,
     ClockAction,
+    DateRange,
     TimeTrackerAnalysisException,
     TimeTrackerWriteException,
     TimeTrackerReadException,
@@ -429,6 +430,48 @@ def test_get_day_data(factory: TimeTrackerFactory, testcase: CaseData):
         assert day_vacation == approx(testcase.date_vacation)
         assert day_error_soft == testcase.date_error_soft
         assert day_error_desc == TEST_ERRORS_TABLE[testcase.date_error_soft]
+
+
+def test_get_data_block(factory: TimeTrackerFactory):
+    """
+    Get all vacations days of January and February in one read and check
+    data is as expected.
+    """
+    one_day = dt.timedelta(days=1)
+    expected_vacs = dict.fromkeys(
+        [dt.date(2025, 1, 1) + one_day * i for i in range(31 + 28)], 0.0
+    )
+    expected_vacs[dt.date(2025, 1, 23)] = 1.0
+    expected_vacs[dt.date(2025, 1, 24)] = 0.5
+    expected_vacs[dt.date(2025, 2, 24)] = 0.5
+
+    with factory.create(TEST_EMPLOYEE_ID, 2025) as tracker:
+        vacations = tracker.get_vacation(
+            DateRange(dt.date(2025, 1, 1), dt.date(2025, 3, 1))
+        )
+        assert vacations == expected_vacs
+
+
+def test_read_data_block(factory: TimeTrackerFactory, tc_clocked_in: CaseData):
+    """
+    Read all errors of February in one read and verify the missing clock
+    event is reported on 11.02.2025.
+    """
+    one_day = dt.timedelta(days=1)
+    expected_errors = dict.fromkeys(
+        [dt.date(2025, 2, 1) + one_day * i for i in range(28)], 0
+    )
+    expected_errors[dt.date(2025, 2, 11)] = 110
+
+    with factory.create(TEST_EMPLOYEE_ID, tc_clocked_in.datetime.year) as tracker:
+        # The tracker must be analyzed for the 12.02 to have the error reported
+        # the 11.02.
+        tracker.analyze(tc_clocked_in.datetime + dt.timedelta(days=1))
+
+        errors = tracker.read_day_attendance_error(
+            DateRange(dt.date(2025, 2, 1), dt.date(2025, 3, 1))
+        )
+        assert errors == expected_errors
 
 
 @pytest.mark.parametrize(

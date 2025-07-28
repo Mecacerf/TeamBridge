@@ -24,6 +24,9 @@ from core.time_tracker import (
     TimeTrackerAnalyzer,
     TimeTrackerDateException,
     ClockEvent,
+    DateRange,
+    DateOrDateRange,
+    IntOrPerDate,
 )
 from core.attendance.attendance_validator import (
     AttendanceChecker,
@@ -120,14 +123,18 @@ class TimeTrackerMock:
     def get_last_validation_anchor(self) -> dt.date:
         return self.anchor
 
-    def get_attendance_error(self, date: dt.date) -> int:
-        return self._app_errors.get(date, 0)
+    def get_attendance_error(self, date: DateOrDateRange) -> IntOrPerDate:
+        if isinstance(date, dt.date):
+            return self._app_errors.get(date, 0)
+        return {date: self._app_errors.get(date, 0) for date in date.iter_days()}
 
     def get_attendance_error_desc(self, error_id: int) -> str:
         return f"Mock error {error_id}"
 
-    def read_day_attendance_error(self, date: dt.date) -> int:
-        return self._tracker_errors.get(date, 0)
+    def read_day_attendance_error(self, date: DateOrDateRange) -> IntOrPerDate:
+        if isinstance(date, dt.date):
+            return self._tracker_errors.get(date, 0)
+        return {date: self._tracker_errors.get(date, 0) for date in date.iter_days()}
 
     def read_year_attendance_error(self) -> int:
         return self._year_error
@@ -139,17 +146,12 @@ class TimeTrackerMock:
         self.anchor = date
 
 
-def dates_range(start: dt.date, end: dt.date) -> Iterable[dt.date]:
-    day = dt.timedelta(days=1)
-    return [start + i * day for i in range((end - start).days)]
-
-
 def test_existing_errors_simple_tracker():
     """
     Test the private `_read_existing_errors` of the validator. It should
     return the application errors contained in the given range.
     """
-    dates_rng = dates_range(dt.date(2025, 1, 1), dt.date(2025, 2, 10))
+    dates_rng = DateRange(dt.date(2025, 1, 1), dt.date(2025, 2, 10))
 
     mock = cast(
         TimeTracker,
@@ -190,7 +192,7 @@ def test_existing_errors_tracker_analyzer():
 
     TimeTrackerAnalyzer.register(TimeTrackerAnalyzerMock)
 
-    dates_rng = dates_range(dt.date(2025, 1, 2), dt.date(2025, 2, 10))
+    dates_rng = DateRange(dt.date(2025, 1, 2), dt.date(2025, 2, 10))
 
     mock = cast(
         TimeTrackerAnalyzer,
@@ -238,7 +240,7 @@ def test_existing_errors_tracker_analyzer_abort():
 
     TimeTrackerAnalyzer.register(TimeTrackerAnalyzerMock)
 
-    dates_rng = dates_range(dt.date(2025, 1, 2), dt.date(2025, 2, 10))
+    dates_rng = DateRange(dt.date(2025, 1, 2), dt.date(2025, 2, 10))
 
     mock = cast(
         TimeTrackerAnalyzer,
@@ -296,7 +298,9 @@ def test_scan_11_days_range():
     new_anchor = dt.date(2025, 1, 10)
 
     date_errors = {}
-    error_date = validator._scan_range(mock, date_errors, start_date, end_date)
+    error_date = validator._scan_range(
+        mock, date_errors, DateRange(start_date, end_date)
+    )
 
     assert date_errors == results
     assert error_date == new_anchor
@@ -316,7 +320,9 @@ def test_scan_until_nothing():
     validator = CustomValidator([])
 
     date_errors = {}
-    error_date = validator._scan_range(mock, date_errors, start_date, end_date)
+    error_date = validator._scan_range(
+        mock, date_errors, DateRange(start_date, end_date)
+    )
 
     assert date_errors == {}
     assert error_date == None
@@ -335,7 +341,9 @@ def test_scan_until_no_error():
     validator = CustomValidator([])  # No error if no checker
 
     date_errors = {}
-    error_date = validator._scan_range(mock, date_errors, start_date, end_date)
+    error_date = validator._scan_range(
+        mock, date_errors, DateRange(start_date, end_date)
+    )
 
     assert date_errors == {}
     assert error_date == end_date

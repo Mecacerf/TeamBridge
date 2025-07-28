@@ -17,13 +17,13 @@ Contact: info@mecacerf.ch
 # Standard libraries
 import logging
 import datetime as dt
-from typing import TypeVar, Callable, cast
+from typing import TypeVar, Callable, Iterable, cast
 
 # Third-party libraries
 import openpyxl
 from openpyxl.utils import column_index_from_string as col_idx
 from openpyxl.utils import coordinate_to_tuple
-from openpyxl.utils.datetime import from_excel  # type: ignore
+from openpyxl.utils.datetime import from_excel, to_excel  # type: ignore
 
 # Internal imports
 from core.time_tracker import *
@@ -262,7 +262,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         Invalidate the analysis. It closes the evaluated workbook and
         clear the `target_dt` property (=`None`).
         After this call, the `analyzed` property is `False` and the
-        `read_` method are unavailable.
+        `read_` methods are unavailable.
         """
         self.__close_eval_workbook()
         self._target_dt = None
@@ -279,6 +279,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         try:
             self._workbook_raw.save(self._raw_file_path)
+            logger.debug(
+                f"[Employee '{self._employee_id}'] Workbook saved in local cache."
+            )
         except Exception as e:
             raise TimeTrackerSaveException() from e
 
@@ -288,7 +291,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
     ## Utility methods to find sheet or row indexes ##
 
-    def __get_date_row(self, date: dt.date | dt.datetime) -> int:
+    def __get_date_row(self, date: dt.date) -> int:
         """
         Args:
             date (date | datetime): Input date.
@@ -306,7 +309,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
         return date.day - 1 + self._row_first_month_date
 
-    def __get_month_sheet_idx(self, month: int | dt.date | dt.datetime) -> int:
+    def __get_month_sheet_idx(self, month: int | dt.date) -> int:
         """
         Args:
             month (int | date | datetime): Input month.
@@ -372,7 +375,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
     def __get_month_cell_value(
         self,
         workbook: openpyxl.Workbook,
-        month: int | dt.date | dt.datetime,
+        month: int | dt.date,
         cell: str,
         cast_func: Callable[[Any], T],
     ) -> T:
@@ -401,22 +404,22 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
     def __get_month_day_cell_value(
         self,
         workbook: openpyxl.Workbook,
-        date: dt.date | dt.datetime,
+        date: DateOrDateRange,
         col: int,
         cast_func: Callable[[Any], T],
-    ) -> T:
+    ) -> T | dict[dt.date, T]:
         """
-        Get a cell value from a month sheet with type checking. The cell
-        row is calculated based on the given date.
+        Get a single cell value or a block of cell values from a month
+        sheet with type checking.
 
         Args:
             workbook (openpyxl.Workbook): The workbook to read.
-            date (date | datetime): Day and month information.
+            date (DateOrDateRange): Date or date range.
             col (int): Data column.
             cast_func (Callable[[Any], T]): Type casting function.
 
         Returns:
-            T: Value of expected type.
+            T | dict[dt.date, T]: Value(s) per date.
 
         Raises:
             TimeTrackerValueException: Conversion unsupported for the
@@ -425,14 +428,41 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         """
         assert not self._closed, CLOSED_ERROR_MSG
 
-        day_row = self.__get_date_row(date)
-        sheet = workbook.worksheets[self.__get_month_sheet_idx(date)]
-        value = sheet.cell(row=day_row, column=col).value
-        return self.__cast(value, cast_func)
+        if isinstance(date, DateRange):
+            values: list[T] = []
+            # Use iter_rows() that is optimized for block reading. Split the
+            # range by month.
+            for rng in date.split_months():
+                month = rng.rng_start.month
+                rng_end_incl = rng.rng_end - dt.timedelta(days=1)
+                sheet = workbook.worksheets[self.__get_month_sheet_idx(month)]
+                for val in sheet.iter_rows(
+                    min_row=self.__get_date_row(rng.rng_start),
+                    max_row=self.__get_date_row(rng_end_incl),
+                    min_col=col,
+                    max_col=col,
+                    values_only=True,
+                ):
+                    values.append(self.__cast(val[0], cast_func))
+
+            # Associate the read values with their date
+            dates = date.iter_days()
+            assert len(dates) == len(values)
+            return dict(zip(dates, values))
+
+        elif isinstance(date, dt.date):
+            # Single cell read
+            day_row = self.__get_date_row(date)
+            sheet = workbook.worksheets[self.__get_month_sheet_idx(date)]
+            value = sheet.cell(row=day_row, column=col).value
+            return self.__cast(value, cast_func)
+
+        else:
+            assert False, f"Date or a DateRange expected, not {type(date)}."
 
     def __read_month_cell_value(
         self,
-        month: int | dt.date | dt.datetime | None,
+        month: int | dt.date | None,
         cell: str,
         cast_func: Callable[[Any], T],
     ) -> T:
@@ -455,10 +485,10 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
     def __read_month_day_cell_value(
         self,
-        date: dt.date | dt.datetime | None,
+        date: DateOrDateRange | None,
         col: int,
         cast_func: Callable[[Any], T],
-    ) -> T:
+    ) -> T | dict[dt.date, T]:
         """
         Same as `self.__get_month_day_cell_value()` but the value is read
         in the evaluated workbook, if available.
@@ -480,9 +510,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
     ## Utility methods to set cell values ##
 
-    def __set_month_day_cell_value(
-        self, date: dt.date | dt.datetime, col: int, value: Any
-    ):
+    def __set_month_day_cell_value(self, date: dt.date, col: int, value: Any):
         """
         Set a cell value in the month sheet. The cell row is calculated
         based on the given date.
@@ -509,7 +537,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         cell = month_sheet.cell(row=date_row, column=col)
         cell.value = value
 
-        self.__save_workbook()
+        self.__invalidate_analysis()
 
     ## Utility method for type safety ##
 
@@ -578,6 +606,11 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             # by openpyxl, which results in a time still being represented as
             # a fraction of days (a number).
             value = cast(Any, from_excel(value))
+
+        if isinstance(value, dt.timedelta):
+            # A timedelta can be converted to a time or datetime by converting
+            # it to excel fromat (fraction of days) and back again to time.
+            value = cast(Any, from_excel(to_excel(value), timedelta=False))
 
         if isinstance(value, dt.time):
             # Passthrough
@@ -767,7 +800,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
     ## Time Tracker read / write methods ##
 
-    def get_clocks(self, date: dt.date | dt.datetime) -> list[Optional[ClockEvent]]:
+    def get_clocks(self, date: dt.date) -> list[Optional[ClockEvent]]:
         """
         Implementation of `TimeTracker.get_clocks()`.
 
@@ -818,7 +851,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
                 return clock_events[: i + 1]
         return []  # All values are None
 
-    def register_clock(self, date: dt.date | dt.datetime, event: ClockEvent):
+    def register_clock(self, date: dt.date, event: ClockEvent):
         """
         Implementation of `TimeTracker.register_clock()`.
 
@@ -856,9 +889,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
                 # The slot is available, write the clock time in HH:MM format
                 self.__set_clock_event(cell, event)
 
-                # Save the workbook and automatically invalidate a previous
-                # data analysis
-                self.__save_workbook()
+                # Invalidate a previous data analysis
+                self.__invalidate_analysis()
 
                 logger.debug(
                     f"[Employee '{self._employee_id}'] Registered clock event "
@@ -872,9 +904,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             f"No available time slot to write the clock event '{event}'."
         )
 
-    def write_clocks(
-        self, date: dt.date | dt.datetime, events: list[Optional[ClockEvent]]
-    ):
+    def write_clocks(self, date: dt.date, events: list[Optional[ClockEvent]]):
         """
         Implementation of `TimeTracker.write_clocks()`.
 
@@ -919,9 +949,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
 
             msgs.append(f"'{evt}' in '{cell.coordinate}'")
 
-        # Save the workbook and automatically invalidate a previous
-        # data analysis
-        self.__save_workbook()
+        # Invalidate a previous data analysis
+        self.__invalidate_analysis()
 
         logger.debug(
             f"[Employee '{self._employee_id}'] Written clock events "
@@ -929,18 +958,18 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             f"{" | ".join(msgs)}"
         )
 
-    def set_vacation(self, date: dt.date | dt.datetime, day_ratio: float):
+    def set_vacation(self, date: dt.date, day_ratio: float):
         self.__set_month_day_cell_value(date, self._col_day_vacation, day_ratio)
 
-    def get_vacation(self, date: dt.date | dt.datetime) -> float:
+    def get_vacation(self, date: DateOrDateRange) -> FloatOrPerDate:
         return self.__get_month_day_cell_value(
             self._workbook_raw, date, self._col_day_vacation, self.__to_float_none_safe
         )
 
-    def set_paid_absence(self, date: dt.date | dt.datetime, day_ratio: float):
+    def set_paid_absence(self, date: dt.date, day_ratio: float):
         self.__set_month_day_cell_value(date, self._col_day_paid_absence, day_ratio)
 
-    def get_paid_absence(self, date: dt.date | dt.datetime) -> float:
+    def get_paid_absence(self, date: DateOrDateRange) -> FloatOrPerDate:
         return self.__get_month_day_cell_value(
             self._workbook_raw,
             date,
@@ -948,12 +977,12 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             self.__to_float_none_safe,
         )
 
-    def set_attendance_error(self, date: dt.date | dt.datetime, error_id: int):
+    def set_attendance_error(self, date: dt.date, error_id: int):
         self.__set_month_day_cell_value(
             date, self._col_day_soft_error, error_id or None
         )
 
-    def get_attendance_error(self, date: dt.date | dt.datetime) -> int:
+    def get_attendance_error(self, date: DateOrDateRange) -> IntOrPerDate:
         return self.__get_month_day_cell_value(
             self._workbook_raw, date, self._col_day_soft_error, self.__to_int_none_safe
         )
@@ -1106,51 +1135,47 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
                 )
             )
 
-    def read_day_schedule(self, date: dt.date | dt.datetime) -> dt.timedelta:
+    def read_day_schedule(self, date: DateOrDateRange) -> TimedeltaOrPerDate:
         return self.__read_month_day_cell_value(
             date, self._col_day_schedule, self.__to_timedelta
         )
 
-    def read_day_worked_time(self, date: dt.date | dt.datetime) -> dt.timedelta:
+    def read_day_worked_time(self, date: DateOrDateRange) -> TimedeltaOrPerDate:
         return self.__read_month_day_cell_value(
             date, self._col_day_worked_time, self.__to_timedelta
         )
 
-    def read_day_balance(self, date: dt.date | dt.datetime) -> dt.timedelta:
+    def read_day_balance(self, date: DateOrDateRange) -> TimedeltaOrPerDate:
         return self.__read_month_day_cell_value(
             date, self._col_day_balance, self.__to_timedelta
         )
 
-    def read_day_attendance_error(self, date: dt.date | dt.datetime) -> int:
+    def read_day_attendance_error(self, date: DateOrDateRange) -> IntOrPerDate:
         return self.__read_month_day_cell_value(
             date, self._col_day_sheet_error, self.__to_int_none_safe
         )
 
-    def read_month_expected_daily_schedule(
-        self, month: int | dt.date | dt.datetime
-    ) -> dt.timedelta:
+    def read_month_expected_daily_schedule(self, month: int | dt.date) -> dt.timedelta:
         return self.__read_month_cell_value(
             month, self._cell_exp_day_schedule, self.__to_timedelta
         )
 
-    def read_month_schedule(self, month: int | dt.date | dt.datetime) -> dt.timedelta:
+    def read_month_schedule(self, month: int | dt.date) -> dt.timedelta:
         return self.__read_month_cell_value(
             month, self._cell_month_schedule, self.__to_timedelta
         )
 
-    def read_month_worked_time(
-        self, month: int | dt.date | dt.datetime
-    ) -> dt.timedelta:
+    def read_month_worked_time(self, month: int | dt.date) -> dt.timedelta:
         return self.__read_month_cell_value(
             month, self._cell_month_worked_time, self.__to_timedelta
         )
 
-    def read_month_balance(self, month: int | dt.date | dt.datetime) -> dt.timedelta:
+    def read_month_balance(self, month: int | dt.date) -> dt.timedelta:
         return self.__read_month_cell_value(
             month, self._cell_month_balance, self.__to_timedelta
         )
 
-    def read_month_vacation(self, month: int | dt.date | dt.datetime) -> float:
+    def read_month_vacation(self, month: int | dt.date) -> float:
         return self.__read_month_cell_value(month, self._cell_month_vacation, float)
 
     def read_year_vacation(self) -> float:
@@ -1189,6 +1214,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         if self._readonly:
             raise TimeTrackerSaveException("Cannot save a read-only tracker.")
 
+        # Write the raw workbook in the local cache
+        self.__save_workbook()
+
         try:
             # Only save if in read/write mode
             self._accessor.save_spreadsheet_file(self._raw_file_path)
@@ -1196,7 +1224,9 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         except Exception as e:
             raise TimeTrackerSaveException() from e
 
-        logger.debug(f"[Employee '{self._employee_id}'] Spreadsheet file saved.")
+        logger.debug(
+            f"[Employee '{self._employee_id}'] Spreadsheet file saved on repository."
+        )
 
     def close(self):
         """
