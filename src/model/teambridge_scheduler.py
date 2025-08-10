@@ -26,6 +26,7 @@ from core.time_tracker import *
 from core.time_tracker_factory import TimeTrackerFactory
 from core.attendance.attendance_validator import AttendanceErrorStatus
 from core.attendance.simple_attendance_validator import SimpleAttendanceValidator
+from core.attendance.simple_attendance_validator import ERROR_MIDNIGHT_ROLLOVER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -218,9 +219,63 @@ class TeamBridgeScheduler:
     ) -> IModelMessage:
         """
         Clock in/out the employee at given datetime.
+
+        A midnight rollover is done if:
+        - This is the first event of the day and;
+        - The datetime is in the morning (typically 00:00 <= now < 4:00) and;
+        - The last clock-out is missing the day before and;
+        - The time between now and the clock-in of yesterday is less than
+            8 hours.
         """
+
+        def check_midnight_rollover(tracker: TimeTrackerAnalyzer) -> bool:
+            """Check the midnight rollover conditions."""
+            if action is ClockAction.CLOCK_OUT:
+                return False
+
+            # Yesterday must be the same year
+            yesterday = datetime - dt.timedelta(days=1)
+            if yesterday.year != tracker.tracked_year:
+                return False
+
+            yesterday_evts = tracker.get_clocks(yesterday)
+            if not yesterday_evts:
+                return False
+
+            yday_evt = yesterday_evts[-1]
+            assert yday_evt
+            yday_evt_dt = dt.datetime.combine(yesterday.date(), yday_evt.time)
+            evts_delta_t = datetime - yday_evt_dt
+
+            is_first_evt = len(tracker.get_clocks(datetime)) == 0
+            is_morning = dt.time(0, 0) < datetime.time() < dt.time(4, 0)
+            is_in_yesterday = tracker.is_clocked_in(yesterday)
+            is_dt_ok = evts_delta_t <= dt.timedelta(hours=8)
+
+            return is_first_evt and is_morning and is_in_yesterday and is_dt_ok
+
         try:
             with self._factory.create(employee_id, datetime) as tracker:
+                # Register a midnight rollover if the condition is respected
+                if check_midnight_rollover(tracker):
+                    # To indicate a rollover, a special clock-out event is
+                    # registered yesterday at midnight (24:00) and a clock-in
+                    # event is registered today at midnight (00:00).
+                    yesterday = datetime - dt.timedelta(days=1)
+                    tracker.register_clock(
+                        yesterday, ClockEvent.midnight_rollover()
+                    )
+                    tracker.register_clock(
+                        datetime,
+                        ClockEvent(
+                            time=dt.time(0, 0), action=ClockAction.CLOCK_IN
+                        ),
+                    )
+                    # A custom error is set to inform the HR
+                    tracker.set_attendance_error(datetime, ERROR_MIDNIGHT_ROLLOVER_ID)
+
+                    logger.info(f"Midnight rollover registered for {tracker!s}.")
+
                 # No action specified: clock-out if clocked in and
                 # clock-in if clocked out
                 if action is None:
