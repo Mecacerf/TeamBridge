@@ -19,7 +19,7 @@ from abc import ABC
 from enum import Enum
 import datetime as dt
 import time
-from typing import Sequence, Iterable
+from typing import Sequence
 
 # Internal libraries
 from ..time_tracker import *

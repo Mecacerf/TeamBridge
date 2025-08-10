@@ -37,12 +37,12 @@ if (Test-Path $venvActivate) {
     # Build teambridge from the spec file
     pyinstaller deploy\\TeamBridge.exe.spec --clean --workpath deploy\\build --distpath deploy\\dist
 
-    # Pause to allow the user to consult the logs
-    pause
-
     # Deactivate the virtual environment
     deactivate
 }
 else {
     Write-Error "Failed to find activation script!"
 }
+
+# Pause to allow the user to consult the logs
+pause

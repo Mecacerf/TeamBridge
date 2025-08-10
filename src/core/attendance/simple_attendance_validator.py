@@ -15,13 +15,26 @@ Contact: info@mecacerf.ch
 # Standard libraries
 import logging
 import datetime as dt
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Final
 
 # Internal libraries
 from .attendance_validator import AttendanceChecker, AttendanceValidator
 from core.time_tracker import TimeTracker, ClockEvent, ClockAction
 
 logger = logging.getLogger(__name__)
+
+
+########################################################################
+#                   External attendance errors ids                     #
+########################################################################
+
+
+ERROR_MIDNIGHT_ROLLOVER_ID: Final = 30
+
+
+########################################################################
+#                           Custom checkers                            #
+########################################################################
 
 
 class ContinuousWorkChecker(AttendanceChecker):
