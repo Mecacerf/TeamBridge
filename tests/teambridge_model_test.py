@@ -80,14 +80,14 @@ def test_clock_action(scheduler: TeamBridgeScheduler):
 
 def test_midnight_rollover(factory: TimeTrackerFactory, scheduler: TeamBridgeScheduler):
     """
-    Register a clock-in event before midnight and a clock-out after 
+    Register a clock-in event before midnight and a clock-out after
     midnight and check that a midnight rollover has been registered.
     """
     # Register a clock out at 12h15
     handle = scheduler.start_clock_action_task(
         TEST_EMPLOYEE_ID,
         dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=12, minute=15)),
-        ClockAction.CLOCK_OUT
+        ClockAction.CLOCK_OUT,
     )
     # Wait until the task finishes
     assert isinstance(wait_result(scheduler, handle), EmployeeEvent)
@@ -96,7 +96,7 @@ def test_midnight_rollover(factory: TimeTrackerFactory, scheduler: TeamBridgeSch
     handle = scheduler.start_clock_action_task(
         TEST_EMPLOYEE_ID,
         dt.datetime.combine(date=TEST_DATE, time=dt.time(hour=22, minute=0)),
-        ClockAction.CLOCK_IN
+        ClockAction.CLOCK_IN,
     )
     # Wait until the task finishes
     assert isinstance(wait_result(scheduler, handle), EmployeeEvent)
@@ -105,8 +105,7 @@ def test_midnight_rollover(factory: TimeTrackerFactory, scheduler: TeamBridgeSch
     # A midnight rollover should be done
     tomorrow = TEST_DATE + dt.timedelta(days=1)
     handle = scheduler.start_clock_action_task(
-        TEST_EMPLOYEE_ID,
-        dt.datetime.combine(date=tomorrow, time=dt.time(hour=2))
+        TEST_EMPLOYEE_ID, dt.datetime.combine(date=tomorrow, time=dt.time(hour=2))
     )
     # Wait until the task finishes
     assert isinstance(wait_result(scheduler, handle), EmployeeEvent)
