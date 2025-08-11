@@ -195,6 +195,7 @@ def configure_logging():
     logging.basicConfig(
         level=logging.DEBUG,  # Minimal level to log
         format=LOGGING_FORMAT,
+        encoding="utf-8",
         handlers=[
             # Log to files
             logging.handlers.TimedRotatingFileHandler(
