@@ -237,7 +237,7 @@ class SheetsRepoAccessor:
             # Failed to acquire, try to release the lock
             if not readonly:
                 self.__release_file_lock(lock_file_path)
-                logger.debug(f"Released '{lock_file_path}' after copying failed.")
+                logger.debug(f"Released '{lock_file_path}' after acquisition failed.")
         except TimeoutError:
             pass
 
@@ -433,10 +433,8 @@ class SheetsRepoAccessor:
 
         while time.time() < timeout:
             try:
-                os.remove(lock_path)
+                pathlib.Path(lock_path).unlink(missing_ok=True)
                 return  # Lock successfully released
-            except FileNotFoundError:
-                return  # Lock already released (nothing to do)
             except OSError as e:
                 # Likely permission error, file in use, etc.
                 oserror = e
