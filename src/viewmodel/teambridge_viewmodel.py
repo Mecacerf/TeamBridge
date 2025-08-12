@@ -498,7 +498,7 @@ class _ClockActionState(_IViewModelState):
             if isinstance(msg, EmployeeEvent):
                 return _ClockSuccessState(msg)
             elif isinstance(msg, ModelError):
-                return _ErrorState(msg)
+                return _ErrorState("Clock action task failed", msg)
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -539,7 +539,7 @@ class _ClockSuccessState(_IViewModelState):
             if isinstance(msg, EmployeeData):
                 return _ConsultationSuccessState(msg, timeout=20.0)
             elif isinstance(msg, ModelError):
-                return _ErrorState(msg)
+                return _ErrorState("Consultation task failed", msg)
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -610,7 +610,7 @@ class _ConsultationActionState(_IViewModelState):
             if isinstance(msg, EmployeeData):
                 return _ConsultationSuccessState(msg, timeout=60.0)
             elif isinstance(msg, ModelError):
-                return _ErrorState(msg)
+                return _ErrorState("Consultation task failed", msg)
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -801,11 +801,14 @@ class _LoadAttendanceList(_IViewModelState):
 
             if result and isinstance(result, AttendanceList):
                 return _ShowAttendanceList(result)
-            return _ErrorState()
+            return _ErrorState("No attendance list result received.")
 
         # Check watchdog
         if time.time() > self._timeout:
-            return _ErrorState()
+            return _ErrorState(
+                f"Timed out while loading attendance list "
+                f"({ATTENDANCE_LIST_TIMEOUT} sec)."
+            )
 
     def exit(self):
         self.fsm.model.drop(self._handle)
@@ -943,17 +946,24 @@ class _ErrorState(_IViewModelState):
     Entry:
         - Form anywhere, on error
     Exit:
-        - Upon acknowledgment by sengind the reset to clock action signal
+        - Upon acknowledgment by sending the reset to clock action signal
     """
 
-    def __init__(self, error: Optional[ModelError] = None):
+    def __init__(self, msg: str, error: Optional[ModelError] = None):
         super().__init__()
         # Save error
+        self._msg = msg
         self._error = error
 
     def entry(self):
         # Reset next action to prevent wrong acknowledgment
         self.fsm.next_action = ViewModelAction.DEFAULT_ACTION
+        logger.error(f"State machine entered error state. Reason '{self._msg}'.")
+        if self._error:
+            logger.error(
+                f"A task failed with error ({self._error.error_code}) "
+                f"'{self._error.message}'."
+            )
 
     def do(self) -> Optional[IStateBehavior]:
         # Check if acknowledged

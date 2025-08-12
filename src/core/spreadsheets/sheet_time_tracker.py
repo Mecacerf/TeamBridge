@@ -162,8 +162,6 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         - Only the getters of the `TimeTracker` interface are available.
         - The tracker opening process is about 10 times faster.
         """
-        start_ts = time.time()
-
         self._closed = False
         self._accessor = accessor
         self._readonly = readonly
@@ -172,6 +170,8 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         self._raw_file_path = accessor.acquire_spreadsheet_file(
             self._employee_id, readonly=readonly
         )
+
+        start_ts = time.time()  # Do not include acquisition time
         self._workbook_raw: openpyxl.Workbook = openpyxl.load_workbook(
             self._raw_file_path, data_only=False, read_only=readonly
         )
