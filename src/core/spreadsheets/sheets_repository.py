@@ -166,6 +166,8 @@ class SheetsRepoAccessor:
             OSError: For general operating system-related errors
                 (e.g., I/O issues).
         """
+        start = time.time()
+
         repo_path = self.__acquire_repository_path()
 
         # Search the employee's file in the remote files repository
@@ -223,9 +225,11 @@ class SheetsRepoAccessor:
         while time.time() < timeout:
             try:
                 shutil.copy2(repo_file, local_file)
+
+                elapsed = (time.time() - start) * 1000.0
                 logger.debug(
                     f"Acquired '{repo_file}' in local cache as '{local_file}' "
-                    f"(read-only={readonly})."
+                    f"(read-only={readonly}) in {elapsed:.0f}ms."
                 )
                 return local_file
 
@@ -241,8 +245,9 @@ class SheetsRepoAccessor:
         except TimeoutError:
             pass
 
+        elapsed = (time.time() - start) * 1000.0
         raise TimeoutError(
-            f"Unable to acquire '{repo_file}' after {SAVE_FILE_TIMEOUT} seconds."
+            f"Unable to acquire '{repo_file}' after {elapsed:.0f}ms."
         ) from oserror
 
     def save_spreadsheet_file(self, local_file: pathlib.Path):
@@ -272,6 +277,8 @@ class SheetsRepoAccessor:
             FileNotFoundError: If the specified local file does not exist.
             OSError: For general I/O or file system-related issues.
         """
+        start = time.time()
+
         repo_path = self.__acquire_repository_path()
         remote_cache_path = repo_path / SHEETS_REMOTE_CACHE
         # Make sure the remote cache exists
@@ -289,7 +296,8 @@ class SheetsRepoAccessor:
                 # Step 2: Atomically move to final repository location
                 os.replace(repo_cache_file, repo_file)
 
-                logger.debug(f"Saved '{repo_file}'.")
+                elapsed = (time.time() - start) * 1000.0
+                logger.debug(f"Saved '{repo_file}' in {elapsed:.0f}ms.")
                 return
             except OSError as e:
                 oserror = e
@@ -302,8 +310,9 @@ class SheetsRepoAccessor:
                 except Exception:
                     pass  # Best effort cleanup; ignore any errors
 
+        elapsed = (time.time() - start) * 1000.0
         raise TimeoutError(
-            f"Unable to save '{repo_file}' after {SAVE_FILE_TIMEOUT} seconds."
+            f"Unable to save '{repo_file}' after {elapsed:.0f}ms."
         ) from oserror
 
     def release_spreadsheet_file(

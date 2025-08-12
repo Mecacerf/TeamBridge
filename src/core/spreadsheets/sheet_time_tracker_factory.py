@@ -258,6 +258,12 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
             TimeTrackerOpenException: Raised on year mismatch when
                 `strict` is `True`.
         """
+        logger.debug(
+            f"Creating a {SheetTimeTracker.__name__} for employee "
+            f"ID '{employee_id}' (readonly={readonly}). "
+            f"Accessor path is '{accessor.remote_repository}'."
+        )
+        
         tracker = SheetTimeTracker(employee_id, accessor=accessor, readonly=readonly)
 
         # Sanity check tracked year
