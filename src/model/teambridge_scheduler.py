@@ -262,14 +262,10 @@ class TeamBridgeScheduler:
                     # registered yesterday at midnight (24:00) and a clock-in
                     # event is registered today at midnight (00:00).
                     yesterday = datetime - dt.timedelta(days=1)
-                    tracker.register_clock(
-                        yesterday, ClockEvent.midnight_rollover()
-                    )
+                    tracker.register_clock(yesterday, ClockEvent.midnight_rollover())
                     tracker.register_clock(
                         datetime,
-                        ClockEvent(
-                            time=dt.time(0, 0), action=ClockAction.CLOCK_IN
-                        ),
+                        ClockEvent(time=dt.time(0, 0), action=ClockAction.CLOCK_IN),
                     )
                     # A custom error is set to inform the HR
                     tracker.set_attendance_error(datetime, ERROR_MIDNIGHT_ROLLOVER_ID)

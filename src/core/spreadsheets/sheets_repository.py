@@ -51,7 +51,7 @@ SHEETS_REMOTE_CACHE = ".remote_cache"
 REPOSITORY_DELAY = 1.0
 REPOSITORY_TIMEOUT = 20.0
 
-# retry delay and timeout for saving a file in the repository
+# Retry delay and timeout for copying/saving a file in the repository
 SAVE_FILE_DELAY = 0.5
 SAVE_FILE_TIMEOUT = 3.0
 
@@ -186,8 +186,9 @@ class SheetsRepoAccessor:
 
         repo_file = matches[0]
 
+        lock_file_path = str(repo_file.resolve()) + LOCK_FILE_EXTENSION
         if not readonly:
-            self.__acquire_file_lock(str(repo_file.resolve()) + LOCK_FILE_EXTENSION)
+            self.__acquire_file_lock(lock_file_path)
 
         # Make sure the local cache exists
         os.makedirs(self._local_cache, exist_ok=True)
@@ -217,13 +218,32 @@ class SheetsRepoAccessor:
             # legal to overwrite an old file in the local cache.
             local_file = pathlib.Path(self._local_cache) / repo_file.name
 
-        shutil.copy2(repo_file, local_file)
+        oserror = None
+        timeout = time.time() + SAVE_FILE_TIMEOUT
+        while time.time() < timeout:
+            try:
+                shutil.copy2(repo_file, local_file)
+                logger.debug(
+                    f"Acquired '{repo_file}' in local cache as '{local_file}' "
+                    f"(read-only={readonly})."
+                )
+                return local_file
 
-        logger.debug(
-            f"Acquired '{repo_file}' in local cache as '{local_file}' "
-            f"(read-only={readonly})."
-        )
-        return local_file
+            except OSError as e:
+                oserror = e
+                time.sleep(SAVE_FILE_DELAY)
+
+        try:
+            # Failed to acquire, try to release the lock
+            if not readonly:
+                self.__release_file_lock(lock_file_path)
+                logger.debug(f"Released '{lock_file_path}' after acquisition failed.")
+        except TimeoutError:
+            pass
+
+        raise TimeoutError(
+            f"Unable to acquire '{repo_file}' after {SAVE_FILE_TIMEOUT} seconds."
+        ) from oserror
 
     def save_spreadsheet_file(self, local_file: pathlib.Path):
         """
@@ -413,10 +433,8 @@ class SheetsRepoAccessor:
 
         while time.time() < timeout:
             try:
-                os.remove(lock_path)
+                pathlib.Path(lock_path).unlink(missing_ok=True)
                 return  # Lock successfully released
-            except FileNotFoundError:
-                return  # Lock already released (nothing to do)
             except OSError as e:
                 # Likely permission error, file in use, etc.
                 oserror = e

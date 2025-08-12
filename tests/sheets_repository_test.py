@@ -13,9 +13,11 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 import pytest
+from pytest import MonkeyPatch
 from pathlib import Path
 import threading
 import time
+import logging
 
 # Internal libraries
 from .test_constants import *
@@ -24,6 +26,8 @@ from core.spreadsheets.sheets_repository import (
     FILE_LOCK_TIMEOUT,
     LOCK_FILE_EXTENSION,
 )
+
+logger = logging.getLogger(__name__)
 
 # Local spreadsheet files cache folder
 TEST_LOCAL_CACHE_FOLDER = str((Path(TEST_ASSETS_DST_FOLDER) / "local_cache").resolve())
@@ -48,6 +52,25 @@ def repository(arrange_assets: None) -> SheetsRepoAccessor:
     )
 
 
+def test_repo_available(repository: SheetsRepoAccessor):
+    """
+    Check that the repository is available and reachable.
+    """
+    assert repository.check_repo_available()
+
+
+def test_repo_unavailable(repository: SheetsRepoAccessor):
+    """
+    Check that the repository is unavailable if the folder has been
+    deleted. The accessor may try to wakeup a potentially sleeping drive
+    so this test can take some time.
+    """
+    import shutil
+
+    shutil.rmtree(TEST_REPOSITORY_ROOT)
+    assert not repository.check_repo_available()
+
+
 def test_acquire_sheet(repository: SheetsRepoAccessor):
     """
     Test that a spreadsheet file is correctly acquired from the repository.
@@ -66,6 +89,36 @@ def test_acquire_sheet(repository: SheetsRepoAccessor):
     # Assert that file exists in local cache and is locked on repository
     assert sheet_path.exists()
     assert repo_lock_file.exists()
+
+
+def test_acquire_sheet_fails(repository: SheetsRepoAccessor, monkeypatch: MonkeyPatch):
+    """
+    Stub the `shutil.copy2()` function that is used in the acquiring process
+    to copy the sheet file from the repository to the local cache to fail
+    every time. Ensure the function returns an error and correctly releases
+    the lock file.
+    """
+
+    def stub_copy2(src, dst):
+        logger.debug(f"Stub shutil.copy2() called with src='{src}' and dst='{dst}'.")
+        raise OSError("Stub error")
+
+    # Patch the specific shutil reference the module is holding
+    import core.spreadsheets.sheets_repository as sheets_repo
+
+    monkeypatch.setattr(sheets_repo.shutil, "copy2", stub_copy2)
+
+    with pytest.raises(TimeoutError):
+        repository.acquire_spreadsheet_file(TEST_EMPLOYEE_ID)
+
+    local_cache_file = Path(TEST_LOCAL_CACHE_FOLDER) / TEST_SPREADSHEET_FILE
+    repo_lock_file = Path(TEST_REPOSITORY_ROOT) / (
+        TEST_SPREADSHEET_FILE + LOCK_FILE_EXTENSION
+    )
+
+    # Neither of the local file or the lock must exist
+    assert not local_cache_file.exists()
+    assert not repo_lock_file.exists()
 
 
 def test_acquire_read_only(repository: SheetsRepoAccessor):
@@ -156,6 +209,26 @@ def test_save_sheet(repository: SheetsRepoAccessor):
         assert file.read(len(DUMMY_CONTENT)) == DUMMY_CONTENT
 
 
+def test_save_sheet_fails(repository: SheetsRepoAccessor, monkeypatch: MonkeyPatch):
+    """
+    Stub the `os.replace()` function to always fail and check the saving
+    process results in an error.
+    """
+
+    def stub_replace(src, dst):
+        logger.debug(f"Stub os.replace() called with src='{src}' and dst='{dst}'.")
+        raise OSError("Stub error")
+
+    sheet_file = repository.acquire_spreadsheet_file(TEST_EMPLOYEE_ID)
+
+    import core.spreadsheets.sheets_repository as sheets_repo
+
+    monkeypatch.setattr(sheets_repo.os, "replace", stub_replace)
+
+    with pytest.raises(TimeoutError):
+        repository.save_spreadsheet_file(sheet_file)
+
+
 def test_release_sheet(repository: SheetsRepoAccessor):
     """
     Acquire a spreadsheet file from the repository and release it. Test
@@ -171,6 +244,25 @@ def test_release_sheet(repository: SheetsRepoAccessor):
 
     assert not sheet_path.exists()
     assert not repo_lock_file.exists()
+
+
+def test_release_sheet_fails(repository: SheetsRepoAccessor, monkeypatch: MonkeyPatch):
+    """
+    Stub the `Path.unlink()` method to make the release process fails and
+    check proper exception is raised by the function.
+    """
+    sheet_path = repository.acquire_spreadsheet_file(TEST_EMPLOYEE_ID)
+
+    def stub_unlink(self, *args, **kwargs):
+        logger.debug(f"Stub Path.unlink() called on {self}.")
+        raise PermissionError("Stub permission error")
+
+    import core.spreadsheets.sheets_repository as sheets_repo
+
+    monkeypatch.setattr(sheets_repo.pathlib.Path, "unlink", stub_unlink)
+
+    with pytest.raises(TimeoutError):
+        repository.release_spreadsheet_file(sheet_path)
 
 
 def test_list_employee(repository: SheetsRepoAccessor):
