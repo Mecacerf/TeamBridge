@@ -93,7 +93,7 @@ from typing import Optional, Any
 # TODO: texts and configurations in a specific file
 import locale
 
-SET_LOCALE = "fr_FR.UTF-8"
+SET_LOCALE = "fr_CH"
 
 # Run method call interval in seconds
 RUN_INTERVAL = float(1.0 / 30.0)
@@ -162,11 +162,20 @@ class TeamBridgeApp(App):
         if theme:
             self.theme = theme
 
-        # Try to set the locale
+        # Try to set the local language setting
         try:
             locale.setlocale(locale.LC_TIME, SET_LOCALE)
+            # Confirm the locale has been set
+            actual = locale.getlocale(locale.LC_TIME)
+            if actual[0] != SET_LOCALE:
+                raise UnicodeError(f"Cannot set locale to '{SET_LOCALE}'.")
+
         except Exception:
             logger.warning(f"Unable to set the desired locale '{SET_LOCALE}'.")
+
+        actual = locale.getlocale(locale.LC_TIME)
+        encoding = locale.getpreferredencoding(False)
+        logger.info(f"Using locale {actual} with preferred encoding '{encoding}'.")
 
     def get_theme(self) -> ViewTheme:
         """
