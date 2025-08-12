@@ -113,6 +113,7 @@
             BoxLayout:
                 orientation: 'vertical'
                 pos_hint: {'x': 0.015, 'y': -0.05}
+                size_hint: 1, 1
 
                 Label:
                     text: root.clock_time
@@ -132,24 +133,40 @@
                     color: app.theme.text_secondary_color
                     font_name: 'InterRegular'
 
-            # Show company name next to company logo
-            Label:
-                pos_hint: {'center_x': 0.825, 'center_y': 0.48}
-                size_hint: 0.5, 1
-                text: "Mecacerf SA"
-                color: app.theme.text_secondary_color
-                halign: 'center'
-                valign: 'center'
-                text_size: self.size
-                font_size: self.height * 0.35
-                font_name: 'InterRegular'
-
-            # Right justified logo
-            Image:
+            BoxLayout:
+                orientation: 'horizontal'
                 pos_hint: {'right': 1.0, 'y': 0.0}
-                size_hint: 0.086, 0.92
-                source: 'assets/images/company_logo.png'
-                fit_mode: 'contain'
+                size_hint: 0.5, 0.93  # Keeps some margin with the top
+
+                # Show company name next to company logo
+                Label:
+                    size_hint: 0.9, 1
+                    text: "Mecacerf SA"
+                    color: app.theme.text_secondary_color
+                    halign: 'right'
+                    valign: 'center'
+                    text_size: self.size
+                    font_size: self.height * 0.37
+                    font_name: 'InterRegular'
+
+                Widget:
+                    size_hint_x: 0.018
+
+                # Right justified square logo 
+                # Putting it in a relative layout allows to magnify it slightly
+                # out of the box layout, which gives a nice effect closer to the
+                # original logo
+                RelativeLayout:
+                    size_hint_x: None
+                    size_hint_y: 1
+                    width: self.height  # The logo stays square
+
+                    Image:
+                        pos_hint: {'right': 0.95, 'top': 1.0}  # Anchor at top-right to exceed at bottom-left
+                        size_hint: 1.05, 1.05
+                        source: 'assets/images/company_logo.png'
+                        fit_mode: 'contain'
+
 
         # Leave some space at the top to center the buttons     
         Widget:
