@@ -1,0 +1,80 @@
+{
+  "repository": {
+    "repository": {
+      "type": "str",
+      "required": true,
+      "default": "samples/"
+    }
+  },
+  "scanner": {
+    "camera_id": {
+      "type": "int",
+      "required": true,
+      "default": 0,
+      "min": 0
+    },
+    "scan_rate": {
+      "type": "int",
+      "required": true,
+      "default": 4,
+      "min": 1
+    }
+  },
+  "ui": {
+    "fullscreen": {
+      "type": "bool",
+      "required": true,
+      "default": true
+    },
+    "dark_mode": {
+      "type": "bool",
+      "required": true,
+      "default": false
+    }
+  },
+  "sleep": {
+    "sleep_timeout": {
+      "type": "int",
+      "default": 120,
+      "min": 0
+    },
+    "sleep_brightness": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 100
+    },
+    "work_brightness": {
+      "type": "int",
+      "min": 0,
+      "max": 100
+    }
+  },
+  "report.email": {
+    "smtp_server": {
+      "type": "str"
+    },
+    "smtp_port": {
+      "type": "int",
+      "default": 587,
+      "min": 0,
+      "max": 65535
+    },
+    "sender_address": {
+      "type": "str"
+    },
+    "sender_password": {
+      "type": "str"
+    },
+    "recipient_address": {
+      "type": "str"
+    }
+  },
+  "debug": {
+    "debug": {
+      "type": "bool",
+      "required": true,
+      "default": false
+    }
+  }
+}
