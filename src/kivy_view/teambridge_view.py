@@ -4,10 +4,11 @@ File: time_tracker_view.py
 Author: Bastian Cerf
 Date: 02/03/2025
 Description:
-    This Kivy-based view displays dynamic text content provided by the ViewModel and
-    interacts with it through the next action signal. It serves as the presentation
-    layer, updating its interface based on ViewModel data and sending user-triggered
-    events back to the ViewModel to drive application logic.
+    This Kivy-based view displays dynamic text content provided by the
+    ViewModel and interacts with it through the next action signal. It
+    serves as the presentation layer, updating its interface based on
+    ViewModel data and sending user-triggered events back to the ViewModel
+    to drive application logic.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -89,20 +90,14 @@ import time
 from enum import Enum
 from typing import Optional, Any
 
-# Try to set the locale to french
-# TODO: texts and configurations in a specific file
-import locale
-
-SET_LOCALE = "fr_CH"
-
 # Run method call interval in seconds
 RUN_INTERVAL = float(1.0 / 30.0)
 
 
 class TeamBridgeApp(App):
     """
-    Teambridge application class. The application starts the graphic library and
-    create the main screen.
+    Teambridge application class. The application starts the graphic
+    library and creates the main screen.
     """
 
     # The kv file is located in the assets/ folder
@@ -161,21 +156,6 @@ class TeamBridgeApp(App):
         # Set theme if provided
         if theme:
             self.theme = theme
-
-        # Try to set the local language setting
-        try:
-            locale.setlocale(locale.LC_TIME, SET_LOCALE)
-            # Confirm the locale has been set
-            actual = locale.getlocale(locale.LC_TIME)
-            if actual[0] != SET_LOCALE:
-                raise UnicodeError(f"Cannot set locale to '{SET_LOCALE}'.")
-
-        except Exception:
-            logger.warning(f"Unable to set the desired locale '{SET_LOCALE}'.")
-
-        actual = locale.getlocale(locale.LC_TIME)
-        encoding = locale.getpreferredencoding(False)
-        logger.info(f"Using locale {actual} with preferred encoding '{encoding}'.")
 
     def get_theme(self) -> ViewTheme:
         """

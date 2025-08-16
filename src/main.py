@@ -14,96 +14,10 @@ Contact: info@mecacerf.ch
 # Import general purpose libraries
 import sys
 import logging, logging.handlers
+import locale
 
 # Internal libraries
 from local_config import LocalConfig
-
-
-def main() -> int:
-    """
-    Application entry point.
-    """
-    configure_logging()
-    logger = logging.getLogger("Main")
-    logger.info("-- Mecacerf TeamBridge Application --")
-
-    # Load local configuration
-    config = LocalConfig()
-    config.show_config()
-
-    repo_conf = config.section("repository")
-    scan_conf = config.section("scanner")
-    sleep_conf = config.section("sleep")
-    ui_conf = config.section("ui")
-    debug_conf = config.section("debug")    
-
-    # Import program backend modules
-    from core.spreadsheets.sheet_time_tracker_factory import SheetTimeTrackerFactory
-    from platform_io.barcode_scanner import BarcodeScanner
-    from platform_io.sleep_manager import SleepManager
-    from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
-    from model.teambridge_scheduler import TeamBridgeScheduler
-
-    # Create the model and inject a sheet time tracker factory
-    factory = SheetTimeTrackerFactory(repo_conf["repository"])
-    model = TeamBridgeScheduler(tracker_factory=factory)
-
-    scanner = BarcodeScanner()
-    viewmodel = TeamBridgeViewModel(
-        model=model,
-        scanner=scanner,
-        debug_mode=debug_conf["debug"],
-        scan_rate=scan_conf["scan_rate"],
-        cam_idx=scan_conf["camera_id"],
-    )
-
-    # Configure sleep mode, it is disabled if timeout is None or 0
-    sleep_timeout = 0
-    sleep_manager = None
-    # If the sleep timeout is specified, the sleep mode is enabled
-    if sleep_conf["sleep_timeout"]:
-        # Sleep mode is enabled, configure the sleep manager
-        if sleep_conf["work_brightness"]:
-            # Use specified work brightness
-            sleep_manager = SleepManager(
-                low_brightness_lvl=sleep_conf["sleep_brightness"],
-                high_brightness_lvl=sleep_conf["work_brightness"],
-            )
-        else:
-            # Use automatic screen brightness (do not specify it).
-            sleep_manager = SleepManager(low_brightness_lvl=sleep_conf["sleep_brightness"])
-        # Set the sleep timeout
-        sleep_timeout = sleep_conf["sleep_timeout"]
-
-    def start_kivy_frontend():
-        """
-        Start the Kivy frontend.
-        """
-        # Import the view module first to configure Kivy first
-        from kivy_view.teambridge_view import TeamBridgeApp
-
-        # Configure UI theme
-        from kivy_view.view_theme import DARK_THEME
-
-        theme = DARK_THEME if ui_conf["dark_mode"] else None
-
-        # Create the teambridge application using Kivy frontend
-        app = TeamBridgeApp(
-            viewmodel,
-            fullscreen=ui_conf["fullscreen"],
-            theme=theme,
-            sleep_manager=sleep_manager,
-            sleep_timeout=sleep_timeout,
-        )
-
-        # Start application
-        logger.info(f"Starting application '{app}' using Kivy frontend.")
-        app.run()
-
-    # Start the application frontend
-    start_kivy_frontend()
-
-    return 0
 
 
 def configure_logging():
@@ -158,6 +72,122 @@ def configure_logging():
             console_handler,
         ],
     )
+
+
+configure_logging()
+logger = logging.getLogger("main")
+
+
+def main() -> int:
+    """
+    Application entry point.
+    """
+    logger.info("-- Mecacerf TeamBridge Application --")
+
+    # Load local configuration
+    config = LocalConfig()
+    config.show_config()
+
+    repo_conf = config.section("repository")
+    scan_conf = config.section("scanner")
+    sleep_conf = config.section("sleep")
+    ui_conf = config.section("ui")
+    lang_conf = config.section("language")
+    debug_conf = config.section("debug")
+
+    # Import program backend modules
+    from core.spreadsheets.sheet_time_tracker_factory import SheetTimeTrackerFactory
+    from platform_io.barcode_scanner import BarcodeScanner
+    from platform_io.sleep_manager import SleepManager
+    from viewmodel.teambridge_viewmodel import TeamBridgeViewModel
+    from model.teambridge_scheduler import TeamBridgeScheduler
+
+    # Create the model and inject a sheet time tracker factory
+    factory = SheetTimeTrackerFactory(repo_conf["repository"])
+    model = TeamBridgeScheduler(tracker_factory=factory)
+
+    scanner = BarcodeScanner()
+    viewmodel = TeamBridgeViewModel(
+        model=model,
+        scanner=scanner,
+        debug_mode=debug_conf["debug"],
+        scan_rate=scan_conf["scan_rate"],
+        cam_idx=scan_conf["camera_id"],
+    )
+
+    # Configure sleep mode, it is disabled if timeout is None or 0
+    sleep_timeout = 0
+    sleep_manager = None
+    # If the sleep timeout is specified, the sleep mode is enabled
+    if sleep_conf["sleep_timeout"]:
+        # Sleep mode is enabled, configure the sleep manager
+        if sleep_conf["work_brightness"]:
+            # Use specified work brightness
+            sleep_manager = SleepManager(
+                low_brightness_lvl=sleep_conf["sleep_brightness"],
+                high_brightness_lvl=sleep_conf["work_brightness"],
+            )
+        else:
+            # Use automatic screen brightness (do not specify it).
+            sleep_manager = SleepManager(
+                low_brightness_lvl=sleep_conf["sleep_brightness"]
+            )
+        # Set the sleep timeout
+        sleep_timeout = sleep_conf["sleep_timeout"]
+
+    # Configure locale
+    if lang_conf["locale"]:
+        set_locale(lang_conf["locale"])
+
+    def start_kivy_frontend():
+        """
+        Start the Kivy frontend.
+        """
+        # Import the view module first to configure Kivy first
+        from kivy_view.teambridge_view import TeamBridgeApp
+
+        # Configure UI theme
+        from kivy_view.view_theme import DARK_THEME
+
+        theme = DARK_THEME if ui_conf["dark_mode"] else None
+
+        # Create the teambridge application using Kivy frontend
+        app = TeamBridgeApp(
+            viewmodel,
+            fullscreen=ui_conf["fullscreen"],
+            theme=theme,
+            sleep_manager=sleep_manager,
+            sleep_timeout=sleep_timeout,
+        )
+
+        # Start application
+        logger.info(f"Starting application '{app}' using Kivy frontend.")
+        app.run()
+
+    # Start the application frontend
+    start_kivy_frontend()
+
+    return 0
+
+
+def set_locale(value: str):
+    """
+    Try to set the desired locale configuration.
+    """
+    # Try to set the local language setting
+    try:
+        locale.setlocale(locale.LC_TIME, value)
+        # Confirm the locale has been set
+        actual = locale.getlocale(locale.LC_TIME)
+        if actual[0] != value:
+            raise UnicodeError(f"Cannot set locale to '{value}'.")
+
+    except Exception:
+        logger.warning(f"Unable to set the desired locale '{value}'.")
+
+    actual = locale.getlocale(locale.LC_TIME)
+    encoding = locale.getpreferredencoding(False)
+    logger.info(f"Using locale {actual} with preferred encoding '{encoding}'.")
 
 
 # Program entry

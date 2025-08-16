@@ -37,7 +37,7 @@ class LocalConfig(SingletonRegister):
 
     def section(self, section: str) -> MappingProxyType[str, Any]:
         return self._view[section]
-    
+
     def show_config(self):
         """ """
         logger.info(f"Using local configuration '{CONFIG_FILE_PATH}'.")

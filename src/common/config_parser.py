@@ -68,11 +68,19 @@ class _SchemaEntry:
 
         self._required = self.__get_field(entry, key, "required", bool, False)
         self._default = self.__get_field(entry, key, "default", None, None)
+        self._comment = self.__get_field(entry, key, "comment", str, None)
         self._min = self.__get_field(entry, key, "min", int, None)
         self._max = self.__get_field(entry, key, "max", int, None)
 
         # Check no extra entry exist
-        diff = set(entry.keys()) - {"type", "required", "default", "min", "max"}
+        diff = set(entry.keys()) - {
+            "type",
+            "required",
+            "default",
+            "comment",
+            "min",
+            "max",
+        }
         if diff:
             raise ConfigError(
                 f"Unrecognized field(s): '{", ".join(diff)}' for key '{key}'."
@@ -104,6 +112,10 @@ class _SchemaEntry:
     @property
     def default(self) -> Any:
         return self._default
+
+    @property
+    def comment(self) -> str:
+        return self._comment
 
     def check_and_cast(self, value: str) -> tuple[Optional[str], Any]:
         """
@@ -205,13 +217,52 @@ class ConfigParser:
             config[section] = {}
             for key in self._schema[section].keys():
                 default = self._schema[section][key]._default
-                config[section][key] = str("" if default is None else default).lower()
+                value = str("" if default is None else default)
+                if isinstance(default, bool):
+                    value = value.lower()
+                config[section][key] = value
 
         # Create and write the default configuration file
         with open(config_path, "x") as file:
             config.write(file, space_around_delimiters=True)
 
+        # Annotate the freshly created file with help comments
+        self.__annotate_config(config_path)
+
         logger.info(f"Initial configuration file setup under '{config_path}'.")
+
+    def __annotate_config(self, config_path: str):
+        """
+        Read an INI file as plain text and insert comments for known keys.
+        Writes the result to path_out.
+        """
+        current_section = None
+        out_lines = []
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+
+                # detect section headers
+                if stripped.startswith("[") and stripped.endswith("]"):
+                    current_section = stripped.strip("[]")
+                    out_lines.append(line)
+                    continue
+
+                # detect key=value lines
+                if "=" in stripped and current_section is not None:
+                    key = stripped.split("=", 1)[0].strip()
+                    comment = self._schema[current_section][key].comment
+                    if comment:
+                        out_lines.append(f"; {comment}\n")  # insert before
+                    out_lines.append(line)
+                    continue
+
+                # default: just copy
+                out_lines.append(line)
+
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.writelines(out_lines)
 
     def __validate_data(self):
         """ """

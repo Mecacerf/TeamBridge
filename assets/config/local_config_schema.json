@@ -3,7 +3,8 @@
     "repository": {
       "type": "str",
       "required": true,
-      "default": "samples/"
+      "default": "samples/",
+      "comment": "Path to remote spreadsheets repository"
     }
   },
   "scanner": {
@@ -11,12 +12,14 @@
       "type": "int",
       "required": true,
       "default": 0,
+      "comment": "Camera device identifier",
       "min": 0
     },
     "scan_rate": {
       "type": "int",
       "required": true,
       "default": 4,
+      "comment": "Camera scanning rate [Hz], higher rate improves scan speed while consuming more CPU",
       "min": 1
     }
   },
@@ -32,27 +35,37 @@
       "default": false
     }
   },
+  "language": {
+    "locale": {
+      "type": "str",
+      "default": "fr_CH"
+    }
+  },
   "sleep": {
     "sleep_timeout": {
       "type": "int",
       "default": 120,
+      "comment": "Sleep mode inactivity timeout [s], left empty to disable",
       "min": 0
     },
     "sleep_brightness": {
       "type": "int",
       "default": 0,
+      "comment": "Screen brightness percentage [0-100] in sleep mode",
       "min": 0,
       "max": 100
     },
     "work_brightness": {
       "type": "int",
+      "comment": "Screen brightness percentage [0-100] in working mode, left empty to select at startup",
       "min": 0,
       "max": 100
     }
   },
   "report.email": {
     "smtp_server": {
-      "type": "str"
+      "type": "str",
+      "comment": "SMTP server URL, such as smtp.gmail.com, left empty to disable email reports"
     },
     "smtp_port": {
       "type": "int",
