@@ -149,6 +149,8 @@ def main() -> int:
     if general_conf["locale"]:
         set_locale(general_conf["locale"])
 
+    raise OSError("test euh error")
+
     def start_kivy_frontend():
         """
         Start the Kivy frontend.
@@ -192,14 +194,45 @@ def set_locale(value: str):
         if actual[0] != value:
             raise UnicodeError(f"Cannot set locale to '{value}'.")
 
-    except Exception:
-        logger.warning(f"Unable to set the desired locale '{value}'.")
+    except Exception as ex:
+        logger.warning(f"Unable to set the desired locale '{value}': {ex}")
 
     actual = locale.getlocale(locale.LC_TIME)
     encoding = locale.getpreferredencoding(False)
     logger.info(f"Using locale {actual} with preferred encoding '{encoding}'.")
 
 
+def show_error_dialog(exc: Exception):
+    """
+    Create a hidden Tkinter root just for the error dialog
+    """
+    print("error dialog show")
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+    except ImportError:
+        logger.error("Cannot show an error dialog, tkinter seems uninstalled.")
+
+    root = tk.Tk()
+    root.withdraw()
+
+    messagebox.showerror(
+        "Critical Error",
+        f"The program has encountered a critical error:\n\n{exc}\n\n"
+        "The application will now close.",
+    )
+
+    root.destroy()
+
+
 # Program entry
 if __name__ == "__main__":
-    sys.exit(main())
+    exit_code = 0
+    try:
+        main()
+    except Exception as ex:
+        exit_code = 1
+        logger.info("will show dialog")
+        show_error_dialog(ex)
+
+    sys.exit(exit_code)
