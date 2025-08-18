@@ -4,12 +4,12 @@ File: local_config.py
 Author: Bastian Cerf
 Date: 15/08/2025
 Description:
-    Read, parse and validate the local configuration file 
-    `local_config.ini` against its schema under 
+    Read, parse and validate the local configuration file
+    `local_config.ini` against its schema under
     `assets/config/local_config_schema.json`.
 
-    The `LocalConfig` class is a thread-safe singleton loaded at 
-    startup that can be accessed from any place of the application. 
+    The `LocalConfig` class is a thread-safe singleton loaded at
+    startup that can be accessed from any place of the application.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch

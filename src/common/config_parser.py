@@ -36,7 +36,7 @@ import logging
 import json
 import configparser
 from pathlib import Path
-from typing import Iterable, Type, Any, Optional, Callable
+from typing import Iterable, Type, Any, Optional, Callable, NamedTuple, TextIO
 from types import MappingProxyType
 
 logger = logging.getLogger(__name__)
@@ -58,8 +58,38 @@ class ConfigError(Exception):
 
 
 ########################################################################
-#                         Internal class(es)                           #
+#                         Internal helpers                             #
 ########################################################################
+
+
+def _str_to_bool(s: str) -> bool:
+    """
+    Convert the given string to a bool, if possible.
+
+    Raises:
+        ValueError: string doesn't contain a valid boolean.
+    """
+    s = s.strip().lower()
+    if s in {"true", "1", "yes", "on"}:
+        return True
+    elif s in {"false", "0", "no", "off"}:
+        return False
+
+    raise ValueError(f"Invalid boolean string: {s}")
+
+
+class ConversionResult(NamedTuple):
+    """
+    Holds the conversion result returned by
+    `_SchemaEntry.check_and_convert()`.
+
+    The message is only available if `error` is `True` and the `value`
+    only if `error` is `False`.
+    """
+
+    error: bool
+    message: Optional[str]
+    value: Optional[Any]
 
 
 class _SchemaEntry:
@@ -70,31 +100,12 @@ class _SchemaEntry:
     the value from the .ini file (str) to its expected type.
     """
 
-    @staticmethod
-    def __str_to_bool(s: str) -> bool:
-        """
-        Convert the given string to a bool, if possible.
-
-        Raises:
-            ValueError: string doesn't contain a valid boolean.
-        """
-        if isinstance(s, bool):
-            return s
-
-        s = s.strip().lower()
-        if s in {"true", "1", "yes", "on"}:
-            return True
-        elif s in {"false", "0", "no", "off"}:
-            return False
-
-        raise ValueError(f"Invalid boolean string: {s}")
-
     # Map the variable types with their converting function
-    CONV_MAP: dict[str, Callable[[str], Any]] = {
+    _CONV_MAP: dict[str, Callable[[str], Any]] = {
         "int": int,
         "float": float,
         "str": str,
-        "bool": __str_to_bool,
+        "bool": _str_to_bool,
     }
 
     def __init__(self, key: str, entry: dict[str, Any]):
@@ -102,7 +113,7 @@ class _SchemaEntry:
         Create and parse the schema entry.
 
         Args:
-            key (str): The key oof the key-value pair, used to improve
+            key (str): The key of the key-value pair, used to improve
                 logging.
             entry (dict[str, Any]): Entry from the JSON file.
         """
@@ -113,12 +124,12 @@ class _SchemaEntry:
         if field not in entry:
             raise ConfigError(f"'{field}' field missing for key '{key}'.")
 
-        if entry[field] not in self.CONV_MAP:
+        if entry[field] not in self._CONV_MAP:
             raise ConfigError(f"Type '{entry[field]}' unrecognized for key '{key}'.")
 
         # Value type and str to type converting function
         self._vartype: str = entry[field]
-        self._conv_func = self.CONV_MAP[self._vartype]
+        self._conv_func = self._CONV_MAP[self._vartype]
 
         # Parse optional fields
         self._required = self.__get_field(entry, "required", bool, False)
@@ -127,7 +138,7 @@ class _SchemaEntry:
         self._min = self.__get_field(entry, "min", int, None)
         self._max = self.__get_field(entry, "max", int, None)
 
-        # Check no extra entry exist
+        # Check no extra entry exists
         diff = set(entry.keys()) - {
             "type",
             "required",
@@ -139,7 +150,7 @@ class _SchemaEntry:
 
         if diff:
             raise ConfigError(
-                f"Unrecognized field(s): '{", ".join(diff)}' for key '{key}'."
+                f"Unrecognized field(s): '{', '.join(diff)}' for key '{key}'."
             )
 
     def __get_field(
@@ -188,37 +199,39 @@ class _SchemaEntry:
     def comment(self) -> str:
         return self._comment
 
-    def check_and_convert(self, value: str) -> tuple[Optional[str], Any]:
+    def check_and_convert(self, value: str) -> ConversionResult:
         """
         Check the schema rules for the given value and convert it to
         its defined type.
 
-        The first argument returned is an optional string describing the
-        error, if any. If `None`, the second argument is available and
-        holds the converted value. Note that it can also be `None` if the
-        value is missing and it's allowed by the rules.
+        The returned value is a named tuple containing the conversion
+        results.
 
         Args:
             value (str): Value to check and convert.
 
         Returns:
-            Optional[str]: Error description or `None` on success.
-            Any: Value converted to the type defined in the schema,
-                `None` if the value is missing or an error occurred.
+            ConversionResult:
+            error (bool): `True` on error, `False` if the `value` is
+                available.
+            message (str): Error description if any.
+            value (Any): Value converted to the type defined in the
+                schema.
         """
         # Check requireness
         if not value:
             if self._required:
-                return "value is required", None
+                return ConversionResult(True, "Value is required", None)
             else:
                 # Value is missing and it's allowed
-                return None, None
+                return ConversionResult(False, None, None)
 
         # Check expected value type by trying to convert it
         try:
             value = self._conv_func(value)
         except ValueError:
-            return (
+            return ConversionResult(
+                True,
                 f"type error for value '{value}' of type "
                 f"'{type(value).__name__}', '{self._vartype}' required",
                 None,
@@ -227,12 +240,16 @@ class _SchemaEntry:
         # Check integer or float is in range
         if isinstance(value, (int, float)):
             if self._min is not None and value < self._min:
-                return f"{value} is less than {self._min}", None
+                return ConversionResult(
+                    True, f"{value} is lower than {self._min}", None
+                )
             if self._max is not None and value > self._max:
-                return f"{value} is greater than {self._max}", None
+                return ConversionResult(
+                    True, f"{value} is greater than {self._max}", None
+                )
 
         # All checks passed, return casted value
-        return None, value
+        return ConversionResult(False, None, value)
 
 
 ########################################################################
@@ -247,14 +264,38 @@ class ConfigParser:
     It provides a view on the loaded data dictionary.
     """
 
-    def __init__(self, schema_path: str, config_path: str):
+    def __init__(
+        self,
+        schema: str | TextIO,
+        config: Optional[str | TextIO] = None,
+        name: Optional[str] = None,
+        gen_default: bool = True,
+    ):
         """
         Initialize configuration data from a configuration file (.ini)
         and validate it against the provided schema (.json).
 
+        If the configuration is given as a path (str) and no file exists
+        at this path, a default configuration is inferred from the schema
+        and the file is created.
+
+        It is possible, although uncommon, to leave the `config` argument
+        empty. It will only load the schema. The configuration can always
+        be loaded and validated in a second time using
+        `load_and_check_config()`.
+
         Args:
-            schema_path (str): Path to the schema file (.json).
-            config_path (str): Path to the configuration file (.ini).
+            schema (str | TextIO): Path to the schema file (.json) or an
+                already opened file-like object.
+            config (str | TextIO | None): Path to the configuration file
+                (.ini), an already opened file-like object or leave empty
+                to only load the schema.
+            name (Optional[str]): A name to identify the configuration.
+                The config file path is used by default. Note this must
+                be set if using file-like objects.
+            gen_default (bool): When `True` and a path is given for the
+                `config` argument, a default configuration file is
+                generated if no file already exists at this path.
 
         Raises:
             ConfigError: Any error related to data parsing, validation,
@@ -264,42 +305,64 @@ class ConfigParser:
         self._config = configparser.ConfigParser(interpolation=None)
         self._data: dict[str, dict[str, Any]] = {}
 
-        # Retrieve config name from path
-        path = Path(config_path)
-        self._name = path.name
+        # Retrieve config name
+        if not name:
+            if not isinstance(config, str):  # If file-like or None
+                raise ConfigError("A configuration name is required.")
+            path = Path(config)
+            self._name = path.name
+        else:
+            self._name = name
 
-        self.__load_schema(schema_path)
+        self.__load_schema(schema)
 
-        # Create a default configuration file if non-existing
-        if not path.exists():
-            self.__create_config(config_path)
+        # Create a default configuration file if not existing
+        if gen_default and isinstance(config, str) and not Path(config).exists():
+            try:
+                with open(config, "x+", encoding="utf-8") as file:
+                    self.generate_default(file)
 
-        self.__load_config(config_path)
-        self.__validate_data()
+            except Exception as e:
+                raise ConfigError(
+                    "Error generating the default configuration file "
+                    f"for '{self._name}'."
+                ) from e
 
-    def __load_schema(self, path: str):
+            logger.info(f"Initial configuration file setup under '{config}'.")
+
+        if config:
+            self.load_and_check_config(config)
+
+    def __load_schema(self, source: str | TextIO):
         """
         Load the schema file (.json). Populate `self._schema` data
         structure.
 
         Args:
-            path (str): Path to schema file.
+            path (str | TextIO): Path to the schema file or an already
+                opened file-like object.
 
         Raises:
             ConfigError: Wrap any exception that may occur during json
                 file opening and parsing.
         """
         try:
-            with open(path, "r", encoding="utf-8") as file:
-                schema = json.load(file)
+            if isinstance(source, str):
+                with open(source, "r", encoding="utf-8") as file:
+                    schema = json.load(file)
+            else:
+                schema = json.load(source)
+
         except FileNotFoundError:
-            raise ConfigError(f"Schema file not found for {self._name}.")
+            raise ConfigError(f"Schema file not found for '{self._name}'.")
         except OSError as e:
-            raise ConfigError(f"OS error occurred opening {self._name}.") from e
+            raise ConfigError(f"OS error occurred opening '{self._name}'.") from e
         except json.JSONDecodeError as e:
-            raise ConfigError(f"Schema parsing error occurred for {self._name}.") from e
+            raise ConfigError(
+                f"Schema parsing error occurred for '{self._name}'."
+            ) from e
         except Exception as e:
-            raise ConfigError(f"Exception occurred for {self._name}.") from e
+            raise ConfigError(f"Exception occurred for '{self._name}'.") from e
 
         # Read the JSON data and populate the schema
         for section in schema.keys():
@@ -309,20 +372,25 @@ class ConfigParser:
                 entry = _SchemaEntry(key, schema[section][key])
                 self._schema[section][key] = entry
 
-    def __load_config(self, path: str):
+    def __load_config(self, source: str | TextIO):
         """
         Load the configuration file (.ini) into `self._config`.
 
         Args:
-            path (str): Path to configuration file.
+            path (str | TextIO): Path to the configuration file or an
+                already opened file-like object.
 
         Raises:
             ConfigError: Wrap any error that may occur when opening or
                 parsing the .ini file.
         """
         try:
-            with open(path, encoding="utf-8") as file:
-                self._config.read_file(file)
+            if isinstance(source, str):
+                with open(source, encoding="utf-8") as file:
+                    self._config.read_file(file)
+            else:
+                self._config.read_file(source)
+
         except configparser.Error as e:
             raise ConfigError(
                 f"A parsing exception occurred opening '{self._name}'."
@@ -330,13 +398,27 @@ class ConfigParser:
         except Exception as e:
             raise ConfigError(f"An error occurred reading '{self._name}'.") from e
 
-    def __create_config(self, path: str):
+    def load_and_check_config(self, source: str | TextIO):
         """
-        Create a default configuration file. The default values are
-        infered from the schema.
+        Load the given configuration (.ini file or file-like) and validate
+        it against the schema.
 
         Args:
-            path (str): Configuration file path.
+            source (str | TextIO): Path to the configuration file (.ini)
+                or an already opened file-like object.
+        """
+        self.__load_config(source)
+        self.__validate_data()
+
+    def generate_default(self, stream: TextIO, annotate: bool = True):
+        """
+        Create a default configuration file. The default values are
+        inferred from the schema.
+
+        Args:
+            stream (TextIO): Stream to write the configuration into.
+            annotate (bool): `True` to annotate the key-value pairs with
+                comments from the schema.
         """
         # Infer the initial configuration from the schema
         config = configparser.ConfigParser(interpolation=None)
@@ -349,50 +431,49 @@ class ConfigParser:
                     value = value.lower()
                 config[section][key] = value
 
-        # Create and write the default configuration file
-        with open(path, "x") as file:
-            config.write(file, space_around_delimiters=True)
+        # Write to the stream
+        config.write(stream, space_around_delimiters=True)
 
         # Annotate the freshly created file with help comments
-        self.__annotate_config(path)
+        if annotate:
+            self.__annotate_config(stream)
 
-        logger.info(f"Initial configuration file setup under '{path}'.")
-
-    def __annotate_config(self, path: str):
+    def __annotate_config(self, stream: TextIO):
         """
-        Read an INI file as plain text and insert comments for known keys.
-        Writes the result to path_out.
+        Read an INI file as plain text from a stream and insert comments
+        for known keys.
 
         Args:
-            path (str): Path to file to insert comments in.
+            stream (TextIO): Stream to write the comments into.
         """
         current_section = None
         out_lines = []
 
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                stripped = line.strip()
+        # Iterate the whole file
+        stream.seek(0)
+        for line in stream:
+            stripped = line.strip()
 
-                # detect section headers
-                if stripped.startswith("[") and stripped.endswith("]"):
-                    current_section = stripped.strip("[]")
-                    out_lines.append(line)
-                    continue
+            # detect section headers
+            if stripped.startswith("[") and stripped.endswith("]"):
+                current_section = stripped.strip("[]")
 
-                # detect key=value lines
-                if "=" in stripped and current_section is not None:
-                    key = stripped.split("=", 1)[0].strip()
-                    comment = self._schema[current_section][key].comment
-                    if comment:
-                        out_lines.append(f"; {comment}\n")  # insert before
-                    out_lines.append(line)
-                    continue
+            # detect key=value lines
+            elif "=" in stripped and current_section is not None:
+                key = stripped.split("=", 1)[0].strip()
+                # Retrieve the comment for this key
+                comment = self._schema[current_section][key].comment
+                if comment:
+                    out_lines.append(f"; {comment}\n")  # insert before line
 
-                # default: just copy
-                out_lines.append(line)
+            # default: just copy
+            out_lines.append(line)
 
-        with open(path, "w", encoding="utf-8") as f:
-            f.writelines(out_lines)
+        # Replace stream content with new lines
+        # By definition, there are at least the same number of lines in
+        # the new stream.
+        stream.seek(0)
+        stream.writelines(out_lines)
 
     def __validate_data(self):
         """
@@ -423,15 +504,15 @@ class ConfigParser:
             # Check and cast values
             for key, entry in self._schema[section].items():
                 config_val = self._config[section][key]
-                error, cast_val = entry.check_and_convert(config_val)
-                if error:
+                result = entry.check_and_convert(config_val)
+                if result.error:
                     raise ConfigError(
                         f"Value for key '{key}' in section '{section}' is invalid: "
-                        f"{error}."
+                        f"{result.message}."
                     )
 
                 # Put the converted value in the data map
-                self._data[section][key] = cast_val
+                self._data[section][key] = result.value
 
     def __compare(self, model: Iterable[str], config: Iterable[str]) -> list[str]:
         """
