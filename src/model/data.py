@@ -87,6 +87,7 @@ class EmployeeData(EmployeeInfo):
             month.
         month_worked_time (dt.timedelta): Worked time in the month.
         month_balance (dt.timedelta): Time balance for the month.
+        month_to_yday_balance (dt.timedelta): Month-to-yesterday balance.
         month_vacation (dt.timedelta): Planned vacation for the month.
         year_vacation (float): Planned vacation for the whole year.
         remaining_vacation (float): Remaining vacation to be planned.
@@ -107,6 +108,7 @@ class EmployeeData(EmployeeInfo):
     month_schedule_time: Optional[dt.timedelta] = field(default=None)
     month_worked_time: Optional[dt.timedelta] = field(default=None)
     month_balance: Optional[dt.timedelta] = field(default=None)
+    month_to_yday_balance: Optional[dt.timedelta] = field(default=None)
     month_vacation: Optional[float] = field(default=None)
     year_vacation: Optional[float] = field(default=None)
     remaining_vacation: Optional[float] = field(default=None)

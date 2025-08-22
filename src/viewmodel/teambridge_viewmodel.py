@@ -695,14 +695,23 @@ class _ConsultationSuccessState(_IViewModelState):
                     f"   \u2022 date inconnue: {data.dominant_error.description}"
                 )
         else:
+            # Extract and format
+            yty_bal = self._fmt_dt(data.yty_balance)
+            mty_bal = self._fmt_dt(data.month_to_yday_balance)
+            day_bal = self._fmt_dt(data.day_balance)
+            day_wtm = self._fmt_dt(data.day_worked_time)
+            day_stm = self._fmt_dt(data.day_schedule_time)
+            mth_vac = self._fmt_days(data.month_vacation)
+            rem_vac = self._fmt_days(data.remaining_vacation)
+
             # Normal information panel
             lines = [
                 f"\u2022 Présent: {'oui' if data.clocked_in else 'non'}",
-                f"\u2022 Balance totale: {self._fmt_dt(data.yty_balance)}",
-                f"\u2022 Balance du mois: {self._fmt_dt(data.month_balance)}",
-                f"\u2022 Temps travaillé: {self._fmt_dt(data.day_worked_time)} / {self._fmt_dt(data.day_schedule_time)}",
-                f"\u2022 Vacances ce mois: {self._fmt_days(data.month_vacation)}",
-                f"\u2022 Vacances à planifier: {self._fmt_days(data.remaining_vacation)}",
+                f"\u2022 Balance totale au jour précédent: {yty_bal}",
+                f"\u2022 Balance du mois au jour précédent: {mty_bal}",
+                f"\u2022 Balance du jour: {day_bal} ({day_wtm} / {day_stm})",
+                f"\u2022 Vacances ce mois: {mth_vac}",
+                f"\u2022 Vacances à planifier: {rem_vac}",
             ]
 
             # Add errors if any

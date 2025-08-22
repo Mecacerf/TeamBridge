@@ -343,6 +343,7 @@ class TeamBridgeScheduler:
                     month_schedule_time=tracker.read_month_schedule(datetime),
                     month_worked_time=tracker.read_month_worked_time(datetime),
                     month_balance=tracker.read_month_balance(datetime),
+                    month_to_yday_balance=tracker.read_month_to_yesterday_balance(),
                     month_vacation=tracker.read_month_vacation(datetime),
                     year_vacation=tracker.read_year_vacation(),
                     remaining_vacation=tracker.read_year_remaining_vacation(),
