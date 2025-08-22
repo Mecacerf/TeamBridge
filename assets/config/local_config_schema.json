@@ -1,4 +1,15 @@
 {
+  "general": {
+    "device": {
+      "type": "str",
+      "default": "TeamBridge Device #0",
+      "comment": "Identifier/name of the device"
+    },
+    "locale": {
+      "type": "str",
+      "default": "fr_CH"
+    }
+  },
   "repository": {
     "repository": {
       "type": "str",
@@ -33,12 +44,6 @@
       "type": "bool",
       "required": true,
       "default": false
-    }
-  },
-  "language": {
-    "locale": {
-      "type": "str",
-      "default": "fr_CH"
     }
   },
   "sleep": {

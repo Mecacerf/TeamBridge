@@ -102,12 +102,14 @@ def main() -> int:
     config = LocalConfig(args.config)
     config.show_config()
 
+    general_conf = config.section("general")
     repo_conf = config.section("repository")
     scan_conf = config.section("scanner")
     sleep_conf = config.section("sleep")
     ui_conf = config.section("ui")
-    lang_conf = config.section("language")
     debug_conf = config.section("debug")
+
+    logger.info(f"Current device identifier is '{general_conf["device"]}'.")
 
     # Import program backend modules
     from core.spreadsheets.sheet_time_tracker_factory import SheetTimeTrackerFactory
@@ -150,8 +152,8 @@ def main() -> int:
         sleep_timeout = sleep_conf["sleep_timeout"]
 
     # Configure locale
-    if lang_conf["locale"]:
-        set_locale(lang_conf["locale"])
+    if general_conf["locale"]:
+        set_locale(general_conf["locale"])
 
     def start_kivy_frontend():
         """
