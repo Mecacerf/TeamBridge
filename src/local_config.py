@@ -20,7 +20,7 @@ Contact: info@mecacerf.ch
 import logging
 from os.path import join
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Optional
 
 # Internal libraries
 from common.config_parser import ConfigParser
@@ -40,13 +40,17 @@ class LocalConfig(SingletonRegister):
     instance.
     """
 
-    def _setup(self):
+    def _setup(self, path: Optional[str] = None):
         """
         Called by `SingletonRegister` once at setup.
         Create internal `ConfigParser` object and get a read-only view
         on its data.
         """
-        config = ConfigParser(SCHEMA_FILE_PATH, CONFIG_FILE_PATH)
+        self._config_path = path
+        if not self._config_path:
+            self._config_path = CONFIG_FILE_PATH
+
+        config = ConfigParser(SCHEMA_FILE_PATH, self._config_path, gen_default=True)
         self._view = config.view()
 
     def section(self, section: str) -> MappingProxyType[str, Any]:
@@ -60,6 +64,6 @@ class LocalConfig(SingletonRegister):
         """
         Log the local configuration in use, section by section.
         """
-        logger.info(f"Using local configuration '{CONFIG_FILE_PATH}'.")
+        logger.info(f"Using local configuration '{self._config_path}'.")
         for section, values in self._view.items():
             logger.info(f"Section [{section}] = {values}")

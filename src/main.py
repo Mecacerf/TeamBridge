@@ -15,9 +15,10 @@ Contact: info@mecacerf.ch
 import sys
 import logging, logging.handlers
 import locale
+import argparse
 
 # Internal libraries
-from local_config import LocalConfig
+from local_config import LocalConfig, CONFIG_FILE_PATH
 
 
 def configure_logging():
@@ -84,8 +85,21 @@ def main() -> int:
     """
     logger.info("-- Mecacerf TeamBridge Application --")
 
+    parser = argparse.ArgumentParser(description="Mecacerf TeamBridge Application")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=CONFIG_FILE_PATH,
+        help=(
+            "Path to local configuration file (.ini). "
+            "A default file is created if not existing."
+        ),
+    )
+
+    args = parser.parse_args()
+
     # Load local configuration
-    config = LocalConfig()
+    config = LocalConfig(args.config)
     config.show_config()
 
     repo_conf = config.section("repository")
