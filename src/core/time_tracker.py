@@ -1168,6 +1168,40 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         """
         pass
 
+    def read_month_to_yesterday_balance(self) -> dt.timedelta:
+        """
+        Get employee's month-to-yesterday balance.
+
+        The month-to-yesterday balance is calculated by summing up all
+        day balances up to `target_datetime.date()` (excluded). It is
+        often more relevant for the employee to see his balance related
+        to yesterday when the current day is still in progress.
+
+        Always check that no attendance error exists for the month using
+        an `AttendanceValidator` before relying on this value.
+
+        This method is only available when the `analyzed` property is
+        `True`.
+
+        Returns:
+            datetime.timedelta: Month-to-yesterday balance as a timedelta.
+
+        Raises:
+            TimeTrackerReadException: The reading methods are unavailable
+                (see `analyzed` property).
+            TimeTrackerValueException: Read an unexpected value from the
+                storage system.
+            See chained exceptions for specific failure reasons.
+        """
+        if not self.target_datetime:
+            raise TimeTrackerReadException()
+
+        # A simple way of getting this value is to subtract the current day
+        # balance to the month (to date) balance
+        month_to_date = self.read_month_balance(self.target_datetime)
+        day_balance = self.read_day_balance(self.target_datetime)
+        return month_to_date - day_balance
+
     @abstractmethod
     def read_month_vacation(self, month: int | dt.date) -> float:
         """
@@ -1284,11 +1318,8 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         often more relevant for the employee to see his balance related
         to yesterday when the current day is still in progress.
 
-        Since this method relies on the `read_month_balance()` method
-        that itself relies on the `read_day_balance()` method, it has
-        the same problem regarding attendance errors. Always check
-        that no attendance error exists for the year using an
-        `AttendanceValidator` before relying on this value.
+        Always check that no attendance error exists for the year using
+        an `AttendanceValidator` before relying on this value.
 
         This method is only available when the `analyzed` property is
         `True`.
@@ -1309,7 +1340,7 @@ class TimeTrackerAnalyzer(TimeTracker, ABC):
         # A simple way of getting this value is to subtract the current day
         # balance to the year-to-date balance
         year_to_date = self.read_year_to_date_balance()
-        day_balance = self.read_day_balance(self.target_datetime.date())
+        day_balance = self.read_day_balance(self.target_datetime)
         return year_to_date - day_balance
 
     @abstractmethod

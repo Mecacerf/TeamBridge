@@ -103,6 +103,7 @@ class CaseData:
     month_daily_schedule: dt.timedelta
     month_worked: dt.timedelta
     month_balance: dt.timedelta
+    month_to_yday_balance: dt.timedelta
     month_vacation: float
 
     ytd_balance: dt.timedelta
@@ -148,6 +149,8 @@ def tc_first_work_day() -> CaseData:
         # Balance does depend on the test datetime. It is the same as the day
         # balance since the test date is the 01.01.25.
         month_balance=dt.timedelta(minutes=13),
+        # Balance to yesterday is naturally 0h
+        month_to_yday_balance=dt.timedelta(minutes=0),
         # Opening balance is 2 hours, add the 13 minutes of the date
         ytd_balance=dt.timedelta(hours=2, minutes=13),
         yty_balance=dt.timedelta(hours=2),
@@ -190,6 +193,8 @@ def tc_month_closing():
         # Balance does depend on the test datetime but relates to the whole
         # month since the test date is the 31.01.25.
         month_balance=dt.timedelta(hours=-2, minutes=-13, seconds=-30),
+        # Balance to the 30.01.25
+        month_to_yday_balance=dt.timedelta(hours=-2, minutes=-56, seconds=-30),
         ytd_balance=dt.timedelta(minutes=-13, seconds=-30),
         yty_balance=dt.timedelta(minutes=-56, seconds=-30),
         # Year / remaining vacation doesn't depend on current date
@@ -226,6 +231,7 @@ def tc_clocked_in():
         month_vacation=0.5,
         # Month balance, year-to-date and year-to-yesterday depend on current date
         month_balance=dt.timedelta(hours=-2, minutes=-4),
+        month_to_yday_balance=dt.timedelta(hours=3, minutes=8),
         ytd_balance=dt.timedelta(hours=-2, minutes=-17, seconds=-30),
         yty_balance=dt.timedelta(hours=2, minutes=54, seconds=30),
         # Year / remaining vacation doesn't depend on current date
@@ -270,6 +276,7 @@ def tc_work_at_midnight():
         month_vacation=1.5,
         # Month balance, year-to-date and year-to-yesterday depend on current date
         month_balance=dt.timedelta(hours=1, minutes=30),
+        month_to_yday_balance=dt.timedelta(hours=1, minutes=27),
         ytd_balance=dt.timedelta(hours=3, minutes=30),
         yty_balance=dt.timedelta(hours=3, minutes=27),
         # Year / remaining vacation doesn't depend on current date
@@ -301,6 +308,7 @@ def tc_vacation():
         month_vacation=1.5,
         # Month balance, year-to-date and year-to-yesterday depend on current date
         month_balance=dt.timedelta(hours=-4, minutes=-32),
+        month_to_yday_balance=dt.timedelta(hours=-4, minutes=-32),  # Balance did not move
         ytd_balance=dt.timedelta(hours=-2, minutes=-32),
         yty_balance=dt.timedelta(hours=-2, minutes=-32),
         # Year / remaining vacation doesn't depend on current date
@@ -332,6 +340,9 @@ def tc_sickness():
         month_vacation=1.5,
         # Month balance, year-to-date and year-to-yesterday depend on current date
         month_balance=dt.timedelta(hours=-2, minutes=-56, seconds=-30),
+        month_to_yday_balance=dt.timedelta(
+            hours=-2, minutes=-56, seconds=-30
+        ),  # Did not move
         ytd_balance=dt.timedelta(hours=0, minutes=-56, seconds=-30),
         yty_balance=dt.timedelta(hours=0, minutes=-56, seconds=-30),
         # Year / remaining vacation doesn't depend on current date
@@ -558,12 +569,14 @@ def test_read_month_data(factory: TimeTrackerFactory, testcase: CaseData):
             testcase.datetime
         )
         month_balance = tracker.read_month_balance(testcase.datetime)
+        month_ty_balance = tracker.read_month_to_yesterday_balance()
         month_worked_time = tracker.read_month_worked_time(testcase.datetime)
         month_vacation = tracker.read_month_vacation(testcase.datetime)
 
         assert month_schedule == testcase.month_schedule
         assert month_daily_schedule == testcase.month_daily_schedule
         assert month_balance == testcase.month_balance
+        assert month_ty_balance == testcase.month_to_yday_balance
         assert month_worked_time == testcase.month_worked
         assert month_vacation == approx(testcase.month_vacation)
 

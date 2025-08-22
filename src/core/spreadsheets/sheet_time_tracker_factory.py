@@ -263,7 +263,7 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
             f"ID '{employee_id}' (readonly={readonly}). "
             f"Accessor path is '{accessor.remote_repository}'."
         )
-        
+
         tracker = SheetTimeTracker(employee_id, accessor=accessor, readonly=readonly)
 
         # Sanity check tracked year
