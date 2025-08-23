@@ -85,10 +85,10 @@ def _value_to_str(value: Any) -> str:
     Raises:
         ValueError: Conversion not possible.
     """
-    if isinstance(value, (int, float, str)):
-        return str(value)
-    elif isinstance(value, bool):
+    if isinstance(value, bool):
         return "true" if value else "false"
+    elif isinstance(value, (int, float, str)):
+        return str(value)
     raise ValueError(f"Unkown type '{type(value).__name__}'")
 
 

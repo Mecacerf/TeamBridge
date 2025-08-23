@@ -46,7 +46,10 @@ class SleepManager:
     """
 
     def __init__(
-        self, low_brightness_lvl: int, high_brightness_lvl: Optional[int] = None
+        self,
+        sleep_timeout: float,
+        low_brightness_lvl: int,
+        high_brightness_lvl: Optional[int] = None,
     ):
         """
         Initialize the sleep manager.
@@ -54,6 +57,9 @@ class SleepManager:
         is used.
 
         Args:
+            sleep_timeout (float): Period of inactivity after which the
+                sleep is requested. This value is not used by the manager
+                itself. It is an information for the manager's user.
             low_brightness_lvl (int): Brightness level of the screen in
                 soft sleep mode [0-100].
             high_brightness_lvl (int): Brightness level of the screen in
@@ -61,6 +67,7 @@ class SleepManager:
         """
         self._enabled = False
         self._soft_sleep = False
+        self._sleep_timeout = sleep_timeout
 
         self._low_brightness_lvl = min(100, max(0, low_brightness_lvl))
 
@@ -128,12 +135,22 @@ class SleepManager:
             self._enabled = False
 
     @property
+    def sleep_timeout(self) -> float:
+        """
+        Get the requested sleep timeout [s].
+
+        Returns:
+            float: Sleep timeout in seconds.
+        """
+        return self._sleep_timeout
+
+    @property
     def soft_sleep(self):
         """
         Get the soft sleep status.
 
         Returns:
-            bool: soft sleep mode status
+            bool: Soft sleep mode status.
         """
         return self._soft_sleep
 
@@ -143,7 +160,7 @@ class SleepManager:
         Change the soft sleep mode.
 
         Args:
-            status: `bool` soft sleep mode
+            status (bool): Soft sleep mode.
         """
         # The manager must be enabled and the value must has changed.
         if not self._enabled or self._soft_sleep == status:

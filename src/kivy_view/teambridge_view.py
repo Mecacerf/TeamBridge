@@ -121,7 +121,6 @@ class TeamBridgeApp(App):
         fullscreen: bool = False,
         theme: Optional[ViewTheme] = None,
         sleep_manager: Optional[SleepManager] = None,
-        sleep_timeout: float = 60,
     ):
         """
         Initialize the application.
@@ -132,26 +131,28 @@ class TeamBridgeApp(App):
             theme (ViewTheme): Optional theme to customize UI colors.
             sleep_manager (SleepManager): Optional sleep manager to use
                 when the UI is idle.
-            sleep_timeout (float): Sleep timeout, a sleep manager must
-                be provided
         """
         super().__init__()
 
         self._viewmodel = viewmodel
         self._sleep_manager = sleep_manager
-        self._sleep_timeout = sleep_timeout
+
+        self._sleep_timeout = 0
+        if sleep_manager:
+            self._sleep_timeout = sleep_manager.sleep_timeout
 
         # Create the sleep timer if a sleep manager is provided.
         if self._sleep_manager:
             self._sleep_manager.enable()
             # Schedule the timer to call the timeout method after the given delay.
             self._sleep_timer = Clock.schedule_once(
-                self._on_sleep_timeout, sleep_timeout
+                self._on_sleep_timeout, self._sleep_timeout
             )
             # Automatically call the activity method when the screen is touched.
             Window.bind(on_touch_down=self.on_screen_activity)
             logger.info(
-                f"The system will enter sleep mode after {sleep_timeout} seconds of inactivity."
+                f"The system will enter sleep mode after {self._sleep_timeout} "
+                "seconds of inactivity."
             )
         else:
             logger.info("The sleep mode is disabled.")
@@ -462,11 +463,13 @@ class MainScreen(FloatLayout):
         modifiers: list of active modifiers (e.g. ['ctrl', 'shift'])
         """
         # The space bar toggles the view theme
-        if codepoint == ' ':
+        if codepoint == " ":
             set_dark = self._app.get_theme() is LIGHT_THEME
             self._app.set_theme(DARK_THEME if set_dark else LIGHT_THEME)
             _config.persist("ui", "dark_mode", set_dark)
-            logger.info(f"Changed view theme to {"dark" if set_dark else "light"} mode.")
+            logger.info(
+                f"Changed view theme to {"dark" if set_dark else "light"} mode."
+            )
 
 
 class IconButton(ButtonBehavior, RelativeLayout):
