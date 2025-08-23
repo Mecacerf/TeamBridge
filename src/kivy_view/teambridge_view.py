@@ -160,7 +160,7 @@ class TeamBridgeApp(App):
         # Set fullscreen mode
         Window.fullscreen = "auto" if fullscreen else False
         if not fullscreen:
-            Window.size = (1137, 640)
+            Window.size = (1060, 600)
 
         # Set theme if provided
         if theme:

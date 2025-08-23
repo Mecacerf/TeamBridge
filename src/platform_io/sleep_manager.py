@@ -66,7 +66,7 @@ class SleepManager:
                 working mode [0-100].
         """
         self._enabled = False
-        self._soft_sleep = False
+        self._soft_sleep = True
         self._sleep_timeout = sleep_timeout
 
         self._low_brightness_lvl = min(100, max(0, low_brightness_lvl))
@@ -109,6 +109,9 @@ class SleepManager:
 
             FLAGS = ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
             ctypes.windll.kernel32.SetThreadExecutionState(FLAGS)
+
+            self.soft_sleep = False
+
         except Exception:
             logger.error("Unable to disable Windows sleep mode.", exc_info=True)
         finally:
@@ -133,6 +136,7 @@ class SleepManager:
             # Exit soft sleep mode if enabled
             self.soft_sleep = False
             self._enabled = False
+            self._soft_sleep = True
 
     @property
     def sleep_timeout(self) -> float:
@@ -152,7 +156,7 @@ class SleepManager:
         Returns:
             bool: Soft sleep mode status.
         """
-        return self._soft_sleep
+        return self._enabled and self._soft_sleep
 
     @soft_sleep.setter
     def soft_sleep(self, status: bool):
