@@ -32,6 +32,24 @@
       "default": 4,
       "comment": "Camera scanning rate [Hz], higher rate improves scan speed while consuming more CPU",
       "min": 1
+    },
+    "regex": {
+      "type": "str",
+      "required": true,
+      "default": "teambridge@(\\w+)",
+      "comment": "Regular expression the scanned codes must match to be considered"
+    },
+    "regex_group": {
+      "type": "int",
+      "required": true,
+      "default": 1,
+      "comment": "Regex group index to extract the ID from"
+    },
+    "scanned_id_delay": {
+      "type": "float",
+      "required": true,
+      "default": 10.0,
+      "comment": "Delay [s] to prevent rescanning the same ID twice"
     }
   },
   "ui": {

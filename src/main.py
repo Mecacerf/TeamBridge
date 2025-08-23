@@ -123,13 +123,7 @@ def main() -> int:
     model = TeamBridgeScheduler(tracker_factory=factory)
 
     scanner = BarcodeScanner()
-    viewmodel = TeamBridgeViewModel(
-        model=model,
-        scanner=scanner,
-        debug_mode=debug_conf["debug"],
-        scan_rate=scan_conf["scan_rate"],
-        cam_idx=scan_conf["camera_id"],
-    )
+    viewmodel = TeamBridgeViewModel(model=model, scanner=scanner)
 
     # Configure sleep mode, it is disabled if timeout is None or 0
     sleep_timeout = 0
