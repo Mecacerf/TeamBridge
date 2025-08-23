@@ -63,6 +63,9 @@ from viewmodel.teambridge_viewmodel import *
 from platform_io.sleep_manager import SleepManager
 from .view_theme import *
 
+# Set Kivy window icon
+Window.set_icon("assets/images/company_logo_small.png")
+
 # Register text fonts
 from kivy.core.text import LabelBase
 
