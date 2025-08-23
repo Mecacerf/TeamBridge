@@ -82,15 +82,15 @@ def _configure_logging():
 
 
 def _load_config() -> LocalConfig:
-    """ 
+    """
     Parse the program arguments and check if a custom configuration file
-    path is configured. If not, fallback to `CONFIG_FILE_PATH`. 
+    path is configured. If not, fallback to `CONFIG_FILE_PATH`.
 
-    The local configuration file is then parsed and validated against 
+    The local configuration file is then parsed and validated against
     its schema.
 
     Returns:
-        LocalConfig: Local configuration handle. 
+        LocalConfig: Local configuration handle.
     """
     # Parse the config program argument
     parser = argparse.ArgumentParser(description="Mecacerf TeamBridge Application")
@@ -134,7 +134,7 @@ def _set_locale(value: str):
 
 
 def _load_backend(config: LocalConfig) -> Any:
-    """ 
+    """
     Load the application backend services. It returns a handle on a
     backend object to inject into frontend services.
 
@@ -159,7 +159,7 @@ def _load_backend(config: LocalConfig) -> Any:
 
 
 def _load_sleep_manager(config: LocalConfig) -> Any:
-    """ 
+    """
     Load a sleep manager, if specified by the local configuration.
 
     Returns:
@@ -189,9 +189,9 @@ def _load_sleep_manager(config: LocalConfig) -> Any:
 
 
 def _load_kivy_frontend(config: LocalConfig, backend: Any, sleep_manager: Any) -> Any:
-    """ 
+    """
     Load the Kivy frontend. Requires handles on the backend and optionally
-    a sleep manager. 
+    a sleep manager.
 
     Returns:
         Any: Application handle.
@@ -216,14 +216,14 @@ def _load_kivy_frontend(config: LocalConfig, backend: Any, sleep_manager: Any) -
 
 
 def app_bootstrap() -> Any:
-    """ 
+    """
     Standard application bootstrap. Load the logging module, the program
     configuration, the backend services and finally the configured
     frontend.
 
     Returns:
-        Any: An application handle that supports calling a blocking 
-            run() and a stop() on it. 
+        Any: An application handle that supports calling a blocking
+            run() and a stop() on it.
     """
     _configure_logging()
     logger.info("... TeamBridge Application Startup ...")

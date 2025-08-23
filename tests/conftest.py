@@ -91,9 +91,8 @@ def viewmodel_scanner(
     scanner = BarcodeScanner()
     scanner_mock = BarcodeScannerMock(scanner, monkeypatch)
 
-    viewmodel = TeamBridgeViewModel(
-        model=scheduler, scanner=scanner, cam_idx=0, scan_rate=10, debug_mode=True
-    )
+    # Unit tests use the local configuration
+    viewmodel = TeamBridgeViewModel(model=scheduler, scanner=scanner)
 
     yield viewmodel, scanner_mock
     viewmodel.close()
