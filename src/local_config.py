@@ -50,8 +50,10 @@ class LocalConfig(SingletonRegister):
         if not self._config_path:
             self._config_path = CONFIG_FILE_PATH
 
-        config = ConfigParser(SCHEMA_FILE_PATH, self._config_path, gen_default=True)
-        self._view = config.view()
+        self._config = ConfigParser(
+            SCHEMA_FILE_PATH, self._config_path, gen_default=True
+        )
+        self._view = self._config.get_view()
 
     def section(self, section: str) -> MappingProxyType[str, Any]:
         """
@@ -59,6 +61,12 @@ class LocalConfig(SingletonRegister):
             MappingProxyType: A read-only view on a data section.
         """
         return self._view[section]
+
+    def persist(self, section: str, key: str, value: Any):
+        """
+        Persist a value in the local configuration.
+        """
+        self._config.set_value(section, key, value)
 
     def show_config(self):
         """

@@ -308,7 +308,9 @@ def tc_vacation():
         month_vacation=1.5,
         # Month balance, year-to-date and year-to-yesterday depend on current date
         month_balance=dt.timedelta(hours=-4, minutes=-32),
-        month_to_yday_balance=dt.timedelta(hours=-4, minutes=-32),  # Balance did not move
+        month_to_yday_balance=dt.timedelta(
+            hours=-4, minutes=-32
+        ),  # Balance did not move
         ytd_balance=dt.timedelta(hours=-2, minutes=-32),
         yty_balance=dt.timedelta(hours=-2, minutes=-32),
         # Year / remaining vacation doesn't depend on current date

@@ -51,7 +51,8 @@ TEST_SCHEMA = """
         "floating": {
             "type": "float",
             "default": 3.14,
-            "comment": "This is PI"
+            "comment": "This is PI",
+            "min": 2.1
         }
     }
 }
@@ -229,14 +230,14 @@ def test_read_config():
         io.StringIO(TEST_SCHEMA), io.StringIO(TEST_CONFIG), name="test-config"
     )
 
-    view = parser.view()
+    view = parser.get_view()
     assert view["section1"]["number"] == 8
     assert view["section1"]["flag"] == False
     assert view["section2"]["text"] == "This is a default text"
     assert view["section2"]["floating"] == approx(3.14)
 
 
-def test_extra_section():
+def test_extra_section_raises():
     """
     Test that the configuration validation fails if it contains extra
     sections.
@@ -249,7 +250,7 @@ def test_extra_section():
         )
 
 
-def test_extra_key():
+def test_extra_key_raises():
     """
     Test that the configuration validation fails if it contains extra
     keys.
@@ -267,7 +268,7 @@ def test_extra_key():
         )
 
 
-def test_invalid_type():
+def test_invalid_type_raises():
     """
     Test that the configuration validation fails if a value has not the
     expected type.
@@ -284,3 +285,59 @@ def test_invalid_type():
         ConfigParser(
             io.StringIO(TEST_SCHEMA), io.StringIO(wrong_config), name="test-config"
         )
+
+
+def test_set_value():
+    """
+    Change a value and verify it is reflected in the previously retrieved
+    view.
+    """
+    parser = ConfigParser(
+        io.StringIO(TEST_SCHEMA), io.StringIO(TEST_CONFIG), name="test-config"
+    )
+
+    view = parser.get_view()
+
+    parser.set_value("section2", "floating", 4.68)
+    assert view["section2"]["floating"] == approx(4.68)
+
+
+def test_set_value_file(arrange_assets: None):
+    """
+    Change a value and verify it has been written in the configuration
+    file (.ini).
+    """
+    config_path = Path(TEST_ASSETS_DST_FOLDER) / "test_config.ini"
+
+    parser = ConfigParser(io.StringIO(TEST_SCHEMA), str(config_path.resolve()))
+    parser.set_value("section2", "floating", 4.68)
+
+    content = TEST_CONFIG.replace("floating = 3.14", "floating = 4.68")
+    with open(config_path, "r", encoding="utf-8") as file:
+        assert file.read() == content
+
+
+def test_set_value_missing_key_raises():
+    """
+    Check that trying to set a value for a missing key raises.
+    """
+    parser = ConfigParser(
+        io.StringIO(TEST_SCHEMA), io.StringIO(TEST_CONFIG), name="test-config"
+    )
+
+    with pytest.raises(ConfigError, match="key"):
+        parser.set_value("section1", "unexisting", True)
+
+
+def test_set_wrong_value_raises():
+    """
+    Check that trying to set a value that doesn't match the schema rules
+    raises.
+    """
+    parser = ConfigParser(
+        io.StringIO(TEST_SCHEMA), io.StringIO(TEST_CONFIG), name="test-config"
+    )
+
+    with pytest.raises(ConfigError, match="schema rules"):
+        # This parameter must be greater than 2.0
+        parser.set_value("section2", "floating", 1.5)

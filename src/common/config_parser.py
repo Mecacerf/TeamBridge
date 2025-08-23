@@ -36,7 +36,7 @@ import logging
 import json
 import configparser
 from pathlib import Path
-from typing import Iterable, Type, Any, Optional, Callable, NamedTuple, TextIO
+from typing import Iterable, Type, Any, Optional, Callable, NamedTuple, TextIO, Tuple
 from types import MappingProxyType
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,20 @@ def _str_to_bool(s: str) -> bool:
         return False
 
     raise ValueError(f"Invalid boolean string: {s}")
+
+
+def _value_to_str(value: Any) -> str:
+    """
+    Convert the given value to a string literal.
+
+    Raises:
+        ValueError: Conversion not possible.
+    """
+    if isinstance(value, (int, float, str)):
+        return str(value)
+    elif isinstance(value, bool):
+        return "true" if value else "false"
+    raise ValueError(f"Unkown type '{type(value).__name__}'")
 
 
 class ConversionResult(NamedTuple):
@@ -132,11 +146,11 @@ class _SchemaEntry:
         self._conv_func = self._CONV_MAP[self._vartype]
 
         # Parse optional fields
-        self._required = self.__get_field(entry, "required", bool, False)
+        self._required = self.__get_field(entry, "required", (bool,), False)
         self._default = self.__get_field(entry, "default", None, None)
-        self._comment = self.__get_field(entry, "comment", str, None)
-        self._min = self.__get_field(entry, "min", int, None)
-        self._max = self.__get_field(entry, "max", int, None)
+        self._comment = self.__get_field(entry, "comment", (str,), None)
+        self._min = self.__get_field(entry, "min", (int, float), None)
+        self._max = self.__get_field(entry, "max", (int, float), None)
 
         # Check no extra entry exists
         diff = set(entry.keys()) - {
@@ -157,7 +171,7 @@ class _SchemaEntry:
         self,
         entry: dict[str, Any],
         field: str,
-        vartype: Optional[Type],
+        vartypes: Optional[Tuple],
         default: Any,
     ) -> Any:
         """
@@ -166,7 +180,7 @@ class _SchemaEntry:
         Args:
             entry (dict[str, Any]): Parameters dictionary.
             field (str): Field to parse (key name).
-            vartype (Optional[Type]): Expected value type or `None` if
+            vartype (Optional[Tuple]): Expected value types or `None` if
                 any type can go.
             default (Any): Fallback value if the parameter doesn't exist
                 in the dictionary.
@@ -182,13 +196,13 @@ class _SchemaEntry:
 
         # Read value and check its type
         value = entry[field]
-        if not vartype or isinstance(value, vartype):
+        if not vartypes or isinstance(value, vartypes):
             return value
 
         raise ConfigError(
             f"Type error for field '{field}' in key '{self._key}': "
             f"'{value}' has been identified as a '{type(value).__name__}', "
-            f"must be a '{vartype.__name__}'."
+            f"must be a {" or a ".join([f"'{t.__name__}'" for t in vartypes])}."
         )
 
     @property
@@ -304,6 +318,8 @@ class ConfigParser:
         self._schema: dict[str, dict[str, _SchemaEntry]] = {}
         self._config = configparser.ConfigParser(interpolation=None)
         self._data: dict[str, dict[str, Any]] = {}
+
+        self._config_path = config
 
         # Retrieve config name
         if not name:
@@ -524,7 +540,7 @@ class ConfigParser:
         extra = [f"+{e}" for e in config - model]
         return missing + extra
 
-    def view(self) -> MappingProxyType[str, MappingProxyType[str, Any]]:
+    def get_view(self) -> MappingProxyType[str, MappingProxyType[str, Any]]:
         """
         Get a view dictionary on the configuration data.
 
@@ -532,9 +548,64 @@ class ConfigParser:
             MappingProxyType: A read-only dictionary on configuration
                 data.
         """
+        # Wrap a copy of the outer dictionary and wrap the inner dictionaries.
+        # Inner dictionaries reflect self._data changes, while outer dictionary
+        # is a copy (adding / removing sections won't be reflected).
         return MappingProxyType(
             {
                 section: MappingProxyType(values)
                 for section, values in self._data.items()
             }
         )
+
+    def set_value(self, section: str, key: str, value: Any):
+        """
+        Change a value in the configuration file (.ini). No section or
+        key can be created and the provided value must fulfill the schema
+        rules.
+
+        Args:
+            section (str): The section name.
+            key (str): The key name.
+            value (Any): The value to write.
+
+        Raises:
+            ConfigError: The section or the key doesn't exist or doesn't
+                fulfill the schema rules.
+        """
+        if section not in self._config or key not in self._config[section]:
+            raise ConfigError(
+                f"Section '{section}' or key '{key}' doesn't exist in '{self._name}'."
+            )
+
+        try:
+            value_str = _value_to_str(value)
+        except ValueError:
+            raise ConfigError(
+                f"Cannot convert value '{value}' of type "
+                f"'{type(value).__name__}' to a string literal."
+            )
+
+        # The value must validate the schema rules
+        err, msg, _ = self._schema[section][key].check_and_convert(value_str)
+        if err:
+            raise ConfigError(
+                f"The value '{value_str}' doesn't match the schema rules for "
+                f"section '{section}' and key '{key}': {msg}."
+            )
+
+        # The value can be written in the configuration
+        self._data[section][key] = value
+        self._config.set(section, key, value_str)
+
+        try:
+            if isinstance(self._config_path, str):
+                with open(self._config_path, "w+", encoding="utf-8") as file:
+                    self._config.write(file, space_around_delimiters=True)
+                    self.__annotate_config(file)
+                    logger.info(f"Configuration saved under '{self._config_path}'.")
+
+        except Exception as e:
+            raise ConfigError(
+                f"Error saving the configuration under '{self._config_path}'."
+            ) from e
