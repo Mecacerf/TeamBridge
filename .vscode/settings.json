@@ -4,5 +4,11 @@
     ],
     "python.analysis.diagnosticSeverityOverrides": {
         "reportMissingTypeStubs": "none"
+    },
+    "[python]": {
+        "editor.rulers": [
+            72, // Text
+            79  // Code
+        ]
     }
 }

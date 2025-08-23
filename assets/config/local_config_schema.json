@@ -5,6 +5,11 @@
       "default": "TeamBridge Device #0",
       "comment": "Identifier/name of the device"
     },
+    "frontend": {
+      "type": "str",
+      "required": true,
+      "default": "Kivy"
+    },
     "locale": {
       "type": "str",
       "default": "fr_CH"
