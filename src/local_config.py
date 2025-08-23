@@ -46,9 +46,9 @@ class LocalConfig(SingletonRegister):
         Create internal `ConfigParser` object and get a read-only view
         on its data.
         """
-        self._config_path = path
-        if not self._config_path:
-            self._config_path = CONFIG_FILE_PATH
+        self._config_path = CONFIG_FILE_PATH
+        if path:
+            self._config_path = path
 
         self._config = ConfigParser(
             SCHEMA_FILE_PATH, self._config_path, gen_default=True
@@ -75,3 +75,7 @@ class LocalConfig(SingletonRegister):
         logger.info(f"Using local configuration '{self._config_path}'.")
         for section, values in self._view.items():
             logger.info(f"Section [{section}] = {values}")
+
+    @property
+    def config_path(self) -> str:
+        return self._config_path

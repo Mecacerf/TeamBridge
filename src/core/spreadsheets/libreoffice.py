@@ -7,12 +7,6 @@ Description:
     This module provides functionality to load, evaluate and save a
     spreadsheet file using LibreOffice calc in headless mode.
 
-    TODO:
-        The automatic detection of LibreOffice in the filesystem
-        should ideally occur once during program installation, rather
-        than at every startup. The detected path could then be stored
-        in the configuration file once this feature is implemented.
-
 Company: Mecacerf SA
 Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
@@ -27,29 +21,33 @@ import shutil
 import os
 from typing import Optional
 
+# Internal libraries
+from local_config import LocalConfig
+
 logger = logging.getLogger(__name__)
 
-# Libre office program name
-LIBEOFFICE_PROGRAM = "soffice"
 # Cache folder to put evaluated spreadsheet files
 LIBREOFFICE_CACHE_FOLDER = ".tmp_calc"
 # LibreOffice subprocess timeout [s] to prevent indefinite blocking
-LIBREOFFICE_TIMEOUT = 10.0
+LIBREOFFICE_TIMEOUT = 15.0
+
+# Get application configuration
+_config = LocalConfig()
 
 # Libre office program path
 _libreoffice_path = None
 
 
-def find_libreoffice() -> Optional[str]:
+def search_libreoffice() -> Optional[str]:
     """
     Attempts to find the LibreOffice installation path across Windows
     and Linux.
-    Returns the path to soffice if found, otherwise None.
+    Returns the path to `soffice` if found, otherwise `None`.
 
-    Warning: the Linux implementation is not tested yet.
+    Warning/TODO: the Linux implementation is not tested yet.
 
     Returns:
-        Optional[str]: LibreOffice program path is found or None.
+        Optional[str]: LibreOffice program path if found or `None`.
     """
     system = platform.system()
 
@@ -97,27 +95,34 @@ def find_libreoffice() -> Optional[str]:
     return None
 
 
-# Automatically search for LibreOffice in the filesystem on module initialization
-_libreoffice_path = find_libreoffice()
+# Get LibreOffice path from the configuration
+_libreoffice_path = _config.section("dependencies").get("libreoffice")
 
-if _libreoffice_path:
-    logger.info(f"'{LIBEOFFICE_PROGRAM}' program found under '{_libreoffice_path}'.")
-else:
-    logger.warning(f"'{LIBEOFFICE_PROGRAM}' not automatically found.")
+if not _libreoffice_path:
+    logger.info("Scanning the filesystem to search a LibreOffice installation...")
+    _libreoffice_path = search_libreoffice()
+    if _libreoffice_path:
+        logger.info(f"LibreOffice installation found under '{_libreoffice_path}'.")
+        _config.persist("dependencies", "libreoffice", _libreoffice_path)
 
-
-def configure(libreoffice_path: str):
-    """
-    Manually configure the LibreOffice program path.
-
-    Args:
-        libreoffice_path (str): Path to the LibreOffice executable.
-    """
-    global _libreoffice_path
-    _libreoffice_path = libreoffice_path
-    logger.info(
-        f"Manually configured Libreoffice program path to '{_libreoffice_path}'."
+if not _libreoffice_path:
+    raise FileNotFoundError(
+        "LibreOffice is not installed on this computer. It is required to "
+        "run this application. You can get it from "
+        "https://us.libreoffice.org/download/libreoffice-stable/."
     )
+else:
+    # Check the installation is still available
+    path = pathlib.Path(_libreoffice_path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No LibreOffice installation found under '{_libreoffice_path}'. "
+            "The program may have been uninstalled. You can manually remove "
+            f"the value for the key 'libreoffice' in '{_config.config_path}' "
+            "and restart the application to perform a new system scan."
+        )
+
+    logger.info(f"Using LibreOffice installation under '{_libreoffice_path}'.")
 
 
 def evaluate_calc(file_path: pathlib.Path):

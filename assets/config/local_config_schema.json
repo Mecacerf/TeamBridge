@@ -38,7 +38,7 @@
     "fullscreen": {
       "type": "bool",
       "required": true,
-      "default": true
+      "default": false
     },
     "dark_mode": {
       "type": "bool",
@@ -86,6 +86,12 @@
     },
     "recipient_address": {
       "type": "str"
+    }
+  },
+  "dependencies": {
+    "libreoffice": {
+      "type": "str",
+      "comment": "Path to a LibreOffice executable"
     }
   },
   "debug": {
