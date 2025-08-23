@@ -96,6 +96,11 @@ from typing import Optional, Any
 # Run method call interval in seconds
 RUN_INTERVAL = float(1.0 / 30.0)
 
+# Internal imports
+from local_config import LocalConfig
+
+_config = LocalConfig()
+
 
 class TeamBridgeApp(App):
     """
@@ -273,6 +278,9 @@ class MainScreen(FloatLayout):
         # Schedule the clock time update
         Clock.schedule_interval(self._update_clock_time, 1.0)
 
+        # Observe key presses
+        Window.bind(on_key_down=self._on_key_down)
+
         # Observe the viewmodel texts
         self._viewmodel.main_title_text.observe(self._upd_main_title)
         self._viewmodel.main_subtitle_text.observe(self._upd_main_subtitle)
@@ -444,6 +452,21 @@ class MainScreen(FloatLayout):
         Called when the information panel is pressed to collapse it.
         """
         self._viewmodel.next_action = ViewModelAction.RESET_TO_CLOCK_ACTION
+
+    def _on_key_down(self, window, keycode, scancode, codepoint, modifiers):
+        """
+        window: Window instance
+        keycode: (numeric_keycode, key_name)
+        scancode: platform-specific key code
+        codepoint: character typed (if any)
+        modifiers: list of active modifiers (e.g. ['ctrl', 'shift'])
+        """
+        # The space bar toggles the view theme
+        if codepoint == ' ':
+            set_dark = self._app.get_theme() is LIGHT_THEME
+            self._app.set_theme(DARK_THEME if set_dark else LIGHT_THEME)
+            _config.persist("ui", "dark_mode", set_dark)
+            logger.info(f"Changed view theme to {"dark" if set_dark else "light"} mode.")
 
 
 class IconButton(ButtonBehavior, RelativeLayout):
