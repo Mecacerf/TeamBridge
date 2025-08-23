@@ -56,7 +56,7 @@ def test_libreoffice_found():
     The test currently relies on the LibreOffice module automatically
     finding the program on the filesystem, which may change in the future.
     """
-    assert find_libreoffice() is not None
+    assert search_libreoffice() is not None
 
 
 def test_evaluate_sheet(spreadsheet_file: Path):

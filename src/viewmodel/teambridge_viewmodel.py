@@ -34,17 +34,15 @@ from model import *  # Task scheduling
 from platform_io.barcode_scanner import BarcodeScanner  # Employee ID detection
 from core.time_tracker import ClockAction  # Domain model enums
 from core.attendance.attendance_validator import AttendanceErrorStatus
+from local_config import LocalConfig
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["TeamBridgeViewModel", "ViewModelAction"]
 
-# Regex to identify an employee's ID from the barcode scanner
-EMPLOYEE_REGEX = r"teambridge@(\w+)"
-EMPLOYEE_REGEX_GROUP = 1
-
-# Timeout in seconds to prevent double-scanning the same ID
-SCAN_ID_TIMEOUT = 10.0
+# Get the local configuration
+_config = LocalConfig()
+_scanner_conf = _config.section("scanner")
 
 # Timeout for the attendance list task
 ATTENDANCE_LIST_TIMEOUT = 60.0
@@ -81,14 +79,7 @@ class TeamBridgeViewModel(IStateMachine):
     Application state machine.
     """
 
-    def __init__(
-        self,
-        model: TeamBridgeScheduler,
-        scanner: BarcodeScanner,
-        cam_idx: int,
-        scan_rate: float,
-        debug_mode: bool = False,
-    ):
+    def __init__(self, model: TeamBridgeScheduler, scanner: BarcodeScanner):
         """
         Create the viewmodel state machine.
 
@@ -97,10 +88,6 @@ class TeamBridgeViewModel(IStateMachine):
                 to perform tasks.
             scanner (BarcodeScanner): Reference on the barcode scanner to
                 use to identify employees ids.
-            cam_idx (int): Barcode scanner camera id.
-            scan_rate (float): Barcode scanner scan rate in Hz.
-            debug_mode (bool): `True` to show a live window of the scanner
-                view.
         """
         # Enter the initial state
         # The entry() method is called at first run() call
@@ -108,9 +95,9 @@ class TeamBridgeViewModel(IStateMachine):
 
         self._model = model
         self._scanner = scanner
-        self._cam_idx = cam_idx
-        self._scan_rate = scan_rate
-        self._debug_mode = debug_mode
+        self._cam_idx = _scanner_conf["camera_id"]
+        self._scan_rate = _scanner_conf["scan_rate"]
+        self._debug_mode = _config.section("debug")["debug"]
 
         self._next_action = ViewModelAction.DEFAULT_ACTION
 
@@ -317,9 +304,9 @@ class _InitialState(_IViewModelState):
         opened.
         """
         self.fsm.scanner.configure(
-            regex=EMPLOYEE_REGEX,
-            extract_group=EMPLOYEE_REGEX_GROUP,
-            timeout=SCAN_ID_TIMEOUT,
+            regex=_scanner_conf["regex"],
+            extract_group=_scanner_conf["regex_group"],
+            timeout=_scanner_conf["scanned_id_delay"],
             debug_mode=self.fsm.debug_mode,
         )
 
@@ -767,6 +754,7 @@ class _ConsultationSuccessState(_IViewModelState):
         integer = int(days)
         decimal = days - integer
 
+        fraction_symbol = ""
         for threshold, symbol, increment in thresholds:
             if decimal >= threshold:
                 fraction_symbol = symbol

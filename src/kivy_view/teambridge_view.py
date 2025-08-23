@@ -4,10 +4,11 @@ File: time_tracker_view.py
 Author: Bastian Cerf
 Date: 02/03/2025
 Description:
-    This Kivy-based view displays dynamic text content provided by the ViewModel and
-    interacts with it through the next action signal. It serves as the presentation
-    layer, updating its interface based on ViewModel data and sending user-triggered
-    events back to the ViewModel to drive application logic.
+    This Kivy-based view displays dynamic text content provided by the
+    ViewModel and interacts with it through the next action signal. It
+    serves as the presentation layer, updating its interface based on
+    ViewModel data and sending user-triggered events back to the ViewModel
+    to drive application logic.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -62,6 +63,9 @@ from viewmodel.teambridge_viewmodel import *
 from platform_io.sleep_manager import SleepManager
 from .view_theme import *
 
+# Set Kivy window icon
+Window.set_icon("assets/images/company_logo_small.png")
+
 # Register text fonts
 from kivy.core.text import LabelBase
 
@@ -89,20 +93,19 @@ import time
 from enum import Enum
 from typing import Optional, Any
 
-# Try to set the locale to french
-# TODO: texts and configurations in a specific file
-import locale
-
-SET_LOCALE = "fr_CH"
-
 # Run method call interval in seconds
 RUN_INTERVAL = float(1.0 / 30.0)
+
+# Internal imports
+from local_config import LocalConfig
+
+_config = LocalConfig()
 
 
 class TeamBridgeApp(App):
     """
-    Teambridge application class. The application starts the graphic library and
-    create the main screen.
+    Teambridge application class. The application starts the graphic
+    library and creates the main screen.
     """
 
     # The kv file is located in the assets/ folder
@@ -161,21 +164,6 @@ class TeamBridgeApp(App):
         # Set theme if provided
         if theme:
             self.theme = theme
-
-        # Try to set the local language setting
-        try:
-            locale.setlocale(locale.LC_TIME, SET_LOCALE)
-            # Confirm the locale has been set
-            actual = locale.getlocale(locale.LC_TIME)
-            if actual[0] != SET_LOCALE:
-                raise UnicodeError(f"Cannot set locale to '{SET_LOCALE}'.")
-
-        except Exception:
-            logger.warning(f"Unable to set the desired locale '{SET_LOCALE}'.")
-
-        actual = locale.getlocale(locale.LC_TIME)
-        encoding = locale.getpreferredencoding(False)
-        logger.info(f"Using locale {actual} with preferred encoding '{encoding}'.")
 
     def get_theme(self) -> ViewTheme:
         """
@@ -289,6 +277,9 @@ class MainScreen(FloatLayout):
 
         # Schedule the clock time update
         Clock.schedule_interval(self._update_clock_time, 1.0)
+
+        # Observe key presses
+        Window.bind(on_key_down=self._on_key_down)
 
         # Observe the viewmodel texts
         self._viewmodel.main_title_text.observe(self._upd_main_title)
@@ -461,6 +452,21 @@ class MainScreen(FloatLayout):
         Called when the information panel is pressed to collapse it.
         """
         self._viewmodel.next_action = ViewModelAction.RESET_TO_CLOCK_ACTION
+
+    def _on_key_down(self, window, keycode, scancode, codepoint, modifiers):
+        """
+        window: Window instance
+        keycode: (numeric_keycode, key_name)
+        scancode: platform-specific key code
+        codepoint: character typed (if any)
+        modifiers: list of active modifiers (e.g. ['ctrl', 'shift'])
+        """
+        # The space bar toggles the view theme
+        if codepoint == ' ':
+            set_dark = self._app.get_theme() is LIGHT_THEME
+            self._app.set_theme(DARK_THEME if set_dark else LIGHT_THEME)
+            _config.persist("ui", "dark_mode", set_dark)
+            logger.info(f"Changed view theme to {"dark" if set_dark else "light"} mode.")
 
 
 class IconButton(ButtonBehavior, RelativeLayout):

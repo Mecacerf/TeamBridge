@@ -43,13 +43,14 @@ exe = EXE(
     a.datas,
     [],
     name='TeamBridge.exe',
+    icon="../assets/images/company_logo_small.ico",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -62,5 +63,3 @@ print("Executable generation finished, copy utility files...")
 shutil.copytree("assets/", "deploy/dist/assets/")
 # Copy samples to dist folder to allow to run in test mode
 shutil.copytree("samples/", "deploy/dist/samples/")
-# Copy autostart executable utility script
-shutil.copy("deploy/autostart-exe.ps1", "deploy/dist/autostart-exe.ps1")

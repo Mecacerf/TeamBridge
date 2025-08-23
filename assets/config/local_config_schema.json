@@ -1,0 +1,122 @@
+{
+  "general": {
+    "device": {
+      "type": "str",
+      "default": "TeamBridge Device #0",
+      "comment": "Identifier/name of the device"
+    },
+    "locale": {
+      "type": "str",
+      "default": "fr_CH"
+    }
+  },
+  "repository": {
+    "repository": {
+      "type": "str",
+      "required": true,
+      "default": "samples/",
+      "comment": "Path to remote spreadsheets repository"
+    }
+  },
+  "scanner": {
+    "camera_id": {
+      "type": "int",
+      "required": true,
+      "default": 0,
+      "comment": "Camera device identifier",
+      "min": 0
+    },
+    "scan_rate": {
+      "type": "int",
+      "required": true,
+      "default": 4,
+      "comment": "Camera scanning rate [Hz], higher rate improves scan speed while consuming more CPU",
+      "min": 1
+    },
+    "regex": {
+      "type": "str",
+      "required": true,
+      "default": "teambridge@(\\w+)",
+      "comment": "Regular expression the scanned codes must match to be considered"
+    },
+    "regex_group": {
+      "type": "int",
+      "required": true,
+      "default": 1,
+      "comment": "Regex group index to extract the ID from"
+    },
+    "scanned_id_delay": {
+      "type": "float",
+      "required": true,
+      "default": 10.0,
+      "comment": "Delay [s] to prevent rescanning the same ID twice"
+    }
+  },
+  "ui": {
+    "fullscreen": {
+      "type": "bool",
+      "required": true,
+      "default": false
+    },
+    "dark_mode": {
+      "type": "bool",
+      "required": true,
+      "default": false
+    }
+  },
+  "sleep": {
+    "sleep_timeout": {
+      "type": "int",
+      "default": 120,
+      "comment": "Sleep mode inactivity timeout [s], left empty to disable",
+      "min": 0
+    },
+    "sleep_brightness": {
+      "type": "int",
+      "default": 0,
+      "comment": "Screen brightness percentage [0-100] in sleep mode",
+      "min": 0,
+      "max": 100
+    },
+    "work_brightness": {
+      "type": "int",
+      "comment": "Screen brightness percentage [0-100] in working mode, left empty to select at startup",
+      "min": 0,
+      "max": 100
+    }
+  },
+  "report.email": {
+    "smtp_server": {
+      "type": "str",
+      "comment": "SMTP server URL, such as smtp.gmail.com, left empty to disable email reports"
+    },
+    "smtp_port": {
+      "type": "int",
+      "default": 587,
+      "min": 0,
+      "max": 65535
+    },
+    "sender_address": {
+      "type": "str"
+    },
+    "sender_password": {
+      "type": "str"
+    },
+    "recipient_address": {
+      "type": "str"
+    }
+  },
+  "dependencies": {
+    "libreoffice": {
+      "type": "str",
+      "comment": "Path to a LibreOffice executable"
+    }
+  },
+  "debug": {
+    "debug": {
+      "type": "bool",
+      "required": true,
+      "default": false
+    }
+  }
+}
