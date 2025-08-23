@@ -30,7 +30,7 @@ from platform_io.barcode_scanner import BarcodeScanner
 
 # Virtual camera id. If more than one camera is connected, ensure this is the
 # id of the virtual camera created by OBS Studio.
-VIRTUAL_CAM_IDX = 0
+VIRTUAL_CAM_IDX = 1  # 0 is typically the embedded camera and 1 the virtual one
 # Regular expression to use to identify employee's id
 EMPLOYEE_REGEX = r"teambridge@(\w+)"
 # Group to extract ID
