@@ -36,13 +36,11 @@ from core.time_tracker import ClockAction  # Domain model enums
 from core.attendance.attendance_validator import AttendanceErrorStatus
 from local_config import LocalConfig
 
-logger = logging.getLogger(__name__)
-
 __all__ = ["TeamBridgeViewModel", "ViewModelAction"]
 
-# Get the local configuration
-_config = LocalConfig()
-_scanner_conf = _config.section("scanner")
+logger = logging.getLogger(__name__)
+config = LocalConfig()
+_scanner_conf = config.section("scanner")
 
 # Timeout for the attendance list task
 ATTENDANCE_LIST_TIMEOUT = 60.0
@@ -97,7 +95,7 @@ class TeamBridgeViewModel(IStateMachine):
         self._scanner = scanner
         self._cam_idx = _scanner_conf["camera_id"]
         self._scan_rate = _scanner_conf["scan_rate"]
-        self._debug_mode = _config.section("debug")["debug"]
+        self._debug_mode = config.section("debug")["debug"]
 
         self._next_action = ViewModelAction.DEFAULT_ACTION
 

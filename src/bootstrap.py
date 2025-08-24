@@ -23,6 +23,9 @@ from local_config import LocalConfig, CONFIG_FILE_PATH
 logger = logging.getLogger(__name__)
 
 
+LOG_FILE_NAME = "teambridge.log"
+
+
 def _configure_logging():
     """
     Configure the logging module.
@@ -69,7 +72,7 @@ def _configure_logging():
         handlers=[
             # Log to files with a time rotating strategy
             logging.handlers.TimedRotatingFileHandler(
-                filename="teambridge.log",
+                filename=LOG_FILE_NAME,
                 when="midnight",
                 interval=1,
                 backupCount=7,
@@ -245,5 +248,19 @@ def app_bootstrap() -> Any:
         raise NotImplementedError(
             f"The frontend '{general_conf["frontend"]}' is not supported."
         )
+
+    from common.email_reporter import EmailAsyncReporter
+    from common.reporter import Report, ReportSeverity, EmployeeReport
+
+    EmailAsyncReporter().report(
+        EmployeeReport(
+            ReportSeverity.INFO,
+            "Teambridge starts",
+            "Hello World",
+            "000",
+            "Dupont",
+            "Jean",
+        ).attach_logs()
+    )
 
     return app

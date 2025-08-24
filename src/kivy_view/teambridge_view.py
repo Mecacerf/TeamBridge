@@ -53,10 +53,12 @@ from kivy.properties import (
 )
 from kivy.clock import Clock
 
-# Import logging and get the module logger
+# Logging and config modules
 import logging
+from local_config import LocalConfig
 
 logger = logging.getLogger(__name__)
+config = LocalConfig()
 
 # Internal imports
 from viewmodel.teambridge_viewmodel import *
@@ -95,11 +97,6 @@ from typing import Optional, Any
 
 # Run method call interval in seconds
 RUN_INTERVAL = float(1.0 / 30.0)
-
-# Internal imports
-from local_config import LocalConfig
-
-_config = LocalConfig()
 
 
 class TeamBridgeApp(App):
@@ -466,7 +463,7 @@ class MainScreen(FloatLayout):
         if codepoint == " ":
             set_dark = self._app.get_theme() is LIGHT_THEME
             self._app.set_theme(DARK_THEME if set_dark else LIGHT_THEME)
-            _config.persist("ui", "dark_mode", set_dark)
+            config.persist("ui", "dark_mode", set_dark)
             logger.info(
                 f"Changed view theme to {"dark" if set_dark else "light"} mode."
             )
