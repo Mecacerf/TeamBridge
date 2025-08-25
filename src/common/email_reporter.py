@@ -17,6 +17,7 @@ import smtplib
 from email.message import EmailMessage
 import zipfile
 import os
+import io
 import textwrap
 from typing import Optional
 
@@ -107,29 +108,38 @@ class EmailBuilder:
 
     def _attach_files(self, files: list[str], email: EmailMessage):
         """
-        Add the listed files as attachements to the email. If there are
+        Add the listed files as attachments to the email. If there are
         more than one file, they are bundled in a unique zip file.
+
+        Note this method is not designed to support large files.
         """
         if len(files) > 1:
-            # Create a zip archive of all files
-            filename = "attachments.zip"
-            subtype = "zip"
-            with zipfile.ZipFile(filename, "w", zipfile.ZIP_DEFLATED) as zipf:
+            # Create in-memory zip
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
                 for file in files:
                     if os.path.exists(file):
-                        zipf.write(
-                            file, arcname=os.path.basename(file)
-                        )  # arcname avoids storing full path
+                        zipf.write(file, arcname=os.path.basename(file))
+            buffer.seek(0)
+
+            email.add_attachment(
+                buffer.read(),
+                maintype="application",
+                subtype="zip",
+                filename="attachments.zip",
+            )
+
         else:
-            # Do not zip a single attachment
+            # Single file, just attach it
             filename = files[0]
             subtype = filename.split(".")[-1]
-
-        # Attach the file
-        with open(filename, "rb") as f:
-            email.add_attachment(
-                f.read(), maintype="application", subtype=subtype, filename=filename
-            )
+            with open(filename, "rb") as f:
+                email.add_attachment(
+                    f.read(),
+                    maintype="application",
+                    subtype=subtype,
+                    filename=os.path.basename(filename),
+                )
 
 
 class EmailSyncReporter(Reporter):
