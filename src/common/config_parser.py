@@ -151,6 +151,7 @@ class _SchemaEntry:
         self._comment = self.__get_field(entry, "comment", (str,), None)
         self._min = self.__get_field(entry, "min", (int, float), None)
         self._max = self.__get_field(entry, "max", (int, float), None)
+        self._enum = self.__get_field(entry, "enum", (list,), None)
 
         # Check no extra entry exists
         diff = set(entry.keys()) - {
@@ -160,6 +161,7 @@ class _SchemaEntry:
             "comment",
             "min",
             "max",
+            "enum",
         }
 
         if diff:
@@ -260,6 +262,27 @@ class _SchemaEntry:
             if self._max is not None and value > self._max:
                 return ConversionResult(
                     True, f"{value} is greater than {self._max}", None
+                )
+
+        # Check string respects enum values
+        if self._enum:
+            if not isinstance(value, str):
+                return ConversionResult(
+                    True,
+                    "the enumeration constraint is only applicable for strings, "
+                    f"got a '{type(value).__name__}'.",
+                    None,
+                )
+
+            if any(not isinstance(v, str) for v in self._enum):
+                return ConversionResult(True, "All enum values must be strings.", None)
+
+            if not any(value.lower() == v for v in self._enum):
+                return ConversionResult(
+                    True,
+                    f"'{value}' is not a possible value, expecting one of "
+                    f"'{", ".join(self._enum)}'.",
+                    None,
                 )
 
         # All checks passed, return casted value
