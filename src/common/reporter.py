@@ -13,7 +13,7 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 from abc import ABC, abstractmethod
-from enum import Enum, auto
+from enum import IntEnum, auto
 from dataclasses import dataclass, field
 import datetime as dt
 from typing import Optional
@@ -26,15 +26,30 @@ from local_config import LocalConfig
 config = LocalConfig()
 
 
-class ReportSeverity(Enum):
+class ReportSeverity(IntEnum):
     """
     Severity of the report.
     """
 
-    INFO = auto()
-    WARNING = auto()
-    ERROR = auto()
-    CRITICAL = auto()
+    INFO = 0
+    WARNING = 1
+    ERROR = 2
+    CRITICAL = 3
+
+    @classmethod
+    def parse(cls, value: str) -> "ReportSeverity":
+        """
+        Parse a string literal to an enum member, if possible.
+
+        Raises:
+            ValueError: Given string doesn't match any member.
+        """
+        try:
+            return next(
+                (member for member in cls if member.name.lower() == value.lower())
+            )
+        except StopIteration:
+            raise ValueError(f"Unknown severity '{value}'.")
 
 
 @dataclass
@@ -93,6 +108,17 @@ class Reporter(ABC):
     """
     Generic reporter class.
     """
+
+    def check_rules(self, report: Report) -> bool:
+        """
+        Check whether this report can be sent according to configured
+        reporting rules.
+        """
+        # Check the minimal report severity
+        min_severity = config.section("report.general")["report_severity"]
+        min_severity = ReportSeverity.parse(min_severity)
+
+        return report.severity >= min_severity
 
     @abstractmethod
     def report(self, report: Report):

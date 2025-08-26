@@ -44,6 +44,29 @@ def show_error_dialog(exc: Exception):
     root.destroy()
 
 
+def report_crash(exc: Exception):
+    """
+    Try to send a crash report.
+    """
+    try:
+        from common.reporter import Reporter, Report, ReportSeverity
+
+        reporter: Reporter = bootstrap.load_reporter(sync=True)
+        reporter.report(
+            Report(
+                ReportSeverity.CRITICAL,
+                "Crash report",
+                (
+                    "Teambridge encountered a critical error and must be manually "
+                    "restarted.\n\n"
+                    f"Exception: {exc}."
+                ),
+            ).attach_logs()
+        )
+    except Exception as e:
+        logger.error(f"An error occurred sending the error report: {e}.")
+
+
 # Program entry
 if __name__ == "__main__":
     exit_code = 0
@@ -56,7 +79,7 @@ if __name__ == "__main__":
         # Start application
         app.run()
 
-    except Exception as ex:
+    except Exception as exc:
         exit_code = 1
         try:
             # Log the crash if logging is ready
@@ -64,9 +87,10 @@ if __name__ == "__main__":
             logger.exception("An unhandled exception occurred.")
         except Exception:
             # Fallback to print
-            print(f"An unhandled exception occurred {ex}.")
+            print(f"An unhandled exception occurred {exc}.")
 
-        show_error_dialog(ex)
+        report_crash(exc)
+        show_error_dialog(exc)
 
         # Try to terminate the app
         try:

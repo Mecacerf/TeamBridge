@@ -180,6 +180,10 @@ class EmailSyncReporter(Reporter):
             Exception: Any exception that may occur during message
                 building or sending.
         """
+        # The report must be compliant with reporting rules
+        if not self.check_rules(report):
+            return
+
         email = self._builder.build(report)
         email["From"] = self._sender
         email["To"] = self._recipient

@@ -90,18 +90,18 @@
       "max": 100
     }
   },
-  "report": {
-    "employee_report_level": {
-      "type": "int",
-      "default": 30,
-      "min": 0,
-      "comment": "All employee errors that are >= to this value result in a report"
-    },
+  "report.general": {
     "report_severity": {
       "type": "str",
       "enum": ["info", "warning", "error", "critical"],
       "default": "info",
       "comment": "All reports with a severity >= to this value are sent, possibilities: info, warning, error or critical"
+    },
+    "employee_error_level": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "comment": "All employee errors that are >= to this value are reported"
     }
   },
   "report.email": {

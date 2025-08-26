@@ -116,6 +116,28 @@ def _load_config() -> LocalConfig:
     return config
 
 
+def load_reporter(sync: bool = False) -> Any:
+    """
+    Load a program reporter module. The returned object is of type
+    `Reporter`.
+
+    Args:
+        sync (bool): `True` to load a synchronous reporter, `False` for
+            asynchronous. A synchronous reporter blocks until the report
+            is sent and raises any exception that may occur. The 
+            asynchronous version sends the report in a background task.
+
+    Returns:
+        Reporter: Loaded reporter object.
+    """
+    from common.email_reporter import EmailSyncReporter, EmailAsyncReporter
+
+    if sync:
+        return EmailSyncReporter()
+    else:
+        return EmailAsyncReporter()
+
+
 def _set_locale(value: str):
     """
     Try to set the desired locale configuration.
