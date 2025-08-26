@@ -200,6 +200,8 @@ class TeamBridgeApp(App):
         """
         Called by kivy when the application finishes running.
         """
+        Window.hide()  # Improve responsiveness by immediately hiding window
+
         self._viewmodel.close()
         if self._sleep_manager:
             self._sleep_manager.disable()

@@ -20,7 +20,7 @@ from typing import Optional
 import os
 
 # Internal libraries
-from bootstrap import LOG_FILE_NAME
+from bootstrap import LOGGING_FILE_NAME
 from local_config import LocalConfig
 
 config = LocalConfig()
@@ -62,7 +62,7 @@ class Report:
 
     severity: ReportSeverity
     title: str
-    content: str
+    content: Optional[str]
     attachments: list[str] = field(default_factory=list, init=False)
     created_at: dt.datetime = field(init=False)
     device_id: str = field(init=False)
@@ -71,12 +71,15 @@ class Report:
         self.created_at = dt.datetime.now()
         self.device_id = config.section("general")["device"]
 
+    def __str__(self) -> str:
+        return f"'[{self.severity.name}] {self.title}'"
+
     def attach_logs(self) -> "Report":
         """
         Attach the program log files to the report.
         """
         self.attachments.extend(
-            [file for file in os.listdir(".") if LOG_FILE_NAME in file]
+            [file for file in os.listdir(".") if LOGGING_FILE_NAME in file]
         )
         return self
 
@@ -121,12 +124,14 @@ class Reporter(ABC):
         return report.severity >= min_severity
 
     @abstractmethod
-    def report(self, report: Report):
+    def report(self, report: Report, sync: bool = False):
         """
-        Perform a report.
+        Send a report.
 
         Args:
-            report (Report): Object holding the pieces of information
-                to be reported.
+            report (Report): Report to send.
+            sync (bool): `True` to wait for the report to be sent and
+                raise any exception that may occur in the process.
+                `False` to send in a background task.
         """
         pass

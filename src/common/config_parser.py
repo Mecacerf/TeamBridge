@@ -270,18 +270,18 @@ class _SchemaEntry:
                 return ConversionResult(
                     True,
                     "the enumeration constraint is only applicable for strings, "
-                    f"got a '{type(value).__name__}'.",
+                    f"got a '{type(value).__name__}'",
                     None,
                 )
 
             if any(not isinstance(v, str) for v in self._enum):
-                return ConversionResult(True, "All enum values must be strings.", None)
+                return ConversionResult(True, "All enum values must be strings", None)
 
             if not any(value.lower() == v for v in self._enum):
                 return ConversionResult(
                     True,
                     f"'{value}' is not a possible value, expecting one of "
-                    f"'{", ".join(self._enum)}'.",
+                    f"'{", ".join(self._enum)}'",
                     None,
                 )
 

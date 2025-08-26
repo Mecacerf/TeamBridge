@@ -21,9 +21,12 @@ from typing import Any
 from local_config import LocalConfig, CONFIG_FILE_PATH
 
 logger = logging.getLogger(__name__)
+reporter: Any = None
 
 
-LOG_FILE_NAME = "teambridge.log"
+# Logging configuration
+LOGGING_FILE_NAME = "teambridge.log"
+LOGGING_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
 
 def _configure_logging():
@@ -34,8 +37,6 @@ def _configure_logging():
     A new log file is created at midnight and they are available up to
     7 days. Logs are also printed in the standard output stream.
     """
-    # Define file logs format
-    LOGGING_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
     class ColorFormatter(logging.Formatter):
         """
@@ -72,7 +73,7 @@ def _configure_logging():
         handlers=[
             # Log to files with a time rotating strategy
             logging.handlers.TimedRotatingFileHandler(
-                filename=LOG_FILE_NAME,
+                filename=LOGGING_FILE_NAME,
                 when="midnight",
                 interval=1,
                 backupCount=7,
@@ -116,26 +117,15 @@ def _load_config() -> LocalConfig:
     return config
 
 
-def load_reporter(sync: bool = False) -> Any:
+def _load_reporter():
     """
-    Load a program reporter module. The returned object is of type
-    `Reporter`.
-
-    Args:
-        sync (bool): `True` to load a synchronous reporter, `False` for
-            asynchronous. A synchronous reporter blocks until the report
-            is sent and raises any exception that may occur. The 
-            asynchronous version sends the report in a background task.
-
-    Returns:
-        Reporter: Loaded reporter object.
+    Load a program reporter module. An object respecting the `Reporter`
+    interface is then available globally.
     """
-    from common.email_reporter import EmailSyncReporter, EmailAsyncReporter
+    from common.email_reporter import EmailReporter
 
-    if sync:
-        return EmailSyncReporter()
-    else:
-        return EmailAsyncReporter()
+    global reporter
+    reporter = EmailReporter()
 
 
 def _set_locale(value: str):
@@ -258,6 +248,8 @@ def app_bootstrap() -> Any:
 
     logger.info(f"Application device identifier is '{general_conf["device"]}'.")
 
+    _load_reporter()
+
     if general_conf["locale"]:
         _set_locale(general_conf["locale"])
 
@@ -270,19 +262,5 @@ def app_bootstrap() -> Any:
         raise NotImplementedError(
             f"The frontend '{general_conf["frontend"]}' is not supported."
         )
-
-    from common.email_reporter import EmailAsyncReporter
-    from common.reporter import Report, ReportSeverity, EmployeeReport
-
-    EmailAsyncReporter().report(
-        EmployeeReport(
-            ReportSeverity.INFO,
-            "Teambridge starts",
-            "Hello World",
-            "000",
-            "Dupont",
-            "Jean",
-        ).attach_logs()
-    )
 
     return app

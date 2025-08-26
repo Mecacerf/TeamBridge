@@ -48,23 +48,60 @@ def report_crash(exc: Exception):
     """
     Try to send a crash report.
     """
+    if not bootstrap.reporter:
+        logger.warning(
+            "Cannot send a crash report. It happened before the reporter setup."
+        )
+        return
+
     try:
         from common.reporter import Reporter, Report, ReportSeverity
 
-        reporter: Reporter = bootstrap.load_reporter(sync=True)
+        reporter: Reporter = bootstrap.reporter
         reporter.report(
             Report(
                 ReportSeverity.CRITICAL,
                 "Crash report",
                 (
-                    "Teambridge encountered a critical error and must be manually "
-                    "restarted.\n\n"
-                    f"Exception: {exc}."
+                    "Teambridge encountered a critical error and must be "
+                    "restarted manually.\n\n"
+                    f"{exc.__class__.__name__}: {exc}."
                 ),
-            ).attach_logs()
+            ).attach_logs(),
+            sync=True,  # Wait for the report to be sent
         )
     except Exception as e:
         logger.error(f"An error occurred sending the error report: {e}.")
+
+
+def report_start():
+    """
+    Send an application starting report.
+    """
+    assert bootstrap.reporter
+
+    from common.reporter import Reporter, Report, ReportSeverity
+
+    reporter: Reporter = bootstrap.reporter
+    reporter.report(Report(ReportSeverity.INFO, "Teambridge has started", None))
+
+
+def report_stop():
+    """
+    Send an application stopping report.
+    """
+    assert bootstrap.reporter
+
+    from common.reporter import Reporter, Report, ReportSeverity
+
+    reporter: Reporter = bootstrap.reporter
+    reporter.report(
+        Report(
+            ReportSeverity.INFO,
+            "Teambridge has stopped",
+            "Teambridge has been stopped by a user.",
+        )
+    )
 
 
 # Program entry
@@ -76,8 +113,11 @@ if __name__ == "__main__":
         # App bootstrap (logging, services, etc)
         app = bootstrap.app_bootstrap()
 
-        # Start application
+        report_start()
         app.run()
+        report_stop()
+
+        # Now where to report things: viewmodel error state, viewmodel consultation state after a clock event --> employee reports
 
     except Exception as exc:
         exit_code = 1

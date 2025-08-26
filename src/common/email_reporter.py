@@ -71,11 +71,17 @@ class EmailBuilder:
             Timestamp: {report.created_at:%Y-%m-%d %H:%M:%S}
             Device ID: {report.device_id}
 
-            ────────── Details ──────────
-            {report.content.strip()}
-
             """
         )
+
+        if report.content:
+            body += textwrap.dedent(
+                f"""        
+                ────────── Details ──────────
+                {report.content.strip()}
+
+                """
+            )
 
         # Add employee context if available
         if isinstance(report, EmployeeReport):
@@ -142,11 +148,10 @@ class EmailBuilder:
                 )
 
 
-class EmailSyncReporter(Reporter):
+class EmailReporter(Reporter):
     """
     Implementation of the `Reporter` abstract class that sends the
-    reports by email. This is a synchronous version, meaning the when
-    the `report()` method returns the email has been sent.
+    reports by email.
     """
 
     def __init__(self, builder: Optional[EmailBuilder] = None):
@@ -169,12 +174,15 @@ class EmailSyncReporter(Reporter):
         self._smtp_server = email_conf["smtp_server"]
         self._smtp_port = email_conf["smtp_port"]
 
-    def report(self, report: Report):
+    def report(self, report: Report, sync: bool = False):
         """
         Build an email report and send it.
 
         Args:
             report (Report): Report to send.
+            sync (bool): `True` to wait for the report to be sent and
+                raise any exception that may occur in the process.
+                `False` to send in a background task.
 
         Raises:
             Exception: Any exception that may occur during message
@@ -184,41 +192,38 @@ class EmailSyncReporter(Reporter):
         if not self.check_rules(report):
             return
 
-        email = self._builder.build(report)
-        email["From"] = self._sender
-        email["To"] = self._recipient
+        if sync:
+            self._report_internal(report, True)
+        else:
+            threading.Thread(
+                target=self._report_internal,
+                args=(report, False),
+                name="AsyncEmailTask",
+                daemon=False,
+            ).start()
 
-        # Sending the email
-        with smtplib.SMTP(self._smtp_server, self._smtp_port) as server:
-            server.starttls()  # Secure the connection
-            server.login(self._sender, self._password)
-            server.send_message(email)
-
-        logger.debug(f"Successfully sent email for {report}.")
-
-
-class EmailAsyncReporter(EmailSyncReporter):
-    """
-    Same as `EmailSyncReporter` but the `report()` method is asynchronous.
-    When called, an internal thread is started to carry the building and
-    sending process. If an error occurs, it is logged but there is no
-    way for the task that posted the report to know it.
-    """
-
-    def report(self, report: Report):
+    def _report_internal(self, report: Report, raises: bool):
         """
-        Build and send a report in an asynchronous task.
+        Internal reporting method. Can be run synchronously or
+        asynchronously.
         """
-        threading.Thread(
-            target=self._async_report,
-            args=(report,),
-            name="AsyncEmailTask",
-            daemon=True,
-        ).start()
-
-    def _async_report(self, report: Report):
         try:
-            super().report(report)
+            email = self._builder.build(report)
+            email["From"] = self._sender
+            email["To"] = self._recipient
+
+            # Sending the email
+            with smtplib.SMTP(self._smtp_server, self._smtp_port) as server:
+                server.starttls()  # Secure the connection
+                server.login(self._sender, self._password)
+                server.send_message(email)
+
+            logger.debug(f"Successfully sent email report {report!s}.")
+
         except Exception as ex:
-            logger.error(f"An exception occurred sending an email report: {ex}.")
-            logger.error(f"Unsent report content: {report}.")
+            logger.error(
+                f"An error occurred sending email report {report!s}.", exc_info=True
+            )
+
+            if raises:
+                raise ex
