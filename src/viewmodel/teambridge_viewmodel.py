@@ -30,6 +30,7 @@ from PIL import ImageFont
 # Import internal modules
 from common.state_machine import *
 from common.live_data import LiveData  # For view communication
+from common.reporter import Reporter, ReportSeverity, Report, EmployeeReport
 from model import *  # Task scheduling
 from platform_io.barcode_scanner import BarcodeScanner  # Employee ID detection
 from core.time_tracker import ClockAction  # Domain model enums
@@ -77,7 +78,12 @@ class TeamBridgeViewModel(IStateMachine):
     Application state machine.
     """
 
-    def __init__(self, model: TeamBridgeScheduler, scanner: BarcodeScanner):
+    def __init__(
+        self,
+        model: TeamBridgeScheduler,
+        scanner: BarcodeScanner,
+        reporter: Optional[Reporter],
+    ):
         """
         Create the viewmodel state machine.
 
@@ -86,6 +92,8 @@ class TeamBridgeViewModel(IStateMachine):
                 to perform tasks.
             scanner (BarcodeScanner): Reference on the barcode scanner to
                 use to identify employees ids.
+            reporter (Optional[Reporter]): Optionally provide a reporter
+                object for employee errors / warnings.
         """
         # Enter the initial state
         # The entry() method is called at first run() call
@@ -93,6 +101,7 @@ class TeamBridgeViewModel(IStateMachine):
 
         self._model = model
         self._scanner = scanner
+        self._reporter = reporter
         self._cam_idx = _scanner_conf["camera_id"]
         self._scan_rate = _scanner_conf["scan_rate"]
         self._debug_mode = config.section("debug")["debug"]
@@ -114,6 +123,10 @@ class TeamBridgeViewModel(IStateMachine):
     @property
     def scanner(self) -> BarcodeScanner:
         return self._scanner
+
+    @property
+    def reporter(self) -> Optional[Reporter]:
+        return self._reporter
 
     @property
     def camera_idx(self) -> int:
@@ -483,7 +496,9 @@ class _ClockActionState(_IViewModelState):
             if isinstance(msg, EmployeeEvent):
                 return _ClockSuccessState(msg)
             elif isinstance(msg, ModelError):
-                return _ErrorState("Clock action task failed", msg)
+                return _ErrorState(
+                    "Clock action task failed", msg, employee_id=self._id
+                )
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -524,7 +539,13 @@ class _ClockSuccessState(_IViewModelState):
             if isinstance(msg, EmployeeData):
                 return _ConsultationSuccessState(msg, timeout=20.0)
             elif isinstance(msg, ModelError):
-                return _ErrorState("Consultation task failed", msg)
+                return _ErrorState(
+                    "Consultation task failed",
+                    msg,
+                    employee_id=self._evt.id,
+                    employee_name=self._evt.name,
+                    employee_firstname=self._evt.firstname,
+                )
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -595,7 +616,9 @@ class _ConsultationActionState(_IViewModelState):
             if isinstance(msg, EmployeeData):
                 return _ConsultationSuccessState(msg, timeout=60.0)
             elif isinstance(msg, ModelError):
-                return _ErrorState("Consultation task failed", msg)
+                return _ErrorState(
+                    "Consultation task failed", msg, employee_id=self._id
+                )
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -944,21 +967,75 @@ class _ErrorState(_IViewModelState):
         - Upon acknowledgment by sending the reset to clock action signal
     """
 
-    def __init__(self, msg: str, error: Optional[ModelError] = None):
+    def __init__(
+        self,
+        msg: str,
+        error: Optional[ModelError] = None,
+        employee_id: Optional[str] = None,
+        employee_name: Optional[str] = None,
+        employee_firstname: Optional[str] = None,
+    ):
         super().__init__()
-        # Save error
         self._msg = msg
         self._error = error
+        self._employee_id = employee_id
+        self._employee_name = employee_name
+        self._employee_firstname = employee_firstname
 
     def entry(self):
         # Reset next action to prevent wrong acknowledgment
         self.fsm.next_action = ViewModelAction.DEFAULT_ACTION
+
         logger.error(f"State machine entered error state. Reason '{self._msg}'.")
         if self._error:
             logger.error(
                 f"A task failed with error ({self._error.error_code}) "
                 f"'{self._error.message}'."
             )
+        if self._employee_id:
+            logger.error(
+                f"Error occurred with employee ID='{self._employee_id}', "
+                f"name='{self._employee_name if self._employee_name else "unknown"}', "
+                f"firstname='{self._employee_firstname if self._employee_firstname else "unknown"}'."
+            )
+
+        # Send an error report if a reporter has been specified
+        if self.fsm.reporter:
+            body = (
+                "The application entered error state. The user must acknowledge "
+                "to continue.\n\nError message: "
+                f"{self._msg}"
+            )
+
+            if self._error:
+                body += f"\nError code {self._error.error_code}"
+                body += f"\nSpecific message: {self._error.message}"
+
+            if self._employee_id:
+                self.__employee_report(self.fsm.reporter, body, self._employee_id)
+            else:
+                self.__simple_report(self.fsm.reporter, body)
+
+    def __employee_report(self, reporter: Reporter, body: str, id: str):
+        reporter.report(
+            EmployeeReport(
+                ReportSeverity.ERROR,
+                "Employee runtime exception",
+                body,
+                employee_id=id,
+                name=self._employee_name,
+                firstname=self._employee_firstname,
+            ).attach_logs()
+        )
+
+    def __simple_report(self, reporter: Reporter, body: str):
+        reporter.report(
+            Report(
+                ReportSeverity.ERROR,
+                "Runtime exception",
+                body
+            ).attach_logs()
+        )
 
     def do(self) -> Optional[IStateBehavior]:
         # Check if acknowledged

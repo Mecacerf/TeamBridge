@@ -170,7 +170,7 @@ def _load_backend(config: LocalConfig) -> Any:
 
     # Create the viewmodel with a standard barcode scanner
     scanner = BarcodeScanner()
-    return TeamBridgeViewModel(model=model, scanner=scanner)
+    return TeamBridgeViewModel(model=model, scanner=scanner, reporter=reporter)
 
 
 def _load_sleep_manager(config: LocalConfig) -> Any:

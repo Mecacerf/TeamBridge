@@ -65,31 +65,31 @@ class EmailBuilder:
         # Body template
         body = textwrap.dedent(
             f"""\
-            ────────── Summary ──────────
-            Severity: {report.severity.name}
-            Title: {report.title}
-            Timestamp: {report.created_at:%Y-%m-%d %H:%M:%S}
-            Device ID: {report.device_id}
+                ────────── Summary ──────────
+                Severity: {report.severity.name}
+                Title: {report.title}
+                Timestamp: {report.created_at:%Y-%m-%d %H:%M:%S}
+                Device ID: {report.device_id}
 
             """
         )
 
         if report.content:
             body += textwrap.dedent(
-                f"""        
-                ────────── Details ──────────
-                {report.content.strip()}
-
+                """\
+                    ────────── Details ──────────
                 """
             )
+            body += report.content
+            body += "\n\n"
 
         # Add employee context if available
         if isinstance(report, EmployeeReport):
             body += textwrap.dedent(
                 f"""\
-                ────────── Employee ──────────
-                Employee ID: {report.employee_id}
-                Name: {report.firstname or ''} {report.name or ''}
+                    ────────── Employee ──────────
+                    Employee ID: {report.employee_id}
+                    Name: {report.firstname or '?'} {report.name or '?'}
 
                 """
             )
@@ -103,9 +103,9 @@ class EmailBuilder:
         # Footer
         body += textwrap.dedent(
             """\
-
-            ─────────────────────────────────────────
-            This message was generated automatically.
+                
+                ────────────────────────────────────────
+                This message was generated automatically.
             """
         )
 
