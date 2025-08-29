@@ -117,8 +117,6 @@ if __name__ == "__main__":
         app.run()
         report_stop()
 
-        # Now where to report things: viewmodel error state, viewmodel consultation state after a clock event --> employee reports
-
     except Exception as exc:
         exit_code = 1
         try:

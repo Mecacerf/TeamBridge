@@ -218,7 +218,7 @@ class EmailReporter(Reporter):
                 server.login(self._sender, self._password)
                 server.send_message(email)
 
-            logger.debug(f"Successfully sent email report {report!s}.")
+            logger.info(f"Successfully sent email report {report!s}.")
 
         except Exception as ex:
             logger.error(

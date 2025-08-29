@@ -537,7 +537,8 @@ class _ClockSuccessState(_IViewModelState):
         msg = self.fsm.model.get_result(self._handle)
         if msg:
             if isinstance(msg, EmployeeData):
-                return _ConsultationSuccessState(msg, timeout=20.0)
+                # Always send an error report when coming from clocking mode
+                return _ConsultationSuccessState(msg, timeout=20.0, should_report=True)
             elif isinstance(msg, ModelError):
                 return _ErrorState(
                     "Consultation task failed",
@@ -638,15 +639,55 @@ class _ConsultationSuccessState(_IViewModelState):
         - When the timeout is elapsed
     """
 
-    def __init__(self, data: EmployeeData, timeout: float = 15.0):
+    def __init__(
+        self, data: EmployeeData, timeout: float = 15.0, should_report: bool = False
+    ):
         super().__init__()
         # Save data and quit option
         self._data = data
         self._timeout = timeout
+        self._should_report = should_report
 
     def entry(self):
         # Set leave time
         self._leave = time.time() + self._timeout
+
+        # Send a warning / error report if configured
+        if self._should_report and self.fsm.reporter:
+            self.__send_report(self.fsm.reporter)
+
+    def __send_report(self, reporter: Reporter):
+        dominant = self._data.dominant_error
+        # Check if the employee error level overshoots threshold
+        min_level = config.section("report.general")["employee_error_level"]
+        if dominant.error_id < min_level:
+            return
+
+        # Translate error status to report severity
+        severity = ReportSeverity.INFO
+        if dominant.status is AttendanceErrorStatus.WARNING:
+            severity = ReportSeverity.WARNING
+        elif dominant.status is AttendanceErrorStatus.ERROR:
+            severity = ReportSeverity.ERROR
+
+        body = f"Most critical error for employee: \n- {dominant}"
+        if self._data.date_errors:
+            body += "\n\nAll errors:\n"
+            body += "\n".join(
+                [f"- {date}: {err}" for date, err in self._data.date_errors.items()]
+            )
+
+        # Report employee error
+        reporter.report(
+            EmployeeReport(
+                severity,
+                f"{self._data.firstname} {self._data.name}",
+                body,
+                employee_id=self._data.id,
+                name=self._data.name,
+                firstname=self._data.firstname,
+            )
+        )
 
     def do(self) -> Optional[IStateBehavior]:
         # Leave the state if an employee ID is available
@@ -1030,11 +1071,7 @@ class _ErrorState(_IViewModelState):
 
     def __simple_report(self, reporter: Reporter, body: str):
         reporter.report(
-            Report(
-                ReportSeverity.ERROR,
-                "Runtime exception",
-                body
-            ).attach_logs()
+            Report(ReportSeverity.ERROR, "Runtime exception", body).attach_logs()
         )
 
     def do(self) -> Optional[IStateBehavior]:
