@@ -13,13 +13,15 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 from abc import ABC, abstractmethod
-from enum import IntEnum, auto
+from enum import IntEnum
 from dataclasses import dataclass, field
 import datetime as dt
-from typing import Optional
+from typing import Optional, Type
+from types import TracebackType
 import os
 
 # Internal libraries
+from threading import Event
 from bootstrap import LOGGING_FILE_NAME
 from local_config import LocalConfig
 
@@ -99,39 +101,107 @@ class EmployeeReport(Report):
     """
     A report targetting a specific employee. The name and firstname can
     be missing, typically when reporting an error where this information
-    is unknown.
+    is unknown. If this report has been created after an employee error
+    occurred, the error ID can be specified.
     """
 
     employee_id: str
     name: Optional[str] = None
     firstname: Optional[str] = None
+    error_id: Optional[int] = None
 
 
-class Reporter(ABC):
+class ReportingService(ABC):
     """
-    Generic reporter class.
+    A generic reporting service interface.
     """
+
+    def __init__(self) -> None:
+        """
+        Initialize a reporting service.
+        """
+        self._available_flag = Event()
+
+    @property
+    def available(self) -> bool:
+        """
+        Returns:
+            bool: Service availability status.
+        """
+        return self._available_flag.is_set()
 
     def check_rules(self, report: Report) -> bool:
         """
         Check whether this report can be sent according to configured
         reporting rules.
+
+        Args:
+            report (Report): Report to check.
+
+        Returns:
+            bool: `True` if the report fulfills the rules.
         """
+        rules = config.section("report.general")
+
         # Check the minimal report severity
-        min_severity = config.section("report.general")["report_severity"]
+        min_severity = rules["report_severity"]
         min_severity = ReportSeverity.parse(min_severity)
 
-        return report.severity >= min_severity
+        if report.severity < min_severity:
+            return False
 
-    @abstractmethod
-    def report(self, report: Report, sync: bool = False):
+        # Check the employee error ID
+        if isinstance(report, EmployeeReport):
+            min_error_level = rules["employee_error_level"]
+            if report.error_id and report.error_id < min_error_level:
+                return False
+
+        return True
+
+    def send_report(self, report: Report, bypass: bool = False):
         """
-        Send a report.
+        Submit a report to be sent by the service.
 
         Args:
             report (Report): Report to send.
-            sync (bool): `True` to wait for the report to be sent and
-                raise any exception that may occur in the process.
-                `False` to send in a background task.
+            bypass (bool): `True` to ignore the rules check. By default,
+                `check_rules()` is called to verify if the report can
+                be sent.
+        """
+        if bypass or self.check_rules(report):
+            self._internal_send(report)
+
+    @abstractmethod
+    def _internal_send(self, report: Report):
+        """
+        Internal implementation of the `send_report()` method.
         """
         pass
+
+    def close(self):
+        """
+        Terminate the service.
+        """
+        self._available_flag.clear()
+
+    ### Context manager ###
+
+    def __enter__(self) -> "ReportingService":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Optional[bool]:
+        try:
+            self.close()
+        except Exception as close_ex:
+            if exc_val:
+                # If there was an exception in the context block,
+                # chain the close error to it
+                raise exc_val from close_ex
+            # No prior exception: just raise the close failure
+            raise close_ex
+        return False  # Propagate any exception from the context block

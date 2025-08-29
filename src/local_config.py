@@ -23,7 +23,7 @@ from types import MappingProxyType
 from typing import Any, Optional
 
 # Internal libraries
-from common.config_parser import ConfigParser
+from common.config_parser import ConfigParser, ConfigError
 from common.singleton_register import SingletonRegister
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,10 @@ class LocalConfig(SingletonRegister):
         Returns:
             MappingProxyType: A read-only view on a data section.
         """
-        return self._view[section]
+        try:
+            return self._view[section]
+        except AttributeError:
+            raise ConfigError("Configuration unavailable")
 
     def persist(self, section: str, key: str, value: Any):
         """

@@ -20,14 +20,13 @@ import os
 import io
 import textwrap
 from typing import Optional
+from threading import Thread
+from queue import Queue, ShutDown, Empty
 
 # Internal libraries
-from common.reporter import Reporter, Report, EmployeeReport
-from local_config import LocalConfig
-import threading
+from common.reporter import ReportingService, Report, EmployeeReport
 
 logger = logging.getLogger(__name__)
-config = LocalConfig()
 
 
 class EmailBuilder:
@@ -148,82 +147,147 @@ class EmailBuilder:
                 )
 
 
-class EmailReporter(Reporter):
+class EmailReporter(ReportingService):
     """
-    Implementation of the `Reporter` abstract class that sends the
+    Implementation of the `ReportingService` interface that sends the
     reports by email.
     """
 
-    def __init__(self, builder: Optional[EmailBuilder] = None):
+    CHECK_AVAILABILITY_TIMEOUT = 15.0
+
+    def __init__(
+        self,
+        smtp_server: str,
+        smtp_port: int,
+        sender: str,
+        password: str,
+        recipient: str,
+        builder: Optional[EmailBuilder] = None,
+    ):
         """
         Create an email reporter. Optionally specify a custom builder.
 
         Args:
+            smtp_server (str): SMTP server to use for email sending.
+            smtp_port (int): SMTP server port.
+            sender (str): Sender email address.
+            password (str): Sender password.
+            recipient (str): Recipient email address.
             builder (Optional[EmailBuilder]): Optionally specify a
                 custom email builder.
         """
+        super().__init__()
+
         self._builder = EmailBuilder()  # Use default builder
         if builder:
             self._builder = builder
 
         # Gather email parameters
-        email_conf = config.section("report.email")
-        self._sender = email_conf["sender_address"]
-        self._password = email_conf["sender_password"]
-        self._recipient = email_conf["recipient_address"]
-        self._smtp_server = email_conf["smtp_server"]
-        self._smtp_port = email_conf["smtp_port"]
+        self._sender = sender
+        self._password = password
+        self._recipient = recipient
+        self._smtp_server = smtp_server
+        self._smtp_port = smtp_port
 
-    def report(self, report: Report, sync: bool = False):
+        # Setup the report sending queue
+        self._send_queue = Queue()
+
+        # Start the service task
+        self._task = Thread(
+            target=self.__reporter_task, name="EmailReporterTask", daemon=False
+        )
+        self._task.start()
+
+    def __reporter_task(self):
         """
-        Build an email report and send it.
-
-        Args:
-            report (Report): Report to send.
-            sync (bool): `True` to wait for the report to be sent and
-                raise any exception that may occur in the process.
-                `False` to send in a background task.
-
-        Raises:
-            Exception: Any exception that may occur during message
-                building or sending.
-        """
-        # The report must be compliant with reporting rules
-        if not self.check_rules(report):
-            return
-
-        if sync:
-            self._report_internal(report, True)
-        else:
-            threading.Thread(
-                target=self._report_internal,
-                args=(report, False),
-                name="AsyncEmailTask",
-                daemon=False,
-            ).start()
-
-    def _report_internal(self, report: Report, raises: bool):
-        """
-        Internal reporting method. Can be run synchronously or
-        asynchronously.
+        Internal service task.
         """
         try:
-            email = self._builder.build(report)
-            email["From"] = self._sender
-            email["To"] = self._recipient
+            # Initial service availability check
+            self.__check_availability()
 
+            while True:
+                try:
+                    # Block until a report is available
+                    report = self._send_queue.get(
+                        block=True, timeout=self.CHECK_AVAILABILITY_TIMEOUT
+                    )
+                    self.__process_report(report)
+
+                except Empty:
+                    if self._available_flag.is_set():
+                        continue
+                    # Re-check service availability
+                    self.__check_availability()
+
+        except ShutDown:
+            logger.info("Email reporting service task finished.")
+        except Exception:
+            logger.exception(f"Email reporting task finished with exception.")
+
+        self._available_flag.clear()  # Obviously unavailable after task stop
+
+    def __check_availability(self):
+        """
+        Check if the SMTP server is reachable and set the availibility
+        flag accordingly.
+        """
+        try:
+            with self.__login():
+                self._available_flag.set()
+                logger.info("SMTP server is now available.")
+        except OSError:
+            pass
+
+    def __process_report(self, report: Report):
+        """
+        Build an email message from the report and try to send it.
+        """
+        email = self._builder.build(report)
+        email["From"] = self._sender
+        email["To"] = self._recipient
+
+        try:
             # Sending the email
-            with smtplib.SMTP(self._smtp_server, self._smtp_port) as server:
-                server.starttls()  # Secure the connection
-                server.login(self._sender, self._password)
+            with self.__login() as server:
                 server.send_message(email)
 
+            self._available_flag.set()
             logger.info(f"Successfully sent email report {report!s}.")
 
-        except Exception as ex:
-            logger.error(
-                f"An error occurred sending email report {report!s}.", exc_info=True
-            )
+        except OSError as ex:
+            self._available_flag.clear()
+            logger.error(f"An exception occurred sending report {report!s}: {ex}")
 
-            if raises:
-                raise ex
+    def __login(self) -> smtplib.SMTP:
+        """
+        Start a TLS connection to the SMTP server and tries to login with
+        configured identifiers.
+
+        Returns:
+            smtplib.SMTP: SMTP connection instance.
+
+        Raises:
+            SMTPHeloError
+            SMTPAuthenticationError
+            SMTPNotSupportedError
+            SMTPException
+        """
+        server = smtplib.SMTP(self._smtp_server, self._smtp_port)
+        server.starttls()  # Secured connection with TLS
+        server.login(self._sender, self._password)
+        return server
+
+    def close(self):
+        super().close()
+        # Shutdown the queue, blocking put() calls and raising ShutDown
+        # when empty. Join the thread (wait until all reports are sent).
+        self._send_queue.shutdown(immediate=False)
+        self._task.join(timeout=10.0)  # Safe timeout
+
+    def _internal_send(self, report: Report):
+        try:
+            # Put pending report in the send queue
+            self._send_queue.put(report)
+        except ShutDown:
+            logger.error(f"Cannot send report {report!s}, the service has been closed.")

@@ -48,60 +48,32 @@ def report_crash(exc: Exception):
     """
     Try to send a crash report.
     """
-    if not bootstrap.reporter:
-        logger.warning(
-            "Cannot send a crash report. It happened before the reporter setup."
-        )
-        return
+    from common.config_parser import ConfigError
 
     try:
-        from common.reporter import Reporter, Report, ReportSeverity
+        from common.reporter import Report, ReportSeverity
+        from local_config import LocalConfig
 
-        reporter: Reporter = bootstrap.reporter
-        reporter.report(
-            Report(
-                ReportSeverity.CRITICAL,
-                "Crash report",
-                (
-                    "Teambridge encountered a critical error and must be "
-                    "restarted manually.\n\n"
-                    f"{exc.__class__.__name__}: {exc}."
-                ),
-            ).attach_logs(),
-            sync=True,  # Wait for the report to be sent
+        with bootstrap.load_reporter(LocalConfig()) as reporter:
+            reporter.send_report(
+                Report(
+                    ReportSeverity.CRITICAL,
+                    "Crash report",
+                    (
+                        "Teambridge encountered a critical error and must be "
+                        "restarted manually.\n\n"
+                        f"{exc.__class__.__name__}: {exc}."
+                    ),
+                ).attach_logs()
+            )
+
+    except ConfigError:
+        logger.warning(
+            "No crash report sent. The configuration was not available at the "
+            "time of crash."
         )
-    except Exception as e:
-        logger.error(f"An error occurred sending the error report: {e}.")
-
-
-def report_start():
-    """
-    Send an application starting report.
-    """
-    assert bootstrap.reporter
-
-    from common.reporter import Reporter, Report, ReportSeverity
-
-    reporter: Reporter = bootstrap.reporter
-    reporter.report(Report(ReportSeverity.INFO, "Teambridge has started", None))
-
-
-def report_stop():
-    """
-    Send an application stopping report.
-    """
-    assert bootstrap.reporter
-
-    from common.reporter import Reporter, Report, ReportSeverity
-
-    reporter: Reporter = bootstrap.reporter
-    reporter.report(
-        Report(
-            ReportSeverity.INFO,
-            "Teambridge has stopped",
-            "Teambridge has been stopped by a user.",
-        )
-    )
+    except Exception as ex:
+        logger.exception(f"An exception occurred sending the crash report: {ex}")
 
 
 # Program entry
@@ -113,9 +85,7 @@ if __name__ == "__main__":
         # App bootstrap (logging, services, etc)
         app = bootstrap.app_bootstrap()
 
-        report_start()
         app.run()
-        report_stop()
 
     except Exception as exc:
         exit_code = 1

@@ -30,7 +30,7 @@ from PIL import ImageFont
 # Import internal modules
 from common.state_machine import *
 from common.live_data import LiveData  # For view communication
-from common.reporter import Reporter, ReportSeverity, Report, EmployeeReport
+from common.reporter import ReportingService, ReportSeverity, Report, EmployeeReport
 from model import *  # Task scheduling
 from platform_io.barcode_scanner import BarcodeScanner  # Employee ID detection
 from core.time_tracker import ClockAction  # Domain model enums
@@ -82,7 +82,7 @@ class TeamBridgeViewModel(IStateMachine):
         self,
         model: TeamBridgeScheduler,
         scanner: BarcodeScanner,
-        reporter: Optional[Reporter],
+        reporter: Optional[ReportingService],
     ):
         """
         Create the viewmodel state machine.
@@ -115,6 +115,7 @@ class TeamBridgeViewModel(IStateMachine):
         self._panel_title_text = LiveData[str]("")
         self._panel_subtitle_text = LiveData[str]("")
         self._panel_content_text = LiveData[str]("")
+        self._reporting_service = LiveData[bool](False)
 
     @property
     def model(self) -> TeamBridgeScheduler:
@@ -125,7 +126,7 @@ class TeamBridgeViewModel(IStateMachine):
         return self._scanner
 
     @property
-    def reporter(self) -> Optional[Reporter]:
+    def reporter(self) -> Optional[ReportingService]:
         return self._reporter
 
     @property
@@ -146,6 +147,9 @@ class TeamBridgeViewModel(IStateMachine):
         """
         # Run the state machine
         super().run()
+
+        # Update service status
+        self._reporting_service.value = not self._reporter or self._reporter.available
 
     def on_state_changed(
         self, old_state: Optional[IStateBehavior], new_state: IStateBehavior
@@ -259,6 +263,14 @@ class TeamBridgeViewModel(IStateMachine):
             LiveData[str]: text as an observable
         """
         return self._panel_content_text
+
+    @property
+    def reporting_service_status(self) -> LiveData[bool]:
+        """
+        Get the reporting service status. If no reporting service is
+        configured, this is always `True`.
+        """
+        return self._reporting_service
 
 
 class _IViewModelState(IStateBehavior, ABC):
@@ -656,14 +668,9 @@ class _ConsultationSuccessState(_IViewModelState):
         if self._should_report and self.fsm.reporter:
             self.__send_report(self.fsm.reporter)
 
-    def __send_report(self, reporter: Reporter):
-        dominant = self._data.dominant_error
-        # Check if the employee error level overshoots threshold
-        min_level = config.section("report.general")["employee_error_level"]
-        if dominant.error_id < min_level:
-            return
-
+    def __send_report(self, reporter: ReportingService):
         # Translate error status to report severity
+        dominant = self._data.dominant_error
         severity = ReportSeverity.INFO
         if dominant.status is AttendanceErrorStatus.WARNING:
             severity = ReportSeverity.WARNING
@@ -678,7 +685,7 @@ class _ConsultationSuccessState(_IViewModelState):
             )
 
         # Report employee error
-        reporter.report(
+        reporter.send_report(
             EmployeeReport(
                 severity,
                 f"{self._data.firstname} {self._data.name}",
@@ -686,6 +693,7 @@ class _ConsultationSuccessState(_IViewModelState):
                 employee_id=self._data.id,
                 name=self._data.name,
                 firstname=self._data.firstname,
+                error_id=dominant.error_id,
             )
         )
 
@@ -1057,8 +1065,8 @@ class _ErrorState(_IViewModelState):
             else:
                 self.__simple_report(self.fsm.reporter, body)
 
-    def __employee_report(self, reporter: Reporter, body: str, id: str):
-        reporter.report(
+    def __employee_report(self, reporter: ReportingService, body: str, id: str):
+        reporter.send_report(
             EmployeeReport(
                 ReportSeverity.ERROR,
                 "Employee runtime exception",
@@ -1069,8 +1077,8 @@ class _ErrorState(_IViewModelState):
             ).attach_logs()
         )
 
-    def __simple_report(self, reporter: Reporter, body: str):
-        reporter.report(
+    def __simple_report(self, reporter: ReportingService, body: str):
+        reporter.send_report(
             Report(ReportSeverity.ERROR, "Runtime exception", body).attach_logs()
         )
 
