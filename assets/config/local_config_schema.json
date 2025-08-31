@@ -29,6 +29,20 @@
       "comment": "Regular expression to match year in folder names, must match 4 digits"
     }
   },
+  "repository.rules": {
+    "last_morning_clock_out_time": {
+      "type": "str",
+      "required": true,
+      "default": "05:00",
+      "comment": "A midnight rollover is done if the employee clocks out between midnight and this hour (HH:MM)"
+    },
+    "max_work_duration": {
+      "type": "str",
+      "required": true,
+      "default": "08:00",
+      "comment": "A midnight rollover is done if the delta time from clock-in to now is smaller than this duration (HH:MM)"
+    }
+  },
   "scanner": {
     "camera_id": {
       "type": "int",
