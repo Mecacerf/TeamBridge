@@ -2,7 +2,7 @@
   "general": {
     "device": {
       "type": "str",
-      "default": "TeamBridge Device #0",
+      "default": "TeamBridge Device",
       "comment": "Identifier/name of the device"
     },
     "frontend": {
@@ -21,6 +21,12 @@
       "required": true,
       "default": "samples/",
       "comment": "Path to remote spreadsheets repository"
+    },
+    "year_regex": {
+      "type": "str",
+      "required": true,
+      "default": "(?<!\\d)(\\d{4})(?!\\d)",
+      "comment": "Regular expression to match year in folder names, must match 4 digits"
     }
   },
   "scanner": {
