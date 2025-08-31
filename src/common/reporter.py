@@ -77,7 +77,9 @@ class Report:
         self.created_at = dt.datetime.now()
         self.device_id = config.section("general")["device"]
         self.machine_name = socket.gethostname()
-        self.machine_os = f"{platform.system()} {platform.release()} ({platform.version()})"
+        self.machine_os = (
+            f"{platform.system()} {platform.release()} ({platform.version()})"
+        )
 
     def __str__(self) -> str:
         return f"'[{self.severity.name}] {self.title}'"

@@ -24,6 +24,9 @@ Description:
         creating the default .ini file
     - min/max: optionally constrains int and float values in a specified
         range
+    - enum: optionally define a preset of accepted values (only for strings)
+    - match: optionally specify a regular expression the string value must
+        match
     Only the type parameter is absolutely required.
 
 Company: Mecacerf SA
@@ -36,8 +39,9 @@ import logging
 import json
 import configparser
 from pathlib import Path
-from typing import Iterable, Type, Any, Optional, Callable, NamedTuple, TextIO, Tuple
+from typing import Iterable, Any, Optional, Callable, NamedTuple, TextIO, Tuple
 from types import MappingProxyType
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +94,23 @@ def _value_to_str(value: Any) -> str:
     elif isinstance(value, (int, float, str)):
         return str(value)
     raise ValueError(f"Unkown type '{type(value).__name__}'")
+
+
+def _check_valid_regex(value: Any) -> bool:
+    """
+    Check if the given value is a valid regular expression.
+
+    Returns:
+        bool: `True` if string and compilable, `False` otherwise.
+    """
+    if not isinstance(value, str):
+        return False
+
+    try:
+        re.compile(value)
+        return True
+    except re.error:
+        return False
 
 
 class ConversionResult(NamedTuple):
@@ -152,6 +173,7 @@ class _SchemaEntry:
         self._min = self.__get_field(entry, "min", (int, float), None)
         self._max = self.__get_field(entry, "max", (int, float), None)
         self._enum = self.__get_field(entry, "enum", (list,), None)
+        self._match = self.__get_field(entry, "match", (str,), None)
 
         # Check no extra entry exists
         diff = set(entry.keys()) - {
@@ -162,6 +184,7 @@ class _SchemaEntry:
             "min",
             "max",
             "enum",
+            "match",
         }
 
         if diff:
@@ -283,6 +306,24 @@ class _SchemaEntry:
                     f"'{value}' is not a possible value, expecting one of "
                     f"'{", ".join(self._enum)}'",
                     None,
+                )
+
+        # Check string matches regex
+        if self._match:
+            if not isinstance(value, str):
+                return ConversionResult(
+                    True,
+                    "the match constraint is only applicable for strings, "
+                    f"got a '{type(value).__name__}'",
+                    None,
+                )
+
+            if not _check_valid_regex(self._match):
+                return ConversionResult(True, f"wrong regex '{self._match}'", None)
+
+            if not re.fullmatch(self._match, value):
+                return ConversionResult(
+                    True, f"value '{value}' doesn't match regex constraint", None
                 )
 
         # All checks passed, return casted value

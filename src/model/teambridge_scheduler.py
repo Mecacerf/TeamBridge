@@ -228,7 +228,7 @@ class TeamBridgeScheduler:
         - The last clock-out is missing the day before and;
         - The time between now and the clock-in of yesterday is less than
             8 hours.
-        
+
         Actual time values are configured in the local configuration file.
         """
 
@@ -243,9 +243,9 @@ class TeamBridgeScheduler:
             morning_clock_out = dt.datetime.strptime(morning_clock_out, "%H:%M").time()
 
             max_work_duration = rules["max_work_duration"]
-            hours, minutes = map(int, max_work_duration.split(':'))
+            hours, minutes = map(int, max_work_duration.split(":"))
             max_work_duration = dt.timedelta(hours=hours, minutes=minutes)
-            
+
             # Yesterday must be the same year
             yesterday = datetime - dt.timedelta(days=1)
             if yesterday.year != tracker.tracked_year:
