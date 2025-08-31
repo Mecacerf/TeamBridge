@@ -59,7 +59,7 @@ class Report:
     """
     A report holding a severity, a title and message content.
     Attachments can optionally be added to the report using the provided
-    convenienvce methods.
+    convenience methods.
     """
 
     severity: ReportSeverity
@@ -76,12 +76,15 @@ class Report:
     def __str__(self) -> str:
         return f"'[{self.severity.name}] {self.title}'"
 
-    def attach_logs(self) -> "Report":
+    def attach_logs(self, root: Optional[str] = None) -> "Report":
         """
         Attach the program log files to the report.
         """
+        if not root:
+            root = "."
+
         self.attachments.extend(
-            [file for file in os.listdir(".") if LOGGING_FILE_NAME in file]
+            [file for file in os.listdir(root) if LOGGING_FILE_NAME in file]
         )
         return self
 
@@ -125,6 +128,10 @@ class ReportingService(ABC):
     @property
     def available(self) -> bool:
         """
+        Availability status of the service. An unavailable service can
+        still be used, the behavior is implementation dependant though.
+        It may wakeup a sleeping service or just fail.
+
         Returns:
             bool: Service availability status.
         """
@@ -153,7 +160,7 @@ class ReportingService(ABC):
         # Check the employee error ID
         if isinstance(report, EmployeeReport):
             min_error_level = rules["employee_error_level"]
-            if report.error_id and report.error_id < min_error_level:
+            if report.error_id is not None and report.error_id < min_error_level:
                 return False
 
         return True
