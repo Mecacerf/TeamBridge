@@ -53,15 +53,18 @@ from kivy.properties import (
 )
 from kivy.clock import Clock
 
-# Import logging and get the module logger
+# Logging and config modules
 import logging
+from local_config import LocalConfig
 
 logger = logging.getLogger(__name__)
+config = LocalConfig()
 
 # Internal imports
 from viewmodel.teambridge_viewmodel import *
 from platform_io.sleep_manager import SleepManager
 from .view_theme import *
+from common.reporter import ReportingService, ReportSeverity, Report
 
 # Set Kivy window icon
 Window.set_icon("assets/images/company_logo_small.png")
@@ -96,11 +99,6 @@ from typing import Optional, Any
 # Run method call interval in seconds
 RUN_INTERVAL = float(1.0 / 30.0)
 
-# Internal imports
-from local_config import LocalConfig
-
-_config = LocalConfig()
-
 
 class TeamBridgeApp(App):
     """
@@ -121,6 +119,7 @@ class TeamBridgeApp(App):
         fullscreen: bool = False,
         theme: Optional[ViewTheme] = None,
         sleep_manager: Optional[SleepManager] = None,
+        reporter: Optional[ReportingService] = None,
     ):
         """
         Initialize the application.
@@ -131,11 +130,14 @@ class TeamBridgeApp(App):
             theme (ViewTheme): Optional theme to customize UI colors.
             sleep_manager (SleepManager): Optional sleep manager to use
                 when the UI is idle.
+            reporter (ReportingService): Optional reporting service to
+                send application events.
         """
         super().__init__()
 
         self._viewmodel = viewmodel
         self._sleep_manager = sleep_manager
+        self._reporter = reporter
 
         self._sleep_timeout = 0
         if sleep_manager:
@@ -199,13 +201,35 @@ class TeamBridgeApp(App):
         Clock.schedule_interval(self._run_viewmodel, RUN_INTERVAL)
         return MainScreen(self._viewmodel, self)
 
+    def on_start(self):
+        """
+        Called by kivy when the application is starting.
+        """
+        if self._reporter:
+            self._reporter.send_report(
+                Report(ReportSeverity.INFO, "Teambridge has started", None)
+            )
+
     def on_stop(self):
         """
         Called by kivy when the application finishes running.
         """
-        self._viewmodel.close()
+        Window.hide()  # Improve responsiveness by immediately hiding window
+
         if self._sleep_manager:
             self._sleep_manager.disable()
+
+        if self._reporter:
+            self._reporter.send_report(
+                Report(
+                    ReportSeverity.INFO,
+                    "Teambridge has stopped",
+                    "Teambridge has been stopped by a user.",
+                )
+            )
+            self._reporter.close()
+
+        self._viewmodel.close()
         logger.info("Application closed, goodbye.")
 
     def on_screen_activity(self, *args: tuple[Any]):
@@ -250,6 +274,8 @@ class MainScreen(FloatLayout):
     panel_title_text = StringProperty("")
     panel_subtitle_text = StringProperty("")
     panel_content_text = StringProperty("")
+    # Services panel text
+    services_panel_text = StringProperty("")
 
     ## Properties provided by the kv file
     # Toggle buttons
@@ -288,6 +314,10 @@ class MainScreen(FloatLayout):
         self._viewmodel.panel_title_text.observe(self.upd_panel_title)
         self._viewmodel.panel_subtitle_text.observe(self._upd_panel_subtitle)
         self._viewmodel.panel_content_text.observe(self._upd_panel_content)
+        # Observe the services status
+        self._viewmodel.reporting_service_status.observe(
+            self._upd_reporting_service_sts, init_call=True
+        )
         # Observe the viewmodel state
         self._viewmodel.current_state.observe(self._on_state_change)
         # Update the UI style on theme change
@@ -317,6 +347,9 @@ class MainScreen(FloatLayout):
 
     def _upd_panel_content(self, txt: str):
         self.panel_content_text = txt
+
+    def _upd_reporting_service_sts(self, status: bool):
+        self.services_panel_text = "" if status else "\u26a0 Serveur SMTP \u26a0"
 
     def _on_state_change(self, state: str):
         """
@@ -466,7 +499,7 @@ class MainScreen(FloatLayout):
         if codepoint == " ":
             set_dark = self._app.get_theme() is LIGHT_THEME
             self._app.set_theme(DARK_THEME if set_dark else LIGHT_THEME)
-            _config.persist("ui", "dark_mode", set_dark)
+            config.persist("ui", "dark_mode", set_dark)
             logger.info(
                 f"Changed view theme to {"dark" if set_dark else "light"} mode."
             )

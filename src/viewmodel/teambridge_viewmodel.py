@@ -30,19 +30,18 @@ from PIL import ImageFont
 # Import internal modules
 from common.state_machine import *
 from common.live_data import LiveData  # For view communication
+from common.reporter import ReportingService, ReportSeverity, Report, EmployeeReport
 from model import *  # Task scheduling
 from platform_io.barcode_scanner import BarcodeScanner  # Employee ID detection
 from core.time_tracker import ClockAction  # Domain model enums
 from core.attendance.attendance_validator import AttendanceErrorStatus
 from local_config import LocalConfig
 
-logger = logging.getLogger(__name__)
-
 __all__ = ["TeamBridgeViewModel", "ViewModelAction"]
 
-# Get the local configuration
-_config = LocalConfig()
-_scanner_conf = _config.section("scanner")
+logger = logging.getLogger(__name__)
+config = LocalConfig()
+_scanner_conf = config.section("scanner")
 
 # Timeout for the attendance list task
 ATTENDANCE_LIST_TIMEOUT = 60.0
@@ -79,7 +78,12 @@ class TeamBridgeViewModel(IStateMachine):
     Application state machine.
     """
 
-    def __init__(self, model: TeamBridgeScheduler, scanner: BarcodeScanner):
+    def __init__(
+        self,
+        model: TeamBridgeScheduler,
+        scanner: BarcodeScanner,
+        reporter: Optional[ReportingService] = None,
+    ):
         """
         Create the viewmodel state machine.
 
@@ -88,6 +92,8 @@ class TeamBridgeViewModel(IStateMachine):
                 to perform tasks.
             scanner (BarcodeScanner): Reference on the barcode scanner to
                 use to identify employees ids.
+            reporter (Optional[Reporter]): Optionally provide a reporter
+                object for employee errors / warnings.
         """
         # Enter the initial state
         # The entry() method is called at first run() call
@@ -95,9 +101,10 @@ class TeamBridgeViewModel(IStateMachine):
 
         self._model = model
         self._scanner = scanner
+        self._reporter = reporter
         self._cam_idx = _scanner_conf["camera_id"]
         self._scan_rate = _scanner_conf["scan_rate"]
-        self._debug_mode = _config.section("debug")["debug"]
+        self._debug_mode = config.section("debug")["debug"]
 
         self._next_action = ViewModelAction.DEFAULT_ACTION
 
@@ -108,6 +115,7 @@ class TeamBridgeViewModel(IStateMachine):
         self._panel_title_text = LiveData[str]("")
         self._panel_subtitle_text = LiveData[str]("")
         self._panel_content_text = LiveData[str]("")
+        self._reporting_service = LiveData[bool](False)
 
     @property
     def model(self) -> TeamBridgeScheduler:
@@ -116,6 +124,10 @@ class TeamBridgeViewModel(IStateMachine):
     @property
     def scanner(self) -> BarcodeScanner:
         return self._scanner
+
+    @property
+    def reporter(self) -> Optional[ReportingService]:
+        return self._reporter
 
     @property
     def camera_idx(self) -> int:
@@ -135,6 +147,9 @@ class TeamBridgeViewModel(IStateMachine):
         """
         # Run the state machine
         super().run()
+
+        # Update service status
+        self._reporting_service.value = not self._reporter or self._reporter.available
 
     def on_state_changed(
         self, old_state: Optional[IStateBehavior], new_state: IStateBehavior
@@ -248,6 +263,14 @@ class TeamBridgeViewModel(IStateMachine):
             LiveData[str]: text as an observable
         """
         return self._panel_content_text
+
+    @property
+    def reporting_service_status(self) -> LiveData[bool]:
+        """
+        Get the reporting service status. If no reporting service is
+        configured, this is always `True`.
+        """
+        return self._reporting_service
 
 
 class _IViewModelState(IStateBehavior, ABC):
@@ -485,7 +508,9 @@ class _ClockActionState(_IViewModelState):
             if isinstance(msg, EmployeeEvent):
                 return _ClockSuccessState(msg)
             elif isinstance(msg, ModelError):
-                return _ErrorState("Clock action task failed", msg)
+                return _ErrorState(
+                    "Clock action task failed", msg, employee_id=self._id
+                )
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -524,9 +549,16 @@ class _ClockSuccessState(_IViewModelState):
         msg = self.fsm.model.get_result(self._handle)
         if msg:
             if isinstance(msg, EmployeeData):
-                return _ConsultationSuccessState(msg, timeout=20.0)
+                # Always send an error report when coming from clocking mode
+                return _ConsultationSuccessState(msg, timeout=20.0, should_report=True)
             elif isinstance(msg, ModelError):
-                return _ErrorState("Consultation task failed", msg)
+                return _ErrorState(
+                    "Consultation task failed",
+                    msg,
+                    employee_id=self._evt.id,
+                    employee_name=self._evt.name,
+                    employee_firstname=self._evt.firstname,
+                )
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -597,7 +629,9 @@ class _ConsultationActionState(_IViewModelState):
             if isinstance(msg, EmployeeData):
                 return _ConsultationSuccessState(msg, timeout=60.0)
             elif isinstance(msg, ModelError):
-                return _ErrorState("Consultation task failed", msg)
+                return _ErrorState(
+                    "Consultation task failed", msg, employee_id=self._id
+                )
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -617,15 +651,51 @@ class _ConsultationSuccessState(_IViewModelState):
         - When the timeout is elapsed
     """
 
-    def __init__(self, data: EmployeeData, timeout: float = 15.0):
+    def __init__(
+        self, data: EmployeeData, timeout: float = 15.0, should_report: bool = False
+    ):
         super().__init__()
         # Save data and quit option
         self._data = data
         self._timeout = timeout
+        self._should_report = should_report
 
     def entry(self):
         # Set leave time
         self._leave = time.time() + self._timeout
+
+        # Send a warning / error report if configured
+        if self._should_report and self.fsm.reporter:
+            self.__send_report(self.fsm.reporter)
+
+    def __send_report(self, reporter: ReportingService):
+        # Translate error status to report severity
+        dominant = self._data.dominant_error
+        severity = ReportSeverity.INFO
+        if dominant.status is AttendanceErrorStatus.WARNING:
+            severity = ReportSeverity.WARNING
+        elif dominant.status is AttendanceErrorStatus.ERROR:
+            severity = ReportSeverity.ERROR
+
+        body = f"Most critical error for employee: \n- {dominant}"
+        if self._data.date_errors:
+            body += "\n\nAll errors:\n"
+            body += "\n".join(
+                [f"- {date}: {err}" for date, err in self._data.date_errors.items()]
+            )
+
+        # Report employee error
+        reporter.send_report(
+            EmployeeReport(
+                severity,
+                f"{self._data.firstname} {self._data.name}",
+                body,
+                employee_id=self._data.id,
+                name=self._data.name,
+                firstname=self._data.firstname,
+                error_id=dominant.error_id,
+            )
+        )
 
     def do(self) -> Optional[IStateBehavior]:
         # Leave the state if an employee ID is available
@@ -946,21 +1016,71 @@ class _ErrorState(_IViewModelState):
         - Upon acknowledgment by sending the reset to clock action signal
     """
 
-    def __init__(self, msg: str, error: Optional[ModelError] = None):
+    def __init__(
+        self,
+        msg: str,
+        error: Optional[ModelError] = None,
+        employee_id: Optional[str] = None,
+        employee_name: Optional[str] = None,
+        employee_firstname: Optional[str] = None,
+    ):
         super().__init__()
-        # Save error
         self._msg = msg
         self._error = error
+        self._employee_id = employee_id
+        self._employee_name = employee_name
+        self._employee_firstname = employee_firstname
 
     def entry(self):
         # Reset next action to prevent wrong acknowledgment
         self.fsm.next_action = ViewModelAction.DEFAULT_ACTION
+
         logger.error(f"State machine entered error state. Reason '{self._msg}'.")
         if self._error:
             logger.error(
                 f"A task failed with error ({self._error.error_code}) "
                 f"'{self._error.message}'."
             )
+        if self._employee_id:
+            logger.error(
+                f"Error occurred with employee ID='{self._employee_id}', "
+                f"name='{self._employee_name if self._employee_name else "unknown"}', "
+                f"firstname='{self._employee_firstname if self._employee_firstname else "unknown"}'."
+            )
+
+        # Send an error report if a reporter has been specified
+        if self.fsm.reporter:
+            body = (
+                "The application entered error state. The user must acknowledge "
+                "to continue.\n\nError message: "
+                f"{self._msg}"
+            )
+
+            if self._error:
+                body += f"\nError code {self._error.error_code}"
+                body += f"\nSpecific message: {self._error.message}"
+
+            if self._employee_id:
+                self.__employee_report(self.fsm.reporter, body, self._employee_id)
+            else:
+                self.__simple_report(self.fsm.reporter, body)
+
+    def __employee_report(self, reporter: ReportingService, body: str, id: str):
+        reporter.send_report(
+            EmployeeReport(
+                ReportSeverity.ERROR,
+                "Employee runtime exception",
+                body,
+                employee_id=id,
+                name=self._employee_name,
+                firstname=self._employee_firstname,
+            ).attach_logs()
+        )
+
+    def __simple_report(self, reporter: ReportingService, body: str):
+        reporter.send_report(
+            Report(ReportSeverity.ERROR, "Runtime exception", body).attach_logs()
+        )
 
     def do(self) -> Optional[IStateBehavior]:
         # Check if acknowledged

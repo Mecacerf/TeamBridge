@@ -25,14 +25,12 @@ from typing import Optional
 from local_config import LocalConfig
 
 logger = logging.getLogger(__name__)
+config = LocalConfig()
 
 # Cache folder to put evaluated spreadsheet files
 LIBREOFFICE_CACHE_FOLDER = ".tmp_calc"
 # LibreOffice subprocess timeout [s] to prevent indefinite blocking
 LIBREOFFICE_TIMEOUT = 15.0
-
-# Get application configuration
-_config = LocalConfig()
 
 # Libre office program path
 _libreoffice_path = None
@@ -96,14 +94,14 @@ def search_libreoffice() -> Optional[str]:
 
 
 # Get LibreOffice path from the configuration
-_libreoffice_path = _config.section("dependencies").get("libreoffice")
+_libreoffice_path = config.section("dependencies").get("libreoffice")
 
 if not _libreoffice_path:
     logger.info("Scanning the filesystem to search a LibreOffice installation...")
     _libreoffice_path = search_libreoffice()
     if _libreoffice_path:
         logger.info(f"LibreOffice installation found under '{_libreoffice_path}'.")
-        _config.persist("dependencies", "libreoffice", _libreoffice_path)
+        config.persist("dependencies", "libreoffice", _libreoffice_path)
 
 if not _libreoffice_path:
     raise FileNotFoundError(
@@ -118,7 +116,7 @@ else:
         raise FileNotFoundError(
             f"No LibreOffice installation found under '{_libreoffice_path}'. "
             "The program may have been uninstalled. You can manually remove "
-            f"the value for the key 'libreoffice' in '{_config.config_path}' "
+            f"the value for the key 'libreoffice' in '{config.config_path}' "
             "and restart the application to perform a new system scan."
         )
 

@@ -43,14 +43,18 @@ class LiveData(Generic[T]):
         self._bus_mode = bus_mode
         self._observers: set[Callable[[T], None]] = set()
 
-    def observe(self, observer: Callable[[T], None]):
+    def observe(self, observer: Callable[[T], None], init_call: bool = False):
         """
         Add an observer to the live data.
 
         Args:
             observer (Callable[[T], None]): New observer to register.
+            init_call (bool): `True` to setup the observer with the
+                current value.
         """
         self._observers.add(observer)
+        if init_call:
+            observer(self._value)
 
     def remove(self, observer: Callable[[T], None]):
         """

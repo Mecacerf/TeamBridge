@@ -187,6 +187,34 @@ def test_range_check_lower():
     assert msg and "lower" in msg
 
 
+def test_enum_check_not_str():
+    entry = _SchemaEntry("choice", {"type": "int", "enum": [5, 3, 8]})
+    err, msg, _ = entry.check_and_convert("5")
+    assert err
+    assert msg and "applicable" in msg
+
+
+def test_enum_check_invalid():
+    entry = _SchemaEntry("choice", {"type": "str", "enum": ["red", 8, "green"]})
+    err, msg, _ = entry.check_and_convert("red")
+    assert err
+    assert msg and "string" in msg
+
+
+def test_enum_check_unsupported():
+    entry = _SchemaEntry("choice", {"type": "str", "enum": ["red", "green"]})
+    err, msg, _ = entry.check_and_convert("yellow")
+    assert err
+    assert msg and "yellow" in msg
+
+
+def test_enum_check_ok():
+    entry = _SchemaEntry("choice", {"type": "str", "enum": ["red", "green"]})
+    err, _, val = entry.check_and_convert("green")
+    assert not err
+    assert val == "green"
+
+
 ########################################################################
 #                     Configuration parser test                        #
 ########################################################################

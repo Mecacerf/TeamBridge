@@ -318,3 +318,15 @@
                     text_size: self.size
                     font_size: self.height * 0.05
                     font_name: 'InterRegular'
+
+    # Bottom-right Label above everything to show services errors
+    Label:
+        pos_hint: {'right': 0.99, 'y': 0.015}
+        size_hint: .5, .1
+        halign: 'right'
+        valign: 'bottom'
+        font_size: self.height * 0.4
+        text_size: self.size
+        text: root.services_panel_text
+        color: app.theme.error_color
+        font_name: 'InterRegular'

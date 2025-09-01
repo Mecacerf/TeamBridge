@@ -23,6 +23,11 @@ from local_config import LocalConfig, CONFIG_FILE_PATH
 logger = logging.getLogger(__name__)
 
 
+# Logging configuration
+LOGGING_FILE_NAME = "teambridge.log"
+LOGGING_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+
+
 def _configure_logging():
     """
     Configure the logging module.
@@ -31,8 +36,6 @@ def _configure_logging():
     A new log file is created at midnight and they are available up to
     7 days. Logs are also printed in the standard output stream.
     """
-    # Define file logs format
-    LOGGING_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
     class ColorFormatter(logging.Formatter):
         """
@@ -69,7 +72,7 @@ def _configure_logging():
         handlers=[
             # Log to files with a time rotating strategy
             logging.handlers.TimedRotatingFileHandler(
-                filename="teambridge.log",
+                filename=LOGGING_FILE_NAME,
                 when="midnight",
                 interval=1,
                 backupCount=7,
@@ -113,6 +116,31 @@ def _load_config() -> LocalConfig:
     return config
 
 
+def load_reporter(config: LocalConfig) -> Any:
+    """
+    Load a program reporter service. An object respecting the
+    `ReportingService` interface is returned or None if no reporter is
+    configured.
+    """
+    from common.email_reporter import EmailReporter
+
+    email_conf = config.section("report.email")
+    sender = email_conf["sender_address"]
+    password = email_conf["sender_password"]
+    recipient = email_conf["recipient_address"]
+    smtp_server = email_conf["smtp_server"]
+    smtp_port = email_conf["smtp_port"]
+
+    reporter = None
+    if smtp_server:
+        logger.info("Email reporting service is enabled.")
+        reporter = EmailReporter(smtp_server, smtp_port, sender, password, recipient)
+    else:
+        logger.warning("Email reporting service is disabled.")
+
+    return reporter
+
+
 def _set_locale(value: str):
     """
     Try to set the desired locale configuration.
@@ -133,7 +161,7 @@ def _set_locale(value: str):
     logger.info(f"Using locale {actual} with preferred encoding '{encoding}'.")
 
 
-def _load_backend(config: LocalConfig) -> Any:
+def _load_backend(config: LocalConfig, reporter: Any) -> Any:
     """
     Load the application backend services. It returns a handle on a
     backend object to inject into frontend services.
@@ -155,7 +183,7 @@ def _load_backend(config: LocalConfig) -> Any:
 
     # Create the viewmodel with a standard barcode scanner
     scanner = BarcodeScanner()
-    return TeamBridgeViewModel(model=model, scanner=scanner)
+    return TeamBridgeViewModel(model=model, scanner=scanner, reporter=reporter)
 
 
 def _load_sleep_manager(config: LocalConfig) -> Any:
@@ -188,7 +216,9 @@ def _load_sleep_manager(config: LocalConfig) -> Any:
         )
 
 
-def _load_kivy_frontend(config: LocalConfig, backend: Any, sleep_manager: Any) -> Any:
+def _load_kivy_frontend(
+    config: LocalConfig, backend: Any, sleep_manager: Any, reporter: Any
+) -> Any:
     """
     Load the Kivy frontend. Requires handles on the backend and optionally
     a sleep manager.
@@ -209,6 +239,7 @@ def _load_kivy_frontend(config: LocalConfig, backend: Any, sleep_manager: Any) -
         fullscreen=ui_conf["fullscreen"],
         theme=theme,
         sleep_manager=sleep_manager,
+        reporter=reporter,
     )
 
     logger.info(f"'{app}' configured with Kivy frontend.")
@@ -233,14 +264,16 @@ def app_bootstrap() -> Any:
 
     logger.info(f"Application device identifier is '{general_conf["device"]}'.")
 
+    reporter = load_reporter(config)
+
     if general_conf["locale"]:
         _set_locale(general_conf["locale"])
 
-    backend = _load_backend(config)
+    backend = _load_backend(config, reporter)
     sleep_manager = _load_sleep_manager(config)
 
     if str(general_conf["frontend"]).lower() == "kivy":
-        app = _load_kivy_frontend(config, backend, sleep_manager)
+        app = _load_kivy_frontend(config, backend, sleep_manager, reporter)
     else:
         raise NotImplementedError(
             f"The frontend '{general_conf["frontend"]}' is not supported."

@@ -44,6 +44,38 @@ def show_error_dialog(exc: Exception):
     root.destroy()
 
 
+def report_crash(exc: Exception):
+    """
+    Try to send a crash report.
+    """
+    from common.config_parser import ConfigError
+
+    try:
+        from common.reporter import Report, ReportSeverity
+        from local_config import LocalConfig
+
+        with bootstrap.load_reporter(LocalConfig()) as reporter:
+            reporter.send_report(
+                Report(
+                    ReportSeverity.CRITICAL,
+                    "Crash report",
+                    (
+                        "Teambridge encountered a critical error and must be "
+                        "restarted manually.\n\n"
+                        f"{exc.__class__.__name__}: {exc}."
+                    ),
+                ).attach_logs()
+            )
+
+    except ConfigError:
+        logger.warning(
+            "No crash report sent. The configuration was not available at the "
+            "time of crash."
+        )
+    except Exception as ex:
+        logger.exception(f"An exception occurred sending the crash report: {ex}")
+
+
 # Program entry
 if __name__ == "__main__":
     exit_code = 0
@@ -53,10 +85,9 @@ if __name__ == "__main__":
         # App bootstrap (logging, services, etc)
         app = bootstrap.app_bootstrap()
 
-        # Start application
         app.run()
 
-    except Exception as ex:
+    except Exception as exc:
         exit_code = 1
         try:
             # Log the crash if logging is ready
@@ -64,9 +95,10 @@ if __name__ == "__main__":
             logger.exception("An unhandled exception occurred.")
         except Exception:
             # Fallback to print
-            print(f"An unhandled exception occurred {ex}.")
+            print(f"An unhandled exception occurred {exc}.")
 
-        show_error_dialog(ex)
+        report_crash(exc)
+        show_error_dialog(exc)
 
         # Try to terminate the app
         try:

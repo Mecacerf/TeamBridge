@@ -402,10 +402,10 @@ class SheetsRepoAccessor:
             | os.O_EXCL  # Returns an error value if the file already exists
             | os.O_WRONLY
         )  # Opens a file for writing only
-        # Using os.O_EXCL allows to check if the file exists and create it if not, in one operation.
-        # It seems like it is the best way of implementing such a mechanism in a platform independent
-        # way, even though the operation atomicity may depend on different factors such as the
-        # filesystem in use.
+        # Using os.O_EXCL allows to check if the file exists and create it if
+        # not, in one operation. It seems like it is the best way to implement
+        # such mechanism in a platform independent way, even though the operation
+        # atomicity may depend on different factors such as the filesystem in use.
 
         timeout = time.time() + FILE_LOCK_TIMEOUT
         while time.time() < timeout:
