@@ -58,6 +58,7 @@ class BarcodeScanner:
         self._cooldown_codes: dict[str, float] = {}
         # Create a lock for concurrent access to above collections
         self._lock = threading.Lock()
+        self._thread = None
 
     def configure(
         self,
@@ -74,7 +75,7 @@ class BarcodeScanner:
         camera environment.
 
         Args:
-            regex (str): Optional regular expression the scanned barcodes
+            regex (str): Optional regular expression the scanned barcode
                 must match with.
             extract_group (int): When a regular expression is provided,
                 specify the group to extract the scanned ID from. If not

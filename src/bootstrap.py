@@ -256,27 +256,50 @@ def app_bootstrap() -> Any:
         Any: An application handle that supports calling a blocking
             run() and a stop() on it.
     """
-    _configure_logging()
-    logger.info("... TeamBridge Application Startup ...")
+    reporter = None
+    backend = None
+    sleep_manager = None
+    app = None
 
-    config = _load_config()
-    general_conf = config.section("general")
+    try:
+        _configure_logging()
+        logger.info("... TeamBridge Application Startup ...")
 
-    logger.info(f"Application device identifier is '{general_conf["device"]}'.")
+        config = _load_config()
+        general_conf = config.section("general")
 
-    reporter = load_reporter(config)
+        logger.info(f"Application device identifier is '{general_conf["device"]}'.")
 
-    if general_conf["locale"]:
-        _set_locale(general_conf["locale"])
+        reporter = load_reporter(config)
 
-    backend = _load_backend(config, reporter)
-    sleep_manager = _load_sleep_manager(config)
+        if general_conf["locale"]:
+            _set_locale(general_conf["locale"])
 
-    if str(general_conf["frontend"]).lower() == "kivy":
-        app = _load_kivy_frontend(config, backend, sleep_manager, reporter)
-    else:
-        raise NotImplementedError(
-            f"The frontend '{general_conf["frontend"]}' is not supported."
-        )
+        backend = _load_backend(config, reporter)
+        sleep_manager = _load_sleep_manager(config)
 
-    return app
+        if str(general_conf["frontend"]).lower() == "kivy":
+            app = _load_kivy_frontend(config, backend, sleep_manager, reporter)
+        else:
+            raise NotImplementedError(
+                f"The frontend '{general_conf["frontend"]}' is not supported."
+            )
+
+        return app
+    
+    except Exception:
+        # Try to close the modules that may have been created
+        def try_close(module: Any):
+            try:
+                if module:
+                    module.close()
+            except Exception as ex:
+                logger.warning(f"Exception closing '{module}': {ex}")
+        
+        try_close(reporter)
+        try_close(backend)
+        try_close(sleep_manager)
+        try_close(app)
+        
+        # Propagate exception to main
+        raise

@@ -204,3 +204,7 @@ class SleepManager:
     ) -> Optional[bool]:
         # Automatic disable using a context manager
         self.disable()
+
+    def close(self):
+        """Same as `disable()`."""
+        self.disable()

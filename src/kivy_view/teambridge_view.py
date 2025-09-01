@@ -201,6 +201,10 @@ class TeamBridgeApp(App):
         Clock.schedule_interval(self._run_viewmodel, RUN_INTERVAL)
         return MainScreen(self._viewmodel, self)
 
+    def close(self):
+        """Same as calling `stop()`."""
+        self.stop()
+
     def on_start(self):
         """
         Called by kivy when the application is starting.
