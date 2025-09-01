@@ -5,8 +5,8 @@ Author: Bastian Cerf
 Date: 02/03/2025
 Description:
     Provides an asynchronous way to manipulate employee time trackers.
-    The scheduler allows to execute different I/O bound tasks and get
-    their result when they are finished.
+    The scheduler allows to execute different tasks and get their result
+    once finished.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -40,12 +40,12 @@ MAX_TASK_WORKERS = 4
 class TeamBridgeScheduler:
     """
     The scheduler holds a thread pool executor and can be used to perform
-    various I/O bound tasks, such as clocking in/out an employee,
-    performing a balance query, and so on. The model can be polled to
-    retrieve task results via the defined message containers. Note that
-    this class is not thread safe, meaning that a single thread must post
-    tasks and read results. Tasks are however executed in parallel using
-    the thread pool executor.
+    various tasks, such as clocking in/out an employee, performing a
+    balance query, and so on. The model can be polled to retrieve task
+    results via the defined message containers. Note that this class is
+    not thread safe, meaning that a single thread must post tasks and
+    read results. Tasks are however executed in parallel using a thread
+    pool executor.
     """
 
     def __init__(self, tracker_factory: TimeTrackerFactory):
