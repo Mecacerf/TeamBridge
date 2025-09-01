@@ -4,7 +4,7 @@ File: email_reporter.py
 Author: Bastian Cerf
 Date: 12/08/2025
 Description:
-    Report application events by sending emails.
+    Report application events by emails.
 
 Company: Mecacerf SA
 Website: http://mecacerf.ch
@@ -34,18 +34,22 @@ class EmailBuilder:
     Generate ready to send email messages from program reports.
     """
 
-    def build(self, report: Report) -> EmailMessage:
+    def build(self, report: Report, sender: str, recipient: str) -> EmailMessage:
         """
         Build an email message from the given report.
 
         Args:
             report (Report): Input report.
+            sender (str): Sender email address.
+            recipient (str): Recipient email address.
 
         Returns:
             EmailMessage: Formatted message.
         """
         email = EmailMessage()
         email["Subject"] = f"[{report.severity.name}] {report.title}"
+        email["From"] = sender
+        email["To"] = recipient
 
         # Add plain text body
         self._plain_content(report, email)
@@ -67,7 +71,7 @@ class EmailBuilder:
                 ────────── Summary ──────────
                 Severity: {report.severity.name}
                 Title: {report.title}
-                Timestamp: {report.created_at:%Y-%m-%d %H:%M:%S}
+                Created: {report.created_at:%d.%m.%Y at %H:%M:%S}
                 Device ID: {report.device_id}
 
             """
@@ -89,7 +93,7 @@ class EmailBuilder:
                     ────────── Employee ──────────
                     Employee ID: {report.employee_id}
                     Name: {report.firstname or '?'} {report.name or '?'}
-
+                    {f"Error ID: {report.error_id}\n" if report.error_id else ""} 
                 """
             )
 
@@ -123,8 +127,7 @@ class EmailBuilder:
             buffer = io.BytesIO()
             with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
                 for file in files:
-                    if os.path.exists(file):
-                        zipf.write(file, arcname=os.path.basename(file))
+                    zipf.write(file, arcname=os.path.basename(file))
             buffer.seek(0)
 
             email.add_attachment(
@@ -229,11 +232,11 @@ class EmailReporter(ReportingService):
 
     def __check_availability(self):
         """
-        Check if the SMTP server is reachable and set the availibility
+        Check if the SMTP server is reachable and set the availability
         flag accordingly.
         """
         try:
-            with self.__login():
+            with self._login():
                 self._available_flag.set()
                 logger.info("SMTP server is now available.")
         except OSError:
@@ -243,13 +246,11 @@ class EmailReporter(ReportingService):
         """
         Build an email message from the report and try to send it.
         """
-        email = self._builder.build(report)
-        email["From"] = self._sender
-        email["To"] = self._recipient
+        email = self._builder.build(report, self._sender, self._recipient)
 
         try:
             # Sending the email
-            with self.__login() as server:
+            with self._login() as server:
                 server.send_message(email)
 
             self._available_flag.set()
@@ -259,7 +260,7 @@ class EmailReporter(ReportingService):
             self._available_flag.clear()
             logger.error(f"An exception occurred sending report {report!s}: {ex}")
 
-    def __login(self) -> smtplib.SMTP:
+    def _login(self) -> smtplib.SMTP:
         """
         Start a TLS connection to the SMTP server and tries to login with
         configured identifiers.

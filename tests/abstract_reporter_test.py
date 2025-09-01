@@ -13,11 +13,7 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 import pytest
-from pytest import MonkeyPatch
-from typing import Optional, cast
 import datetime as dt
-import os
-import logging
 
 # Internal libraries
 from common.reporter import (

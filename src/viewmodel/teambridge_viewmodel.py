@@ -82,7 +82,7 @@ class TeamBridgeViewModel(IStateMachine):
         self,
         model: TeamBridgeScheduler,
         scanner: BarcodeScanner,
-        reporter: Optional[ReportingService],
+        reporter: Optional[ReportingService] = None,
     ):
         """
         Create the viewmodel state machine.
