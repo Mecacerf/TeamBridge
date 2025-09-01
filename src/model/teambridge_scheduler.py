@@ -27,8 +27,10 @@ from core.time_tracker_factory import TimeTrackerFactory
 from core.attendance.attendance_validator import AttendanceErrorStatus
 from core.attendance.simple_attendance_validator import SimpleAttendanceValidator
 from core.attendance.simple_attendance_validator import ERROR_MIDNIGHT_ROLLOVER_ID
+from local_config import LocalConfig
 
 logger = logging.getLogger(__name__)
+config = LocalConfig()
 
 # Maximal number of asynchronous tasks that can be handled simultaneously by
 # the scheduler
@@ -226,12 +228,23 @@ class TeamBridgeScheduler:
         - The last clock-out is missing the day before and;
         - The time between now and the clock-in of yesterday is less than
             8 hours.
+
+        Actual time values are configured in the local configuration file.
         """
 
         def check_midnight_rollover(tracker: TimeTrackerAnalyzer) -> bool:
             """Check the midnight rollover conditions."""
             if action is ClockAction.CLOCK_OUT:
                 return False
+
+            # Read config values
+            rules = config.section("repository.rules")
+            morning_clock_out = rules["last_morning_clock_out_time"]
+            morning_clock_out = dt.datetime.strptime(morning_clock_out, "%H:%M").time()
+
+            max_work_duration = rules["max_work_duration"]
+            hours, minutes = map(int, max_work_duration.split(":"))
+            max_work_duration = dt.timedelta(hours=hours, minutes=minutes)
 
             # Yesterday must be the same year
             yesterday = datetime - dt.timedelta(days=1)
@@ -248,9 +261,9 @@ class TeamBridgeScheduler:
             evts_delta_t = datetime - yday_evt_dt
 
             is_first_evt = len(tracker.get_clocks(datetime)) == 0
-            is_morning = dt.time(0, 0) < datetime.time() < dt.time(4, 0)
+            is_morning = dt.time(0, 0) <= datetime.time() <= morning_clock_out
             is_in_yesterday = tracker.is_clocked_in(yesterday)
-            is_dt_ok = evts_delta_t <= dt.timedelta(hours=8)
+            is_dt_ok = evts_delta_t <= max_work_duration
 
             return is_first_evt and is_morning and is_in_yesterday and is_dt_ok
 

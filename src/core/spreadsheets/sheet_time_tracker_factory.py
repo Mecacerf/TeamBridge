@@ -30,11 +30,10 @@ from core.time_tracker import (
 from core.time_tracker_factory import TimeTrackerFactory
 from .sheet_time_tracker import SheetTimeTracker
 from .sheets_repository import SheetsRepoAccessor
+from local_config import LocalConfig
 
 logger = logging.getLogger(__name__)
-
-# Extract the year from a folder name by matching a sequence of four digits
-SUBDIR_NAME_REGEX = r"(?<!\d)(\d{4})(?!\d)"
+config = LocalConfig()
 
 
 class SheetTimeTrackerFactory(TimeTrackerFactory):
@@ -132,7 +131,9 @@ class SheetTimeTrackerFactory(TimeTrackerFactory):
         # Match subfolders by year regex
         year_folders: dict[int, Path] = {}
         for folder in subfolders:
-            matches = re.findall(SUBDIR_NAME_REGEX, folder.name)
+            matches = re.findall(
+                config.section("repository")["year_regex"], folder.name
+            )
 
             if len(matches) == 1:
                 # Name contains a valid year

@@ -215,6 +215,38 @@ def test_enum_check_ok():
     assert val == "green"
 
 
+def test_match_check_not_str():
+    entry = _SchemaEntry("choice", {"type": "int", "match": r"[a-z]"})
+    err, msg, _ = entry.check_and_convert("5")
+    assert err
+    assert msg and "applicable" in msg
+
+
+def test_match_check_invalid():
+    entry = _SchemaEntry("choice", {"type": "str", "match": r"[a-z"})
+    err, msg, _ = entry.check_and_convert("g")
+    assert err
+    assert msg and "wrong regex" in msg
+
+
+def test_match_check_not_matching():
+    entry = _SchemaEntry(
+        "choice", {"type": "str", "match": r"(?:[01]\d|2[0-3]):[0-5]\d"}
+    )
+    err, msg, _ = entry.check_and_convert("67:23")
+    assert err
+    assert msg and "constraint" in msg
+
+
+def test_match_check_ok():
+    entry = _SchemaEntry(
+        "choice", {"type": "str", "match": r"(?:[01]\d|2[0-3]):[0-5]\d"}
+    )
+    err, _, val = entry.check_and_convert("23:45")
+    assert not err
+    assert val == "23:45"
+
+
 ########################################################################
 #                     Configuration parser test                        #
 ########################################################################

@@ -2,7 +2,7 @@
   "general": {
     "device": {
       "type": "str",
-      "default": "TeamBridge Device #0",
+      "default": "TeamBridge Device",
       "comment": "Identifier/name of the device"
     },
     "frontend": {
@@ -21,6 +21,28 @@
       "required": true,
       "default": "samples/",
       "comment": "Path to remote spreadsheets repository"
+    },
+    "year_regex": {
+      "type": "str",
+      "required": true,
+      "default": "(?<!\\d)(\\d{4})(?!\\d)",
+      "comment": "Regular expression to match year in folder names, must match 4 digits"
+    }
+  },
+  "repository.rules": {
+    "last_morning_clock_out_time": {
+      "type": "str",
+      "required": true,
+      "default": "05:00",
+      "match": "(?:[01]\\d|2[0-3]):[0-5]\\d",
+      "comment": "A midnight rollover is done if the employee clocks out between midnight and this hour (HH:MM)"
+    },
+    "max_work_duration": {
+      "type": "str",
+      "required": true,
+      "default": "08:00",
+      "match": "(?:[01]\\d|2[0-3]):[0-5]\\d",
+      "comment": "A midnight rollover is done if the delta time from clock-in to now is smaller than this duration (HH:MM)"
     }
   },
   "scanner": {
