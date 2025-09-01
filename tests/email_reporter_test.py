@@ -68,6 +68,8 @@ def test_build_simple_email(tmp_path):
     assert_email_contains(email, report.device_id)
     assert_email_contains(email, report.created_at.strftime("%H:%M"))
     assert_email_contains(email, report.created_at.strftime("%d.%m.%Y"))
+    assert_email_contains(email, report.machine_name)
+    assert_email_contains(email, report.machine_os)
     assert_email_contains(email, report.content)
     for attachment in report.attachments:
         assert_email_contains(email, attachment)

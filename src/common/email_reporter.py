@@ -73,6 +73,8 @@ class EmailBuilder:
                 Title: {report.title}
                 Created: {report.created_at:%d.%m.%Y at %H:%M:%S}
                 Device ID: {report.device_id}
+                Machine name: {report.machine_name}
+                Operating system: {report.machine_os}
 
             """
         )

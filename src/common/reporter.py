@@ -19,6 +19,8 @@ import datetime as dt
 from typing import Optional, Type
 from types import TracebackType
 import os
+import platform
+import socket
 
 # Internal libraries
 from threading import Event
@@ -68,10 +70,14 @@ class Report:
     attachments: list[str] = field(default_factory=list, init=False)
     created_at: dt.datetime = field(init=False)
     device_id: str = field(init=False)
+    machine_name: str = field(init=False)
+    machine_os: str = field(init=False)
 
     def __post_init__(self):
         self.created_at = dt.datetime.now()
         self.device_id = config.section("general")["device"]
+        self.machine_name = socket.gethostname()
+        self.machine_os = f"{platform.system()} {platform.release()} ({platform.version()})"
 
     def __str__(self) -> str:
         return f"'[{self.severity.name}] {self.title}'"
@@ -102,7 +108,7 @@ class Report:
 @dataclass
 class EmployeeReport(Report):
     """
-    A report targetting a specific employee. The name and firstname can
+    A report targeting a specific employee. The name and firstname can
     be missing, typically when reporting an error where this information
     is unknown. If this report has been created after an employee error
     occurred, the error ID can be specified.
