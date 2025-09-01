@@ -785,7 +785,7 @@ class _ConsultationSuccessState(_IViewModelState):
 
                     lines.append(
                         f"   \u26a0 Hors de la plage autorisée{rng}, "
-                        "veuillez la régulariser rapidement \u26a0"
+                        "veuillez régulariser rapidement \u26a0"
                     )
 
             lines.extend(
