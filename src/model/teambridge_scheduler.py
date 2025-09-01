@@ -362,6 +362,8 @@ class TeamBridgeScheduler:
                     remaining_vacation=tracker.read_year_remaining_vacation(),
                     ytd_balance=tracker.read_year_to_date_balance(),
                     yty_balance=tracker.read_year_to_yesterday_balance(),
+                    min_allowed_balance=tracker.min_allowed_balance,
+                    max_allowed_balance=tracker.max_allowed_balance,
                 )
 
         except TimeTrackerException as e:

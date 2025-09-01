@@ -108,7 +108,7 @@ class TeamBridgeViewModel(IStateMachine):
 
         self._next_action = ViewModelAction.DEFAULT_ACTION
 
-        # Live data are observered by the view
+        # Live data are observed by the view
         self._current_state = LiveData[str](str(self._state))
         self._main_title_text = LiveData[str]("")
         self._main_subtitle_text = LiveData[str]("")
@@ -753,7 +753,9 @@ class _ConsultationSuccessState(_IViewModelState):
                 )
         else:
             # Extract and format
-            yty_bal = self._fmt_dt(data.yty_balance)
+            yty_bal = self._fmt_dt(
+                data.yty_balance, data.min_allowed_balance, data.max_allowed_balance
+            )
             mty_bal = self._fmt_dt(data.month_to_yday_balance)
             day_bal = self._fmt_dt(data.day_balance)
             day_wtm = self._fmt_dt(data.day_worked_time)
@@ -785,9 +787,21 @@ class _ConsultationSuccessState(_IViewModelState):
 
         return "\n".join(lines)
 
-    def _fmt_dt(self, td: Optional[dt.timedelta]):
+    def _fmt_dt(
+        self,
+        td: Optional[dt.timedelta],
+        td_min: Optional[dt.timedelta] = None,
+        td_max: Optional[dt.timedelta] = None,
+    ):
         if td is None:
             return "indisponible"
+
+        # Check if a warning must be shown
+        warn = ""
+        if td_min and td < td_min:
+            warn = f" (\u26a0 min. {self._fmt_dt(td_min)} \u26a0)"
+        if td_max and td > td_max:
+            warn = f" (\u26a0 max. {self._fmt_dt(td_max)} \u26a0)"
 
         total_minutes = int(td.total_seconds() // 60)
         sign = "-" if total_minutes < 0 else ""
@@ -795,10 +809,10 @@ class _ConsultationSuccessState(_IViewModelState):
         hours, minutes = divmod(abs_minutes, 60)
 
         if hours == 0:
-            return f"{sign}{minutes} minute{"s" if minutes > 1 else ""}"
+            return f"{sign}{minutes} minute{"s" if minutes > 1 else ""}{warn}"
         elif minutes == 0:
-            return f"{sign}{hours}h"
-        return f"{sign}{hours}h{minutes:02}"
+            return f"{sign}{hours}h{warn}"
+        return f"{sign}{hours}h{minutes:02}{warn}"
 
     def _fmt_date(self, date: dt.date):
         return dt.date.strftime(date, "%d.%m.%Y")
