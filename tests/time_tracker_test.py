@@ -379,6 +379,8 @@ def test_basic_info(factory: TimeTrackerFactory, tc_first_work_day: CaseData):
         assert tracker.opening_vacation_days == 22
         assert tracker.opening_balance == dt.timedelta(hours=2)
         assert tracker.max_continuous_work_time == dt.timedelta(hours=6)
+        assert tracker.min_allowed_balance == dt.timedelta(hours=-20)
+        assert tracker.max_allowed_balance == None
 
 
 def test_analyze(factory: TimeTrackerFactory, tc_first_work_day: CaseData):

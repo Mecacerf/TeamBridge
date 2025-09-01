@@ -17,7 +17,7 @@ Contact: info@mecacerf.ch
 # Standard libraries
 import logging
 import datetime as dt
-from typing import TypeVar, Callable, Iterable, cast
+from typing import TypeVar, Callable, cast
 
 # Third-party libraries
 import openpyxl
@@ -45,7 +45,7 @@ EVAL_FILE_PREFIX = "eval_"
 
 # Expected spreadsheets major version
 # Opening a spreadsheet that doesn't use this major version will fail to
-# prevent compatibity issues
+# prevent compatibility issues
 # This version may be preceded by a minor version in the form '.xx'
 EXPECTED_MAJOR_VERSION = "v250725"
 
@@ -55,7 +55,7 @@ SHEET_INIT = 0
 # Spreadsheet version
 CELL_VERSION = "A3"
 
-# Year the data in the spreasheet belongs to
+# Year the data in the spreadsheet belongs to
 CELL_YEAR = "A4"
 
 CELL_NAME = "A10"
@@ -65,6 +65,8 @@ CELL_OPENING_DAY_SCHEDULE = "A12"
 CELL_OPENING_VACATION = "A13"
 CELL_OPENING_BALANCE = "A14"
 CELL_MAX_CONTINUOUS_WORK_TIME = "A15"
+CELL_MIN_ALLOWED_BALANCE = "A16"
+CELL_MAX_ALLOWED_BALANCE = "A17"
 
 # These are the date and time data analysis is based on
 CELL_DATE = "A21"
@@ -89,7 +91,7 @@ LOC_JANUARY_SHEET = "A25"
 # Row number for the first date of the month (01.xx.xxxx)
 LOC_FIRST_MONTH_DATE_ROW = "A26"
 
-# Clock in/out times columns (left and right array delimeters)
+# Clock in/out times columns (left and right array delimiters)
 LOC_FIRST_CLOCK_IN_COL = "A27"
 LOC_LAST_CLOCK_OUT_COL = "A28"
 
@@ -146,7 +148,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         Acquire and load the spreadsheet file. Time tracker properties
         are available after this call. The time tracker is never in
         analyzed mode after setup; i.e. the `read_` methods are
-        unavalaible.
+        unavailable.
 
         `self._workbook_raw` is loaded with `data_only=False`, allowing
         access to raw cell values. In this mode, formula cells contain
@@ -574,7 +576,7 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
             datetime.timedelta: Converted value.
         """
         if isinstance(value, (float, int)):
-            # Handle specific case where the value has been set but not reparsed
+            # Handle specific case where the value has been set but not parsed
             # by openpyxl, which results in a time still being represented as
             # a fraction of days (a number).
             value = cast(Any, from_excel(value))
@@ -602,14 +604,14 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
                 or a `_SpecialTime` value.
         """
         if isinstance(value, (float, int)):
-            # Handle specific case where the value has been set but not reparsed
+            # Handle specific case where the value has been set but not parsed
             # by openpyxl, which results in a time still being represented as
             # a fraction of days (a number).
             value = cast(Any, from_excel(value))
 
         if isinstance(value, dt.timedelta):
             # A timedelta can be converted to a time or datetime by converting
-            # it to excel fromat (fraction of days) and back again to time.
+            # it to excel format (fraction of days) and back again to time.
             value = cast(Any, from_excel(to_excel(value), timedelta=False))
 
         if isinstance(value, dt.time):
@@ -797,6 +799,22 @@ class SheetTimeTracker(TimeTrackerAnalyzer):
         return self.__get_init_cell_val(
             CELL_MAX_CONTINUOUS_WORK_TIME, self.__to_timedelta
         )
+
+    @property
+    def min_allowed_balance(self) -> Optional[dt.timedelta]:
+        init = self._workbook_raw.worksheets[SHEET_INIT]
+        value = init[CELL_MIN_ALLOWED_BALANCE].value
+        if value:
+            return self.__cast(value, self.__to_timedelta)
+        return None
+
+    @property
+    def max_allowed_balance(self) -> Optional[dt.timedelta]:
+        init = self._workbook_raw.worksheets[SHEET_INIT]
+        value = init[CELL_MAX_ALLOWED_BALANCE].value
+        if value:
+            return self.__cast(value, self.__to_timedelta)
+        return None
 
     ## Time Tracker read / write methods ##
 

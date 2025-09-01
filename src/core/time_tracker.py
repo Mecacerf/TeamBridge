@@ -468,6 +468,30 @@ class TimeTracker(Employee, ABC):
         """
         pass
 
+    @property
+    @abstractmethod
+    def min_allowed_balance(self) -> Optional[dt.timedelta]:
+        """
+        Get the minimal balance allowed.
+        The value may be unavailable, depending on the configuration.
+
+        Returns:
+            Optional[dt.timedelta]: Minimal balance allowed.
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def max_allowed_balance(self) -> Optional[dt.timedelta]:
+        """
+        Get the maximal balance allowed.
+        The value may be unavailable, depending on the configuration.
+
+        Returns:
+            Optional[dt.timedelta]: Maximal balance allowed.
+        """
+        pass
+
     @abstractmethod
     def get_clocks(self, date: dt.date) -> list[Optional[ClockEvent]]:
         """
