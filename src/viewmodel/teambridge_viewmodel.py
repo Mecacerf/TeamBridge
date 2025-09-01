@@ -767,11 +767,35 @@ class _ConsultationSuccessState(_IViewModelState):
             lines = [
                 f"\u2022 Présent: {'oui' if data.clocked_in else 'non'}",
                 f"\u2022 Balance totale au jour précédent: {yty_bal}",
-                f"\u2022 Balance du mois au jour précédent: {mty_bal}",
-                f"\u2022 Balance du jour: {day_bal} ({day_wtm} / {day_stm})",
-                f"\u2022 Vacances ce mois: {mth_vac}",
-                f"\u2022 Vacances à planifier: {rem_vac}",
             ]
+
+            # Add a warning line if balance is out of range
+            if data.yty_balance:
+                # Clamp if not existing
+                min_bal = data.min_allowed_balance or data.yty_balance
+                max_bal = data.max_allowed_balance or data.yty_balance
+                if not min_bal <= data.yty_balance <= max_bal:
+                    # Show allowed balance range only if both ends are configured
+                    rng = ""
+                    if data.min_allowed_balance and data.max_allowed_balance:
+                        rng = (
+                            f" ({self._fmt_dt(data.min_allowed_balance)} / "
+                            f"{self._fmt_dt(data.max_allowed_balance)})"
+                        )
+
+                    lines.append(
+                        f"   \u26a0 Hors de la plage autorisée{rng}, "
+                        "veuillez la régulariser rapidement \u26a0"
+                    )
+
+            lines.extend(
+                [
+                    f"\u2022 Balance du mois au jour précédent: {mty_bal}",
+                    f"\u2022 Balance du jour: {day_bal} ({day_wtm} / {day_stm})",
+                    f"\u2022 Vacances ce mois: {mth_vac}",
+                    f"\u2022 Vacances à planifier: {rem_vac}",
+                ]
+            )
 
             # Add errors if any
             if data.date_errors:
