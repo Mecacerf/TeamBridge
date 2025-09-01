@@ -71,9 +71,16 @@ def recalc_and_export(
     hard_recalc=False,         # True => hard recalc (includes non-volatile and add-ins)
     refresh_pivots=True        # True => refresh all DataPilot tables
 ):
+    begin = time.time()
+    start = time.time()
+
     # 1) connect to (or start) headless LibreOffice
     server = LibreOfficeServer(soffice_path=soffice_path)
+
     desktop, ctx = server.connect_desktop()
+    print(f"Connecting time {time.time() - start}")
+    start = time.time()
+
 
     # 2) load the document hidden; tell LO how to handle external links on load
     upd = {"quiet": QUIET_UPDATE, "full": FULL_UPDATE}.get(update_links, QUIET_UPDATE)
@@ -84,6 +91,10 @@ def recalc_and_export(
     ])
     url_in = uno.systemPathToFileUrl(os.fspath(input_path))  # must be a file URL
     doc = desktop.loadComponentFromURL(url_in, "_blank", 0, load_props)
+
+    print(f"Load time {time.time() - start}")
+    start = time.time()
+
 
     try:
         # Optional: lock controllers to avoid spurious events (harmless in headless)
@@ -99,6 +110,9 @@ def recalc_and_export(
         else:
             # regular full recalc of all formula cells via XCalculatable
             doc.calculateAll()
+
+        print(f"Calc time {time.time() - start}")
+        start = time.time()
 
         # 4) refresh all Pivot Tables (DataPilot), if any
         if refresh_pivots:
@@ -116,10 +130,16 @@ def recalc_and_export(
                     # Not a fatal problem if a sheet doesn't support pilots
                     pass
 
+        print(f"Refresh pivot time {time.time() - start}")
+        start = time.time()
+
         # 5) export to XLSX
         url_out = uno.systemPathToFileUrl(os.fspath(output_path))
         store_props = tuple([_prop("FilterName", "Calc MS Excel 2007 XML")])
         doc.storeToURL(url_out, store_props)
+
+        print(f"Export time {time.time() - start}")
+        start = time.time()
 
     finally:
         # 6) cleanup
@@ -132,3 +152,111 @@ def recalc_and_export(
         except Exception:
             pass
         doc.close(True)
+
+        print(f"Cleanup time {time.time() - start}")
+        print(f"Completed in {time.time() - begin}")
+
+
+recalc_and_export(
+    input_path="C:\\Users\\Bastian\\Documents\\dev\\TeamBridge\\samples\\000-Robert.xlsx",     # or .xls/.xlsx/.csv etc.
+    output_path="C:\\Users\\Bastian\\Documents\\dev\\TeamBridge\\samples\\000-Robert-calc.xlsx",
+    soffice_path="C:\\Program Files\\LibreOffice\\program\\soffice.exe",    # adjust on Windows/macOS if needed
+    update_links="full",               # or "full"
+    hard_recalc=True,                  # True for the strongest recalc
+    refresh_pivots=True
+)
+
+
+
+
+# Cache folder to put evaluated spreadsheet files
+LIBREOFFICE_CACHE_FOLDER = "C:\\Users\\Bastian\\Documents\\dev\\TeamBridge\\.tmp_calc"
+# LibreOffice subprocess timeout [s] to prevent indefinite blocking
+LIBREOFFICE_TIMEOUT = 15.0
+
+# Libre office program path
+_libreoffice_path = "C:\\Program Files\\LibreOffice\\program\\soffice.exe"
+
+import pathlib
+
+def evaluate_calc_cmd(file_path: pathlib.Path):
+    """
+    Evaluate a spreadsheet file using LibreOffice calc in headless mode.
+
+    Args:
+        file_path (str): Path to the spreadsheet file
+
+    Raises:
+        RuntimeError: No LibreOffice installation found.
+        FileExistsError: A previous evaluation didn't finish properly and
+            a file is still existing in the temporary folder.
+        RuntimeError: The LibreOffice execution returned an error.
+        TimeoutError: The LibreOffice execution timed out.
+        FileNotFoundError: LibreOffice didn't produce the expected output.
+    """
+    if _libreoffice_path is None:
+        raise RuntimeError("No LibreOffice installation found in the filesystem.")
+
+    tmp_file = pathlib.Path(LIBREOFFICE_CACHE_FOLDER) / file_path.name
+    # if tmp_file.exists():
+    #     raise FileExistsError(
+    #         f"The temporary file '{tmp_file}' already exists. A "
+    #         "previous evaluation may have failed."
+    #     )
+
+    os.makedirs(LIBREOFFICE_CACHE_FOLDER, exist_ok=True)
+
+    # Create and execute the LibreOffice command to evaluate and save a
+    # spreadsheet document. The evaluated copy of the original document is
+    # placed in the cache folder, instead of directly replacing the original
+    # one. This way the original document doesn't get corrupted if an error
+    # occurs. The replacement (file move) is done only on success.
+    # https://help.libreoffice.org/latest/km/text/shared/guide/start_parameters.html
+    command = [
+        _libreoffice_path,  # LibreOffice executable path
+        "--headless",
+        "--norestore",
+        "--nolockcheck",
+        "--convert-to",
+        "xlsx",  # Convert to XLSX format
+        "--outdir",
+        str(LIBREOFFICE_CACHE_FOLDER),  # Output to the temp folder
+        str(file_path.resolve()),  # Path to the input spreadsheet
+    ]
+
+    # Run the command as a subprocess
+    try:
+        result = subprocess.run(
+            command,
+            check=True,  # Raise CalledProcessError if returncode != 0
+            capture_output=True,  # Capture stdout and stderr
+            timeout=LIBREOFFICE_TIMEOUT,  # Prevent indefinite hangs
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"LibreOffice subprocess failed with return code {e.returncode}.\n"
+            f"command: {command}\n"
+            f"stdout: {e.stdout.decode(errors='ignore')}\n"
+            f"stderr: {e.stderr.decode(errors='ignore')}"
+        ) from e
+    except subprocess.TimeoutExpired as e:
+        raise TimeoutError("LibreOffice evaluation timed out.") from e
+
+    # Check that the evaluated file was actually produced
+    if not tmp_file.exists():
+        raise FileNotFoundError(
+            f"LibreOffice did not produce the expected output file.\n"
+            f"command: {command}\n"
+            f"stdout: {result.stdout.decode(errors='ignore')}\n"
+            f"stderr: {result.stderr.decode(errors='ignore')}"
+        )
+
+    # Evaluation succeeded without any error: replace original file with
+    # evaluated one
+    #os.replace(tmp_file, file_path)
+
+
+
+start = time.time()
+evaluate_calc_cmd(pathlib.Path("C:\\Users\\Bastian\\Documents\\dev\\TeamBridge\\samples\\000-Robert.xlsx"))
+print(f"Old method finished in {time.time() - start}")
