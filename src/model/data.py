@@ -93,6 +93,10 @@ class EmployeeData(EmployeeInfo):
         remaining_vacation (float): Remaining vacation to be planned.
         ytd_balance (dt.timedelta): Year-to-date balance.
         yty_balance (dt.timedelta): Year-to-yesterday balance.
+        min_allowed_balance (Optional[dt.timedelta]): Minimal allowed
+            balance.
+        max_allowed_balance (Optional[dt.timedelta]): Maximal allowed
+            balance.
 
         The optional indicates that the value may be missing if an error
         exists (dominant_error status is critical).
@@ -114,6 +118,8 @@ class EmployeeData(EmployeeInfo):
     remaining_vacation: Optional[float] = field(default=None)
     ytd_balance: Optional[dt.timedelta] = field(default=None)
     yty_balance: Optional[dt.timedelta] = field(default=None)
+    min_allowed_balance: Optional[dt.timedelta] = field(default=None)
+    max_allowed_balance: Optional[dt.timedelta] = field(default=None)
 
 
 @dataclass(frozen=True)
