@@ -110,6 +110,9 @@ def test_midnight_rollover(factory: TimeTrackerFactory, scheduler: TeamBridgeSch
     # Wait until the task finishes
     assert isinstance(wait_result(scheduler, handle), EmployeeEvent)
 
+    # Close the scheduler to release the staging time trackers
+    scheduler.close()
+
     with factory.create(TEST_EMPLOYEE_ID, TEST_DATE) as tracker:
         # Check that the last event is a clock at midnight (special value)
         evts = tracker.get_clocks(TEST_DATE)
