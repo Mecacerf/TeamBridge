@@ -8,6 +8,20 @@ Description:
     lifecycle. Useful to reuse the same time tracker multiple times
     without having to setup it again each time.
 
+    A time tracker is wrapped in a class that supports and must be used
+    with a context manager. The time tracker is taken from the pool for
+    the duration of the context manager block.
+
+    ```
+    pool = TimeTrackerPool(factory)
+    with pool.acquire(id, year) as tracker:
+        # Tracker is taken from the pool and released on exit
+        print(f"{tracker!s}")
+    ```
+
+    A garbage collection task runs in the background and will discard
+    old time trackers that haven't been used for long.
+
 Company: Mecacerf SA
 Website: http://mecacerf.ch
 Contact: info@mecacerf.ch
@@ -27,7 +41,8 @@ from core.time_tracker_factory import TimeTrackerFactory
 
 logger = logging.getLogger(__name__)
 
-GARBAGE_COLLECTOR_DELAY = 20.0
+# Default time tracker staging delay
+DEFAULT_GARBAGE_DELAY = 20.0
 
 ########################################################################
 #                    Time tracker wrapper object                       #
@@ -35,14 +50,24 @@ GARBAGE_COLLECTOR_DELAY = 20.0
 
 
 class TimeTrackerWrapper:
-    """Hold a pooled time tracker reference."""
+    """
+    Hold a pooled time tracker reference.
+    This class must always be used with a context manager block.
+    """
 
     def __init__(self, tracker: TimeTrackerAnalyzer, pool: "TimeTrackerPool"):
+        
         self._tracker = tracker
         self._pool = pool
         self._expires_at = float("inf")
 
     def __enter__(self) -> TimeTrackerAnalyzer:
+        """
+        Enter the context manager.
+
+        Returns:
+            TimeTrackerAnalyzer: Wrapped time tracker.
+        """
         return self._tracker
 
     def __exit__(
@@ -51,8 +76,15 @@ class TimeTrackerWrapper:
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
     ) -> Optional[bool]:
+        """
+        Exit the context manager.
+
+        If no exception occurred in the block, the tracker is released
+        in the pool. Otherwise it is discarded. Exceptions are not
+        suppressed.
+        """
         if exc_type is None:
-            self._expires_at = time.time() + GARBAGE_COLLECTOR_DELAY
+            self._expires_at = time.time() + DEFAULT_GARBAGE_DELAY
             self._pool._release(self)
         else:
             # discard the object on error
@@ -66,9 +98,22 @@ class TimeTrackerWrapper:
 
 
 class TimeTrackerPool:
-    """Hold a pool of time tracker objects."""
+    """
+    Holds a pool of time tracker objects. This class allows to reuse the
+    same time tracker in many context managers, without re-creating it
+    each time. The closing is done internally by the garbage collector
+    task.
+    """
 
     def __init__(self, factory: TimeTrackerFactory):
+        """
+        Create a pool that uses the provided factory to create the time
+        trackers.
+
+        Args:
+            factory (TimeTrackerFactory): Factory object to create the
+                time trackers.
+        """
         self._factory = factory
 
         # Note: None is used as a flag to indicate 'in use' state
@@ -97,10 +142,10 @@ class TimeTrackerPool:
         Args:
             employee_id (str): Unique identifier for the employee.
             year (int | date | datetime): Year to open the time tracker for.
-            readonly (bool): Optionally specify a read-only flag.
 
         Returns:
-            TimeTrackerWrapper: A wrapper on the time tracker.
+            TimeTrackerWrapper: A wrapper on the time tracker that must
+                be used with a context manager block.
 
         Raises:
             TimeTrackerOpenException: If the time tracker fails to open.
@@ -138,6 +183,8 @@ class TimeTrackerPool:
     def _release(self, wrapper: TimeTrackerWrapper):
         """
         Put back a tracker wrapper in the pool, making it available again.
+
+        Internal use only.
         """
         with self._lock:
             assert wrapper._tracker.employee_id in self._pool
@@ -151,6 +198,8 @@ class TimeTrackerPool:
     def _discard(self, wrapper: TimeTrackerWrapper):
         """
         Close definitely a time tracker.
+
+        Internal use only.
         """
         with self._lock:
             desc = f"{wrapper._tracker!s}"
@@ -180,14 +229,14 @@ class TimeTrackerPool:
         Garbage collector task. Discard all time trackers that have
         expired.
         """
-        logger.debug("Pool garbage collector started.")
+        logger.debug("Time tracker pool garbage collector task started.")
 
         while self._gc_run.is_set():
-            time.sleep(GARBAGE_COLLECTOR_DELAY / 10.0)
+            time.sleep(DEFAULT_GARBAGE_DELAY / 10.0)
             self.__discard_expired()
 
         self.__discard_expired(force=True)
-        logger.debug("Pool garbage collector terminated.")
+        logger.debug("Time tracker pool garbage collector task terminated.")
 
     def close(self, wait: bool = True):
         """

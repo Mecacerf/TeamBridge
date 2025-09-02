@@ -24,6 +24,7 @@ import time
 from .data import *
 from core.time_tracker import *
 from core.time_tracker_factory import TimeTrackerFactory
+from core.time_tracker_pool import TimeTrackerPool
 from core.attendance.attendance_validator import AttendanceErrorStatus
 from core.attendance.simple_attendance_validator import SimpleAttendanceValidator
 from core.attendance.simple_attendance_validator import ERROR_MIDNIGHT_ROLLOVER_ID
@@ -57,7 +58,7 @@ class TeamBridgeScheduler:
                 create the time trackers.
         """
         self._factory = tracker_factory
-        self._factory_lock = threading.Lock()
+        self._tracker_pool = TimeTrackerPool(tracker_factory)
 
         self._pool = ThreadPoolExecutor(
             max_workers=MAX_TASK_WORKERS, thread_name_prefix="Task-"
@@ -200,6 +201,7 @@ class TeamBridgeScheduler:
         # Shutdown the thread pool executor, wait for the running tasks to
         # finish and cancel pending ones.
         self._pool.shutdown(wait=True, cancel_futures=True)
+        self._tracker_pool.close()
 
     def __enter__(self) -> "TeamBridgeScheduler":
         # Enter function when using a context manager
@@ -268,7 +270,7 @@ class TeamBridgeScheduler:
             return is_first_evt and is_morning and is_in_yesterday and is_dt_ok
 
         try:
-            with self._factory.create(employee_id, datetime) as tracker:
+            with self._tracker_pool.acquire(employee_id, datetime) as tracker:
                 # Register a midnight rollover if the condition is respected
                 if check_midnight_rollover(tracker):
                     # To indicate a rollover, a special clock-out event is
@@ -321,7 +323,7 @@ class TeamBridgeScheduler:
         Consultation of employee's information.
         """
         try:
-            with self._factory.create(employee_id, datetime) as tracker:
+            with self._tracker_pool.acquire(employee_id, datetime) as tracker:
                 validator = SimpleAttendanceValidator()
                 status = validator.validate(tracker, datetime)
 
