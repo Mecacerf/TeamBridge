@@ -286,7 +286,7 @@ def app_bootstrap() -> Any:
             )
 
         return app
-    
+
     except Exception:
         # Try to close the modules that may have been created
         def try_close(module: Any):
@@ -295,11 +295,11 @@ def app_bootstrap() -> Any:
                     module.close()
             except Exception as ex:
                 logger.warning(f"Exception closing '{module}': {ex}")
-        
+
         try_close(reporter)
         try_close(backend)
         try_close(sleep_manager)
         try_close(app)
-        
+
         # Propagate exception to main
         raise

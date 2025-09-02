@@ -27,6 +27,9 @@ __all__ = ["SleepManager"]
 
 logger = logging.getLogger(__name__)
 
+# Screen brightness control is a bit too verbose
+logging.getLogger("screen_brightness_control").setLevel(logging.ERROR)
+
 # Windows constants
 ES_CONTINUOUS = 0x80000000  # Tells the system to keep applying the setting
 ES_SYSTEM_REQUIRED = 0x00000001  # Prevents sleep

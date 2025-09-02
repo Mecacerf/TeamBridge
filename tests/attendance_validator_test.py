@@ -13,7 +13,7 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 import pytest
-from typing import Optional, cast, Callable, Iterable
+from typing import Optional, cast, Callable
 import datetime as dt
 import logging
 
