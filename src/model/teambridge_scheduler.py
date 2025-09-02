@@ -15,7 +15,6 @@ Contact: info@mecacerf.ch
 
 # Standard libraries
 import logging
-import threading
 from concurrent.futures import ThreadPoolExecutor, Future
 import datetime as dt
 import time
