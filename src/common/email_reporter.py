@@ -255,6 +255,7 @@ class EmailReporter(ReportingService):
             with self._login() as server:
                 server.send_message(email)
 
+            report.mark_sent(str(self))
             self._available_flag.set()
             logger.info(f"Successfully sent email report {report!s}.")
 
@@ -294,3 +295,9 @@ class EmailReporter(ReportingService):
             self._send_queue.put(report)
         except ShutDown:
             logger.error(f"Cannot send report {report!s}, the service has been closed.")
+
+    def __str__(self) -> str:
+        return (
+            f"EmailReporter[from={self._sender}, to={self._recipient}, "
+            f"server={self._smtp_server}:{self._smtp_port}]"
+        )

@@ -21,6 +21,7 @@ from types import TracebackType
 import os
 import platform
 import socket
+from threading import Event
 
 # Internal libraries
 from threading import Event
@@ -56,22 +57,46 @@ class ReportSeverity(IntEnum):
             raise ValueError(f"Unknown severity '{value}'.")
 
 
+from dataclasses import dataclass, field
+from threading import Event
+from typing import Optional
+import datetime as dt
+import os
+import platform
+import socket
+
+
 @dataclass
 class Report:
     """
-    A report holding a severity, a title and message content.
-    Attachments can optionally be added to the report using the provided
-    convenience methods.
+    Represents a diagnostic or error report that can be sent to a reporting
+    service (e.g., email).
+
+    A report contains:
+      - severity: Importance level.
+      - title: Short descriptive title for the report.
+      - content: Detailed message body (optional).
+      - attachments: Files attached to the report (e.g. logs, exports).
+      - created_at: Timestamp when the report was created.
+      - device_id: Identifier of the originating device (from config).
+      - machine_name: Hostname of the machine generating the report.
+      - machine_os: Operating system string of the host.
+      - is_sent: A thread-safe event flag that is set once the report has
+        been successfully sent by the reporting service.
+
+    Attachments can be added with `attach_logs()` or `attach_files()`.
     """
 
     severity: ReportSeverity
     title: str
     content: Optional[str]
+
     attachments: list[str] = field(default_factory=list, init=False)
     created_at: dt.datetime = field(init=False)
     device_id: str = field(init=False)
     machine_name: str = field(init=False)
     machine_os: str = field(init=False)
+    sent_status: Event = field(init=False)
 
     def __post_init__(self):
         self.created_at = dt.datetime.now()
@@ -80,17 +105,19 @@ class Report:
         self.machine_os = (
             f"{platform.system()} {platform.release()} ({platform.version()})"
         )
+        self.sent_status = Event()
 
     def __str__(self) -> str:
         return f"'[{self.severity.name}] {self.title}'"
 
     def attach_logs(self, root: Optional[str] = None) -> "Report":
         """
-        Attach the program log files to the report.
-        """
-        if not root:
-            root = "."
+        Attach log files matching the configured logging file name.
 
+        Args:
+            root: Directory to search in (default: current directory).
+        """
+        root = root or "."
         self.attachments.extend(
             [file for file in os.listdir(root) if LOGGING_FILE_NAME in file]
         )
@@ -98,13 +125,34 @@ class Report:
 
     def attach_files(self, files: list[str]) -> "Report":
         """
-        Attach files to the report.
+        Attach specific files to the report.
 
         Args:
-            files (list[str]): List of file paths to attach.
+            files: List of file paths to attach.
         """
         self.attachments.extend(files)
         return self
+
+    def mark_sent(self, service: str):
+        """
+        Mark this report as sent by a given service.
+
+        This method is thread-safe.
+
+        Args:
+            service: Unique name of the reporting service.
+        """
+        # For now, only once service is supported
+        self.sent_status.set()
+
+    def is_sent(self) -> bool:
+        """
+        Check if the report has been sent by a service.
+
+        Returns:
+            bool: Sent status.
+        """
+        return self.sent_status.is_set()
 
 
 @dataclass

@@ -158,6 +158,7 @@ def test_send_email_report(monkeypatch, reporter: EmailReporter):
 
     assert hasattr(server, "email")
     assert str(prediction) == str(server.email)
+    assert report.is_sent()
 
 
 def test_availability_flag_set(monkeypatch, reporter: EmailReporter):
