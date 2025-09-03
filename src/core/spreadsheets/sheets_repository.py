@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
 """
-File: spreadsheets_repository.py
+Manages access to the spreadsheet files repository in a thread-safe
+manner. Typically, one instance of the `SheetsRepoAccessor` class is
+created per remote repository and injected into any component that
+requires access to the spreadsheet files.
+
+It operates on any directory available in the local file system,
+including network-mounted drives. To improve reliability, it includes
+a simple retry mechanism to handle temporary unavailability (e.g.,
+due to NAS devices entering sleep mode), and uses locking mechanisms
+to prevent simultaneous access to the same files.
+
+It is the responsibility of the user to ensure the file has been
+acquired before saving it or releasing it. Calling these functions
+without having acquiring the file before may cause unexpected behaviors.
+
+If an error happens during acquired spreadsheet file operations, it
+is normal and intended to not release it. The file will stay unusable
+until someone manually remove the lock file from the remote repository,
+assuming the errors have been manually solved.
+
+---
+TeamBridge - An open-source timestamping application
+
 Author: Bastian Cerf
-Date: 19/03/2025
-Description:
-    Manages access to the spreadsheet files repository in a thread-safe
-    manner. Typically, one instance of the `SheetsRepoAccessor` class is
-    created per remote repository and injected into any component that
-    requires access to the spreadsheet files.
-
-    It operates on any directory available in the local file system,
-    including network-mounted drives. To improve reliability, it includes
-    a simple retry mechanism to handle temporary unavailability (e.g.,
-    due to NAS devices entering sleep mode), and uses locking mechanisms
-    to prevent simultaneous access to the same files.
-
-    It is the responsibility of the user to ensure the file has been
-    acquired before saving it or releasing it. Calling these functions
-    without having acquiring the file before may cause unexpected behaviors.
-
-    If an error happens during acquired spreadsheet file operations, it
-    is normal and intended to not release it. The file will stay unusable
-    until someone manually remove the lock file from the remote repository,
-    assuming the errors have been manually solved.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

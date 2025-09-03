@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: singleton_register_test.py
-Author: Bastian Cerf
-Date: 02/06/2025
-Description:
-    Unit test of the singleton register module.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import pytest

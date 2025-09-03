@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: libreoffice_test.py
-Author: Bastian Cerf
-Date: 19/05/2025
-Description:
-    Unit test of the LibreOffice module.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import pytest

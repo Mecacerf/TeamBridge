@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-File: sheet_time_tracker_factory.py
-Author: Bastian Cerf
-Date: 17/05/2025
-Description:
-    Concrete implementation of the abstract factory defined in
-    `time_tracker_factory.py`. This implementation builds
-    `SheetTimeTracker` instances.
+Concrete implementation of the abstract factory defined in
+`time_tracker_factory.py`. This implementation builds
+`SheetTimeTracker` instances.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

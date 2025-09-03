@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """
-File: bootstrap.py
-Author: Bastian Cerf
-Date: 23/08/2025
-Description:
-    TeamBridge program bootstrap.
+TeamBridge - An open-source timestamping application
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

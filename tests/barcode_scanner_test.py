@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: qr_scanner_test.py
-Author: Bastian Cerf
-Date: 06/03/2025
-Description:
-    Unit test / integration test of the barcode scanner module.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import pytest

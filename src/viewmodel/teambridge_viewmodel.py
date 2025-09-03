@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """
-File: teambridge_viewmodel.py
-Author: Bastian Cerf
-Date: 02/03/2025
-Description:
-    The ViewModel serves as the intermediary between the view and the
-    model, encapsulating the business logic of the application. It
-    manages a state machine to handle user interactions from the view
-    and coordinates with the model to schedule and execute the necessary
-    tasks.
+The ViewModel serves as the intermediary between the view and the
+model, encapsulating the business logic of the application. It
+manages a state machine to handle user interactions from the view
+and coordinates with the model to schedule and execute the necessary
+tasks.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

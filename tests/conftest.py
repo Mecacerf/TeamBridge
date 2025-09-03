@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: conftest.py
-Author: Bastian Cerf
-Date: 13/04/2025
-Description:
-    Declaration of shared fixtures across unit test modules.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import pytest

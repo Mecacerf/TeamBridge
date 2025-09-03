@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-File: email_reporter.py
-Author: Bastian Cerf
-Date: 12/08/2025
-Description:
-    Report application events by emails.
+Report application events by email.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

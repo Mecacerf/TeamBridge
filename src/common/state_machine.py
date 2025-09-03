@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-File: state_machine.py
-Author: Bastian Cerf
-Date: 17/04/2025
-Description:
-    Define the base interfaces to build a finite state machine.
+Define the base interfaces to build a finite state machine.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 from abc import ABC

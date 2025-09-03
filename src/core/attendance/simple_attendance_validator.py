@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-File: simple_attendance_validator.py
-Author: Bastian Cerf
-Date: 20/07/2025
-Description:
-    Simple implementation of base classes provided in
-    `attendance_validator.py`.
+Simple implementation of base classes provided in
+`attendance_validator.py`.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

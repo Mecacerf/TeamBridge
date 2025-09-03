@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: test_constants.py
-Author: Bastian Cerf
-Date: 18/05/2025
-Description:
-    Declaration of general test constants.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 from pathlib import Path
 

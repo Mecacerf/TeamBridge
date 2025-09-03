@@ -1,30 +1,29 @@
 #!/usr/bin/env python3
 """
-File: time_tracker_pool.py
+A pool of time tracker objects that internally manages their
+lifecycle. Useful to reuse the same time tracker multiple times
+without having to setup it again each time.
+
+A time tracker is wrapped in a class that supports and must be used
+with a context manager. The time tracker is taken from the pool for
+the duration of the context manager block.
+
+```
+pool = TimeTrackerPool(factory)
+with pool.acquire(id, year) as tracker:
+    # Tracker is taken from the pool and released on exit
+    print(f"{tracker!s}")
+```
+
+A garbage collection task runs in the background and will discard
+old time trackers that haven't been used for long.
+
+---
+TeamBridge - An open-source timestamping application
+
 Author: Bastian Cerf
-Date: 02/09/2025
-Description:
-    A pool of time tracker objects that internally manages their
-    lifecycle. Useful to reuse the same time tracker multiple times
-    without having to setup it again each time.
-
-    A time tracker is wrapped in a class that supports and must be used
-    with a context manager. The time tracker is taken from the pool for
-    the duration of the context manager block.
-
-    ```
-    pool = TimeTrackerPool(factory)
-    with pool.acquire(id, year) as tracker:
-        # Tracker is taken from the pool and released on exit
-        print(f"{tracker!s}")
-    ```
-
-    A garbage collection task runs in the background and will discard
-    old time trackers that haven't been used for long.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """
-File: barcode_scanner.py
-Author: Bastian Cerf
-Date: 02/03/2025
-Description:
-    Open a camera device mounted on the system and analyze the frames to find barcodes.
+TeamBridge - An open-source timestamping application
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries
@@ -30,12 +26,14 @@ logger = logging.getLogger(__name__)
 
 class BarcodeScanner:
     """
-    Open a camera device mounted on the system and analyze the frames to find barcodes.
-    Barcodes values are decoded as strings and a regular expression can be used to match specific code
-    formats and extract an information, such as an ID.
-    Optionally, a timeout can be specified to prevent a barcode to be scanned in loop.
-    When the scanner is opened, a background thread is started and will handle the scanning process at the
-    specified rate. This process can be paused and resumed using provided methods.
+    Open a camera device mounted on the system and analyze the frames to 
+    find barcode. Barcode values are decoded as strings and a regular 
+    expression can be used to match specific code formats and extract 
+    information, such as an ID. Optionally, a timeout can be specified 
+    to prevent a barcode to be scanned in loop. When the scanner is 
+    opened, a background thread is started and will handle the scanning 
+    process at the specified rate. This process can be paused and resumed 
+    using the provided methods.
     """
 
     def __init__(self):

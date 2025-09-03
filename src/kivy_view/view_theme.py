@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-File: view_theme.py
-Author: Bastian Cerf
-Date: 26/04/2025
-Description:
-    Define base properties for a view theme.
+Define view theme properties and provide default themes.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # pyright: reportGeneralTypeIssues=false
