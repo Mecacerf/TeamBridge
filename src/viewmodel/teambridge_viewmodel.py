@@ -46,6 +46,9 @@ _scanner_conf = config.section("scanner")
 # Timeout for the attendance list task
 ATTENDANCE_LIST_TIMEOUT = 60.0
 
+# Timeout for error state (triggered once a report has been sent)
+ERROR_STATE_TIMEOUT = 20.0
+
 # Font used for attendance list displaying
 ATTENDANCE_LIST_FONT = join("assets", "fonts", "Inter_28pt-Regular.ttf")
 
@@ -1068,6 +1071,8 @@ class _ErrorState(_IViewModelState):
         self._employee_id = employee_id
         self._employee_name = employee_name
         self._employee_firstname = employee_firstname
+        self._report = None
+        self._timeout = None
 
     def entry(self):
         # Reset next action to prevent wrong acknowledgment
@@ -1104,25 +1109,33 @@ class _ErrorState(_IViewModelState):
                 self.__simple_report(self.fsm.reporter, body)
 
     def __employee_report(self, reporter: ReportingService, body: str, id: str):
-        reporter.send_report(
-            EmployeeReport(
-                ReportSeverity.ERROR,
-                "Employee runtime exception",
-                body,
-                employee_id=id,
-                name=self._employee_name,
-                firstname=self._employee_firstname,
-            ).attach_logs()
-        )
+        self._report = EmployeeReport(
+            ReportSeverity.ERROR,
+            "Employee runtime exception",
+            body,
+            employee_id=id,
+            name=self._employee_name,
+            firstname=self._employee_firstname,
+        ).attach_logs()
+        reporter.send_report(self._report)
 
     def __simple_report(self, reporter: ReportingService, body: str):
-        reporter.send_report(
-            Report(ReportSeverity.ERROR, "Runtime exception", body).attach_logs()
-        )
+        self._report = Report(
+            ReportSeverity.ERROR, "Runtime exception", body
+        ).attach_logs()
+        reporter.send_report(self._report)
 
     def do(self) -> Optional[IStateBehavior]:
         # Check if acknowledged
         if self.fsm.next_action == ViewModelAction.RESET_TO_CLOCK_ACTION:
+            return _WaitClockActionState()
+
+        if self._report and self._report.is_sent() and self._timeout is None:
+            # Program the state timeout once a report has been sent
+            # successfully
+            self._timeout = time.time() + ERROR_STATE_TIMEOUT
+
+        if self._timeout and time.time() > self._timeout:
             return _WaitClockActionState()
 
     @property
