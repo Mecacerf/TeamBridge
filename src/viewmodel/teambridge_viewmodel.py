@@ -44,7 +44,7 @@ config = LocalConfig()
 _scanner_conf = config.section("scanner")
 
 # Timeout for the attendance list task
-ATTENDANCE_LIST_TIMEOUT = 60.0
+ATTENDANCE_LIST_TIMEOUT = 90.0
 
 # Timeout for error state (triggered once a report has been sent)
 ERROR_STATE_TIMEOUT = 20.0
@@ -511,9 +511,7 @@ class _ClockActionState(_IViewModelState):
             if isinstance(msg, EmployeeEvent):
                 return _ClockSuccessState(msg)
             elif isinstance(msg, ModelError):
-                return _ErrorState(
-                    "Clock action task failed", msg, employee_id=self._id
-                )
+                return _ErrorState("Clock action task failed", msg)
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -555,13 +553,7 @@ class _ClockSuccessState(_IViewModelState):
                 # Always send an error report when coming from clocking mode
                 return _ConsultationSuccessState(msg, timeout=20.0, should_report=True)
             elif isinstance(msg, ModelError):
-                return _ErrorState(
-                    "Consultation task failed",
-                    msg,
-                    employee_id=self._evt.id,
-                    employee_name=self._evt.name,
-                    employee_firstname=self._evt.firstname,
-                )
+                return _ErrorState("Consultation task failed", msg)
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -632,9 +624,7 @@ class _ConsultationActionState(_IViewModelState):
             if isinstance(msg, EmployeeData):
                 return _ConsultationSuccessState(msg, timeout=60.0)
             elif isinstance(msg, ModelError):
-                return _ErrorState(
-                    "Consultation task failed", msg, employee_id=self._id
-                )
+                return _ErrorState("Consultation task failed", msg)
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
@@ -915,7 +905,7 @@ class _LoadAttendanceList(_IViewModelState):
         if time.time() > self._timeout:
             return _ErrorState(
                 f"Timed out while loading attendance list "
-                f"({ATTENDANCE_LIST_TIMEOUT} sec)."
+                f"(more than {ATTENDANCE_LIST_TIMEOUT} sec elapsed)."
             )
 
     def exit(self):
@@ -1057,20 +1047,10 @@ class _ErrorState(_IViewModelState):
         - Upon acknowledgment by sending the reset to clock action signal
     """
 
-    def __init__(
-        self,
-        msg: str,
-        error: Optional[ModelError] = None,
-        employee_id: Optional[str] = None,
-        employee_name: Optional[str] = None,
-        employee_firstname: Optional[str] = None,
-    ):
+    def __init__(self, msg: str, error: Optional[ModelError] = None):
         super().__init__()
-        self._msg = msg
+        self._message = msg
         self._error = error
-        self._employee_id = employee_id
-        self._employee_name = employee_name
-        self._employee_firstname = employee_firstname
         self._report = None
         self._timeout = None
 
@@ -1078,52 +1058,64 @@ class _ErrorState(_IViewModelState):
         # Reset next action to prevent wrong acknowledgment
         self.fsm.next_action = ViewModelAction.DEFAULT_ACTION
 
-        logger.error(f"State machine entered error state. Reason '{self._msg}'.")
+        logger.error(f"State machine entered error state. Reason '{self._message}'.")
         if self._error:
             logger.error(
                 f"A task failed with error ({self._error.error_code}) "
                 f"'{self._error.message}'."
             )
-        if self._employee_id:
-            logger.error(
-                f"Error occurred with employee ID='{self._employee_id}', "
-                f"name='{self._employee_name if self._employee_name else "unknown"}', "
-                f"firstname='{self._employee_firstname if self._employee_firstname else "unknown"}'."
+            if self._error.employee_id:
+                emp_id = self._error.employee_id
+                emp_name = (
+                    self._error.employee_name
+                    if self._error.employee_name
+                    else "unknown"
+                )
+                emp_firstname = (
+                    self._error.employee_firstname
+                    if self._error.employee_firstname
+                    else "unknown"
+                )
+                logger.error(
+                    f"Error occurred with employee ID='{emp_id}', "
+                    f"name='{emp_name}', "
+                    f"firstname='{emp_firstname}'."
+                )
+
+        # Try to send an application report
+        self.__send_report()
+
+    def __send_report(self):
+        """Build and send the appropriate error report."""
+        if self.fsm.reporter is None:
+            return
+
+        body = f"The application entered error state.\n\nError message: {self._message}"
+
+        if not self._error:
+            # Most simple error report
+            self._report = Report(ReportSeverity.ERROR, "Runtime exception", body)
+
+        elif not self._error.employee_id:
+            # Has error code and message
+            body += f"\nError code: {self._error.error_code}"
+            body += f"\nSpecific message: {self._error.message}"
+            self._report = Report(ReportSeverity.ERROR, "Runtime exception", body)
+
+        else:
+            # Complete employee report
+            body += f"\nError code: {self._error.error_code}"
+            body += f"\nSpecific message: {self._error.message}"
+            self._report = EmployeeReport(
+                ReportSeverity.ERROR,
+                "Employee runtime exception",
+                body,
+                employee_id=self._error.employee_id,
+                name=self._error.employee_name,
+                firstname=self._error.employee_firstname,
             )
 
-        # Send an error report if a reporter has been specified
-        if self.fsm.reporter:
-            body = (
-                "The application entered error state. The user must acknowledge "
-                "to continue.\n\nError message: "
-                f"{self._msg}"
-            )
-
-            if self._error:
-                body += f"\nError code {self._error.error_code}"
-                body += f"\nSpecific message: {self._error.message}"
-
-            if self._employee_id:
-                self.__employee_report(self.fsm.reporter, body, self._employee_id)
-            else:
-                self.__simple_report(self.fsm.reporter, body)
-
-    def __employee_report(self, reporter: ReportingService, body: str, id: str):
-        self._report = EmployeeReport(
-            ReportSeverity.ERROR,
-            "Employee runtime exception",
-            body,
-            employee_id=id,
-            name=self._employee_name,
-            firstname=self._employee_firstname,
-        ).attach_logs()
-        reporter.send_report(self._report)
-
-    def __simple_report(self, reporter: ReportingService, body: str):
-        self._report = Report(
-            ReportSeverity.ERROR, "Runtime exception", body
-        ).attach_logs()
-        reporter.send_report(self._report)
+        self.fsm.reporter.send_report(self._report.attach_logs())
 
     def do(self) -> Optional[IStateBehavior]:
         # Check if acknowledged
