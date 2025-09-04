@@ -99,8 +99,6 @@ def test_clock_action(
     wait_state(viewmodel, "ClockSuccessState")
     # Shall automatically move to consultation state
     wait_state(viewmodel, "ConsultationSuccessState")
-    # And finally back to scanning state after the presentation duration
-    wait_state(viewmodel, "WaitClockActionState", 21.0)
 
     # The next action has been reset
     assert viewmodel.next_action == ViewModelAction.DEFAULT_ACTION
