@@ -124,6 +124,7 @@ class TeamBridgeViewModel(IStateMachine):
         self._panel_title_text = LiveData[str]("")
         self._panel_subtitle_text = LiveData[str]("")
         self._panel_content_text = LiveData[str]("")
+        self._leave_time = LiveData[Optional[float]](None)
         self._reporting_service = LiveData[bool](False)
 
     @property
@@ -250,6 +251,18 @@ class TeamBridgeViewModel(IStateMachine):
             LiveData[str]: text as an observable
         """
         return self._panel_content_text
+
+    @property
+    def leave_time(self) -> LiveData[Optional[float]]:
+        """
+        Get the time at which the current state is programmed to leave
+        automatically. `None` is returned if the current state doesn't
+        time out.
+
+        Returns:
+            LiveData[Optional[float]]: Next state leave time.
+        """
+        return self._leave_time
 
     @property
     def reporting_service_status(self) -> LiveData[bool]:
@@ -606,6 +619,7 @@ class _ConsultationSuccessState(_ScanningState):
 
         # Program state leaving time
         self._leave = time.time() + self._timeout
+        self.fsm.leave_time.value = self._leave
 
         # Send a warning / error report if configured for
         if self._should_report and self.fsm.reporter:
@@ -661,6 +675,7 @@ class _ConsultationSuccessState(_ScanningState):
         super().exit()
         self.fsm.panel_title_text.value = ""
         self.fsm.panel_content_text.value = ""
+        self.fsm.leave_time.value = None
 
     def __panel_title_text(self):
         return f"{self._data.firstname} {self._data.name}"
@@ -884,6 +899,7 @@ class _ShowAttendanceList(_IViewModelState):
         self.fsm.panel_content_text.value = self.__panel_content_text()
 
         self._timeout = time.time() + SHOW_ATTENDANCE_LIST_TIMEOUT
+        self.fsm.leave_time.value = self._timeout
 
         logger.info(f"Fetched attendance list in {self._result.fetch_time:.2f} sec.")
         logger.info(
@@ -911,6 +927,7 @@ class _ShowAttendanceList(_IViewModelState):
     def exit(self):
         self.fsm.panel_title_text.value = ""
         self.fsm.panel_content_text.value = ""
+        self.fsm.leave_time.value = None
 
     def __panel_content_text(self):
         """
@@ -1080,6 +1097,7 @@ class _ErrorState(_IViewModelState):
             # successfully
             self._timeout = time.time() + SHOW_ERROR_STATE_TIMEOUT
             self.fsm.main_subtitle_text.value = "Veuillez réessayer ultérieurement"
+            self.fsm.leave_time.value = self._timeout
 
         if self._timeout and time.time() > self._timeout:
             return _WaitClockActionState()
@@ -1087,3 +1105,4 @@ class _ErrorState(_IViewModelState):
     def exit(self):
         self.fsm.main_title_text.value = ""
         self.fsm.main_subtitle_text.value = ""
+        self.fsm.leave_time.value = None
