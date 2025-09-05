@@ -89,6 +89,31 @@
       "type": "bool",
       "required": true,
       "default": false
+    },
+    "load_attendance_list_timeout": {
+      "type": "float",
+      "required": true,
+      "default": 90.0,
+      "min": 1.0
+    },
+    "show_attendance_list_timeout": {
+      "type": "float",
+      "required": true,
+      "default": 30.0,
+      "min": 1.0
+    },
+    "show_consultation_timeout": {
+      "type": "float",
+      "required": true,
+      "default": 60.0,
+      "min": 1.0
+    },
+    "show_error_timeout": {
+      "type": "float",
+      "required": true,
+      "default": 20.0,
+      "min": 1.0,
+      "comment": "This timeout is started as soon as a report has been sent successfully"
     }
   },
   "sleep": {

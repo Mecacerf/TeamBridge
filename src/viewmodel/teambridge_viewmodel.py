@@ -42,15 +42,21 @@ __all__ = ["TeamBridgeViewModel", "ViewModelAction"]
 logger = logging.getLogger(__name__)
 config = LocalConfig()
 _scanner_conf = config.section("scanner")
+_ui_conf = config.section("ui")
+
+SCANNER_CAMERA_IDX = _scanner_conf["camera_id"]
+SCANNER_RATE_HZ = _scanner_conf["scan_rate"]
 
 # Timeout for the attendance list task
-ATTENDANCE_LIST_TIMEOUT = 90.0
-
+LOAD_ATTENDANCE_LIST_TIMEOUT = _ui_conf["load_attendance_list_timeout"]
+# Timeout for the attendance list view
+SHOW_ATTENDANCE_LIST_TIMEOUT = _ui_conf["show_attendance_list_timeout"]
 # Timeout for error state (triggered once a report has been sent)
-ERROR_STATE_TIMEOUT = 20.0
-
+SHOW_ERROR_STATE_TIMEOUT = _ui_conf["show_error_timeout"]
 # Timeout for the presentation state
-PRESENTATION_STATE_TIMEOUT = 60.0
+SHOW_PRESENTATION_STATE_TIMEOUT = _ui_conf["show_consultation_timeout"]
+
+DEBUG_MODE = config.section("debug")["debug"]
 
 # Font used for attendance list displaying
 ATTENDANCE_LIST_FONT = join("assets", "fonts", "Inter_28pt-Regular.ttf")
@@ -108,9 +114,6 @@ class TeamBridgeViewModel(IStateMachine):
         self._model = model
         self._scanner = scanner
         self._reporter = reporter
-        self._cam_idx = _scanner_conf["camera_id"]
-        self._scan_rate = _scanner_conf["scan_rate"]
-        self._debug_mode = config.section("debug")["debug"]
 
         self._next_action = ViewModelAction.DEFAULT_ACTION
 
@@ -134,18 +137,6 @@ class TeamBridgeViewModel(IStateMachine):
     @property
     def reporter(self) -> Optional[ReportingService]:
         return self._reporter
-
-    @property
-    def camera_idx(self) -> int:
-        return self._cam_idx
-
-    @property
-    def camera_scan_rate(self) -> float:
-        return self._scan_rate
-
-    @property
-    def debug_mode(self) -> bool:
-        return self._debug_mode
 
     def run(self):
         """
@@ -309,7 +300,7 @@ class _InitialState(_IViewModelState):
             regex=_scanner_conf["regex"],
             extract_group=_scanner_conf["regex_group"],
             timeout=_scanner_conf["scanned_id_delay"],
-            debug_mode=self.fsm.debug_mode,
+            debug_mode=DEBUG_MODE,
         )
 
         self.__open_scanner()
@@ -320,9 +311,7 @@ class _InitialState(_IViewModelState):
         some time depending on OS, device, etc.
         """
         try:
-            self.fsm.scanner.open(
-                cam_idx=self.fsm.camera_idx, scan_rate=self.fsm.camera_scan_rate
-            )
+            self.fsm.scanner.open(cam_idx=SCANNER_CAMERA_IDX, scan_rate=SCANNER_RATE_HZ)
 
         except RuntimeError:
             logger.warning(
@@ -510,7 +499,7 @@ class _ClockSuccessState(_IViewModelState):
             if isinstance(msg, EmployeeData):
                 # Always send an error report when coming from clocking mode
                 return _ConsultationSuccessState(
-                    msg, timeout=PRESENTATION_STATE_TIMEOUT, should_report=True
+                    msg, timeout=SHOW_PRESENTATION_STATE_TIMEOUT, should_report=True
                 )
             elif isinstance(msg, ModelError):
                 return _ErrorState("Consultation task failed", msg)
@@ -577,7 +566,7 @@ class _ConsultationActionState(_IViewModelState):
         if msg := self.fsm.model.get_result(self._handle):
             if isinstance(msg, EmployeeData):
                 return _ConsultationSuccessState(
-                    msg, timeout=PRESENTATION_STATE_TIMEOUT
+                    msg, timeout=SHOW_PRESENTATION_STATE_TIMEOUT
                 )
             elif isinstance(msg, ModelError):
                 return _ErrorState("Consultation task failed", msg)
@@ -852,7 +841,7 @@ class _LoadAttendanceList(_IViewModelState):
 
     def entry(self):
         self._handle = self.fsm.model.start_attendance_list_task(dt.datetime.now())
-        self._timeout = time.time() + ATTENDANCE_LIST_TIMEOUT
+        self._timeout = time.time() + LOAD_ATTENDANCE_LIST_TIMEOUT
 
     def do(self) -> Optional[IStateBehavior]:
         if self.fsm.model.available(self._handle):
@@ -865,7 +854,7 @@ class _LoadAttendanceList(_IViewModelState):
         if time.time() > self._timeout:
             return _ErrorState(
                 f"Timed out while loading attendance list "
-                f"(more than {ATTENDANCE_LIST_TIMEOUT} sec elapsed)."
+                f"(more than {LOAD_ATTENDANCE_LIST_TIMEOUT} sec elapsed)."
             )
 
     def exit(self):
@@ -894,7 +883,7 @@ class _ShowAttendanceList(_IViewModelState):
         self.fsm.panel_title_text.value = "Liste des présences"
         self.fsm.panel_content_text.value = self.__panel_content_text()
 
-        self._timeout = time.time() + ATTENDANCE_LIST_TIMEOUT
+        self._timeout = time.time() + SHOW_ATTENDANCE_LIST_TIMEOUT
 
         logger.info(f"Fetched attendance list in {self._result.fetch_time:.2f} sec.")
         logger.info(
@@ -1089,7 +1078,7 @@ class _ErrorState(_IViewModelState):
         if self._report and self._report.is_sent() and self._timeout is None:
             # Program the state timeout once a report has been sent
             # successfully
-            self._timeout = time.time() + ERROR_STATE_TIMEOUT
+            self._timeout = time.time() + SHOW_ERROR_STATE_TIMEOUT
             self.fsm.main_subtitle_text.value = "Veuillez réessayer ultérieurement"
 
         if self._timeout and time.time() > self._timeout:
