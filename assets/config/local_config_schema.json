@@ -13,6 +13,11 @@
     "locale": {
       "type": "str",
       "default": "fr_CH"
+    },
+    "language": {
+      "type": "str",
+      "required": true,
+      "default": "fr"
     }
   },
   "repository": {

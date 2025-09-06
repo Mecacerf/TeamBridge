@@ -157,6 +157,15 @@ def _set_locale(value: str):
     logger.info(f"Using locale {actual} with preferred encoding '{encoding}'.")
 
 
+def _load_translation():
+    """
+    Load the translation service.
+    """
+    from common.translations import LanguageService
+
+    LanguageService()
+
+
 def _load_backend(config: LocalConfig, reporter: Any) -> Any:
     """
     Load the application backend services. It returns a handle on a
@@ -270,6 +279,7 @@ def app_bootstrap() -> Any:
 
         if general_conf["locale"]:
             _set_locale(general_conf["locale"])
+        _load_translation()
 
         backend = _load_backend(config, reporter)
         sleep_manager = _load_sleep_manager(config)
