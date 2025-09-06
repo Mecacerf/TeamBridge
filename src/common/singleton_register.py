@@ -46,8 +46,9 @@ class SingletonRegister(ABC):
 
             instance = super().__new__(cls)
             SingletonRegister._instances[cls] = instance
-            instance._setup(*args, **kwargs)
-            return instance
+
+        instance._setup(*args, **kwargs)
+        return instance
 
     def _setup(self, *args: Any, **kwargs: Any) -> None:
         """
