@@ -10,7 +10,6 @@ License: AGPL-3.0 <https://www.gnu.org/licenses/>
 # Standard libraries
 import logging, logging.handlers
 import argparse
-import locale
 from typing import Any
 
 # Internal libraries
@@ -141,7 +140,7 @@ def _load_translation():
     """
     Load the translation service.
     """
-    from common.translations import LanguageService
+    from i18n.translations import LanguageService
 
     LanguageService()
 

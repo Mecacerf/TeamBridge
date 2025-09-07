@@ -17,6 +17,8 @@ from os.path import join
 from pathlib import Path
 from typing import Optional
 from gettext import GNUTranslations
+from abc import ABC, abstractmethod
+import datetime as dt
 import polib
 import locale
 
@@ -27,6 +29,25 @@ from common.singleton_register import SingletonRegister
 logger = logging.getLogger(__name__)
 
 LOCALES_DIRECTORY = join("assets", "locales")
+
+
+class LanguageFormatter(ABC):
+    """
+    Provide functions to format text for a specific language.
+    """
+
+    @abstractmethod
+    def greeting(self, now: dt.datetime | dt.time, farewell: bool = False) -> str:
+        pass
+
+
+from i18n.formatter_en import EnglishFormatter
+from i18n.formatter_fr import FrenchFormatter
+
+REGISTERED_FORMATTERS: dict[str, "LanguageFormatter"] = {
+    "en": EnglishFormatter(),
+    "fr": FrenchFormatter(),
+}
 
 
 class LanguageService(SingletonRegister):
@@ -43,19 +64,24 @@ class LanguageService(SingletonRegister):
         language files.
         """
         self._translators: dict[str, GNUTranslations] = {}
+        self._formatters: dict[str, LanguageFormatter] = {}
 
         general = LocalConfig().section("general")
-
-        self._set_locale(general["locale"])
+        if general["locale"]:
+            self._set_locale(general["locale"])
+        
         self._compile_po_files()
         self._load_languages()
+        self._load_formatters()
 
         def_lang = general["language"]
         try:
             self._def_lang = self._translators[def_lang]
+            self._def_fmt = self._formatters[def_lang]
         except KeyError:
             raise FileNotFoundError(
-                f"No translation file found for default language '{def_lang}'."
+                "No translation file or formatter found for default language "
+                f" '{def_lang}'."
             )
 
     def _set_locale(self, value: str):
@@ -74,8 +100,9 @@ class LanguageService(SingletonRegister):
                 f"Application locale is '{actual}' / "
                 f"python default encoding is '{encoding}'."
             )
-        except (ValueError, locale.Error):
-            logger.exception(f"The locale '{value}' is unavailable on this system.")
+        except locale.Error:
+            logger.error(f"The locale '{value}' is unavailable on this system.")
+            raise
 
     def _compile_po_files(self):
         """
@@ -111,6 +138,14 @@ class LanguageService(SingletonRegister):
                 self._translators[lang] = GNUTranslations(fb)
             logger.info(f"Created translator for language '{lang}'.")
 
+    def _load_formatters(self):
+        """
+        Load formatters available for loaded translators.
+        """
+        for lang in self._translators.keys():
+            if lang in REGISTERED_FORMATTERS:
+                self._formatters[lang] = REGISTERED_FORMATTERS[lang]
+
     def get_translator(self, lang: Optional[str] = None) -> GNUTranslations:
         """
         Get a translation unit. Fallback to default if not provided or
@@ -131,3 +166,12 @@ class LanguageService(SingletonRegister):
             str: Translation for the message ID.
         """
         return self.get_translator(lang).gettext(msgid)
+
+    def get_formatter(self, lang: Optional[str] = None) -> LanguageFormatter:
+        """
+        Get a formatter for the specified language. Fallback to default
+        if not existing.
+        """
+        if lang:
+            return self._formatters.get(lang, self._def_fmt)
+        return self._def_fmt

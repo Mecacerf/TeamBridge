@@ -34,7 +34,7 @@ from model import *  # Task scheduling
 from platform_io.barcode_scanner import BarcodeScanner  # Employee ID detection
 from core.time_tracker import ClockAction  # Domain model enums
 from core.attendance.attendance_validator import AttendanceErrorStatus
-from common.translations import LanguageService
+from i18n.translations import LanguageService
 from local_config import LocalConfig
 
 __all__ = ["TeamBridgeViewModel", "ViewModelAction"]
@@ -60,8 +60,8 @@ SHOW_PRESENTATION_STATE_TIMEOUT = _ui_conf["show_consultation_timeout"]
 DEBUG_MODE = config.section("debug")["debug"]
 
 # Configure global translator
-_translator = LanguageService().get_translator()
-_ = _translator.gettext
+_language = LanguageService()
+_ = _language.get_translator().gettext
 
 # Font used for attendance list displaying
 ATTENDANCE_LIST_FONT = join("assets", "fonts", "Inter_28pt-Regular.ttf")
@@ -502,6 +502,8 @@ class _ClockSuccessState(_IViewModelState):
     def __init__(self, event: EmployeeEvent):
         super().__init__()
         self._evt = event
+        self._txt = _language.get_translator().gettext
+        self._fmt = _language.get_formatter()
 
     def entry(self):
         self.__greetings()
@@ -530,11 +532,17 @@ class _ClockSuccessState(_IViewModelState):
 
     def __greetings(self):
         if self._evt.clock_evt.action == ClockAction.CLOCK_IN:
-            self.fsm.main_title_text.value = _("Entry recorded")
-            self.fsm.main_subtitle_text.value = f"TODO Bonjour {self._evt.firstname}"
+            self.fsm.main_title_text.value = self._txt("Entry recorded")
+            self.fsm.main_subtitle_text.value = (
+                f"{self._fmt.greeting(self._evt.clock_evt.time)} "
+                f"{self._evt.firstname}"
+            )
         else:
-            self.fsm.main_title_text.value = _("Departure recorded")
-            self.fsm.main_subtitle_text.value = f"Au revoir TODO {self._evt.firstname}"
+            self.fsm.main_title_text.value = self._txt("Departure recorded")
+            self.fsm.main_subtitle_text.value = (
+                f"{self._fmt.greeting(self._evt.clock_evt.time, True)} "
+                f"{self._evt.firstname}"
+            )
 
 
 class _ConsultationActionState(_IViewModelState):
