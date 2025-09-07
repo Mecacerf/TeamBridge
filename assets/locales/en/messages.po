@@ -73,3 +73,51 @@ msgstr "Employee runtime exception"
 
 msgid "Please try again later"
 msgstr "Please try again later"
+
+msgid "Errors are preventing information from being displayed correctly."
+msgstr "Errors are preventing information from being displayed correctly."
+
+msgid "Please contact the office."
+msgstr "Please contact the office."
+
+msgid "Error:"
+msgstr "Error:"
+
+msgid "Errors:"
+msgstr "Errors:"
+
+msgid "unknown date:"
+msgstr "unknown date:"
+
+msgid "yes"
+msgstr "yes"
+
+msgid "no"
+msgstr "no"
+
+msgid "Present:"
+msgstr "Present:"
+
+msgid "Year-to-yesterday balance:"
+msgstr "Year-to-yesterday balance:"
+
+msgid "please adjust quickly"
+msgstr "please adjust quickly"
+
+msgid "Month-to-yesterday balance:"
+msgstr "Month-to-yesterday balance:"
+
+msgid "Today balance:"
+msgstr "Today balance:"
+
+msgid "Month vacation:"
+msgstr "Month vacation:"
+
+msgid "Vacations to plan:"
+msgstr "Vacations to plan:"
+
+msgid "Problem:"
+msgstr "Problem:"
+
+msgid "Problems:"
+msgstr "Problems:"

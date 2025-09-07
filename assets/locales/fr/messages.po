@@ -73,3 +73,54 @@ msgstr "Erreur d'exécution pour un employé"
 
 msgid "Please try again later"
 msgstr "Veuillez réessayer ultérieurement"
+
+msgid "Errors are preventing information from being displayed correctly."
+msgstr "Des erreurs empêchent l'affichage correct des informations."
+
+msgid "Please contact the office."
+msgstr "Veuillez vous adresser au secrétariat."
+
+msgid "Error:"
+msgstr "Erreur:"
+
+msgid "Errors:"
+msgstr "Erreurs:"
+
+msgid "unknown date:"
+msgstr "date inconnue:"
+
+msgid "yes"
+msgstr "oui"
+
+msgid "no"
+msgstr "non"
+
+msgid "Present:"
+msgstr "Présent:"
+
+msgid "Year-to-yesterday balance:"
+msgstr "Balance totale au jour précédent:"
+
+msgid "Outside the authorized range"
+msgstr "Hors de la plage autorisée"
+
+msgid "please adjust quickly"
+msgstr "veuillez régulariser rapidement"
+
+msgid "Month-to-yesterday balance:"
+msgstr "Balance du mois au jour précédent:"
+
+msgid "Today balance:"
+msgstr "Balance du jour:"
+
+msgid "Month vacations:"
+msgstr "Vacances ce mois:"
+
+msgid "Vacations to plan:"
+msgstr "Vacances à planifier:"
+
+msgid "Problem:"
+msgstr "Problème"
+
+msgid "Problems:"
+msgstr "Problèmes"

@@ -601,6 +601,8 @@ class _ConsultationSuccessState(_ScanningState):
         self._data = data
         self._timeout = timeout
         self._should_report = should_report
+        self._txt = _language.get_translator().gettext
+        self._fmt = _language.get_formatter()
 
     def entry(self):
         super().entry()
@@ -677,8 +679,10 @@ class _ConsultationSuccessState(_ScanningState):
         if data.dominant_error.status == AttendanceErrorStatus.ERROR:
             # Show the error panel
             lines = [
-                "Des erreurs empêchent l'affichage correct des informations. ",
-                "Veuillez vous adresser au secrétariat.",
+                self._txt(
+                    "Errors are preventing information from being displayed correctly."
+                ),
+                self._txt("Please contact the office."),
                 "",
             ]
 
@@ -689,7 +693,11 @@ class _ConsultationSuccessState(_ScanningState):
                 if error.status is AttendanceErrorStatus.ERROR
             }
 
-            lines.append(f"\u26a0 Erreur{"" if len(data.date_errors) == 1 else "s"}:")
+            if len(data.date_errors) > 1:
+                lines.append(f"\u26a0 {self._txt("Errors:")}")
+            else:
+                lines.append(f"\u26a0 {self._txt("Error:")}")
+
             lines.extend(
                 [
                     f"   \u2022 {self._fmt_date(date)}: {err.description}"
@@ -701,7 +709,7 @@ class _ConsultationSuccessState(_ScanningState):
             # The dominant error may not be in the scanned range
             if len(errors) == 0:
                 lines.append(
-                    f"   \u2022 date inconnue: {data.dominant_error.description}"
+                    f"   \u2022 {self._txt("unknown date:")} {data.dominant_error.description}"
                 )
         else:
             # Extract and format
@@ -716,9 +724,10 @@ class _ConsultationSuccessState(_ScanningState):
             rem_vac = self._fmt_days(data.remaining_vacation)
 
             # Normal information panel
+            present = self._txt("yes") if data.clocked_in else self._txt("no")
             lines = [
-                f"\u2022 Présent: {'oui' if data.clocked_in else 'non'}",
-                f"\u2022 Balance totale au jour précédent: {yty_bal}",
+                f"\u2022 {self._txt("Present:")} {present}",
+                f"\u2022 {self._txt("Year-to-yesterday balance:")} {yty_bal}",
             ]
 
             # Add a warning line if balance is out of range
@@ -736,24 +745,26 @@ class _ConsultationSuccessState(_ScanningState):
                         )
 
                     lines.append(
-                        f"   \u26a0 Hors de la plage autorisée{rng}, "
-                        "veuillez régulariser rapidement \u26a0"
+                        f"   \u26a0 {self._txt("Outside the authorized range")}{rng}, "
+                        f"{self._txt("please adjust quickly")} \u26a0"
                     )
 
             lines.extend(
                 [
-                    f"\u2022 Balance du mois au jour précédent: {mty_bal}",
-                    f"\u2022 Balance du jour: {day_bal} ({day_wtm} / {day_stm})",
-                    f"\u2022 Vacances ce mois: {mth_vac}",
-                    f"\u2022 Vacances à planifier: {rem_vac}",
+                    f"\u2022 {self._txt("Month-to-yesterday balance:")} {mty_bal}",
+                    f"\u2022 {self._txt("Today balance:")} {day_bal} ({day_wtm} / {day_stm})",
+                    f"\u2022 {self._txt("Month vacations:")} {mth_vac}",
+                    f"\u2022 {self._txt("Vacations to plan:")} {rem_vac}",
                 ]
             )
 
             # Add errors if any
             if data.date_errors:
-                lines.append(
-                    f"\u26a0 Problème{"" if len(data.date_errors) == 1 else "s"}:"
-                )
+                if len(data.date_errors) > 1:
+                    lines.append(f"\u26a0 {self._txt("Problems:")}")
+                else:
+                    lines.append(f"\u26a0 {self._txt("Problem:")}")
+
                 lines.extend(
                     [
                         f"   \u2022 {self._fmt_date(date)}: {err.description}"
