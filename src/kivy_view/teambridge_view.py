@@ -797,7 +797,6 @@ class TimeoutProgressBar(ProgressBar):
         self._anim = None
         self.value = 0.0
         self.opacity = 0.0
-        
 
     def program_timeout(self, timeout: Optional[float]):
         """

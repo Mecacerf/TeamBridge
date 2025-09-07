@@ -1,2 +1,75 @@
-msgid "coucou"
-msgstr "Yes that's me"
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.7\n"
+
+msgid "Out of service"
+msgstr "Out of service"
+
+msgid "Barcode scanner opening..."
+msgstr "Barcode scanner opening..."
+
+msgid "Please show your badge"
+msgstr "Please show your badge"
+
+msgid "Timestamping mode"
+msgstr "Timestamping mode"
+
+msgid "Consultation mode"
+msgstr "Consultation mode"
+
+msgid "Entry recorded"
+msgstr "Entry recorded"
+
+msgid "Departure recorded"
+msgstr "Departure recorded"
+
+msgid "Most critical error for employee:"
+msgstr "Most critical error for employee:"
+
+msgid "All errors:"
+msgstr "All errors:"
+
+msgid "Attendance list"
+msgstr "Attendance list"
+
+msgid "No one's there."
+msgstr "No one's there."
+
+msgid "hidden..."
+msgstr "hidden..."
+
+msgid "An error occurred"
+msgstr "An error occurred"
+
+msgid "Please contact the office"
+msgstr "Please contact the office"
+
+msgid "The application entered error state."
+msgstr "The application entered error state."
+
+msgid "Error message:"
+msgstr "Error message:"
+
+msgid "Runtime exception"
+msgstr "Runtime exception"
+
+msgid "Error code:"
+msgstr "Error code:"
+
+msgid "Specific message:"
+msgstr "Specific message:"
+
+msgid "Employee runtime exception"
+msgstr "Employee runtime exception"
+
+msgid "Please try again later"
+msgstr "Please try again later"
