@@ -20,7 +20,7 @@ import logging
 import datetime as dt
 import time
 from enum import Enum, auto
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import cast
 from os.path import join
 
@@ -42,9 +42,21 @@ __all__ = ["TeamBridgeViewModel", "ViewModelAction"]
 logger = logging.getLogger(__name__)
 config = LocalConfig()
 _scanner_conf = config.section("scanner")
+_ui_conf = config.section("ui")
+
+SCANNER_CAMERA_IDX = _scanner_conf["camera_id"]
+SCANNER_RATE_HZ = _scanner_conf["scan_rate"]
 
 # Timeout for the attendance list task
-ATTENDANCE_LIST_TIMEOUT = 60.0
+LOAD_ATTENDANCE_LIST_TIMEOUT = _ui_conf["load_attendance_list_timeout"]
+# Timeout for the attendance list view
+SHOW_ATTENDANCE_LIST_TIMEOUT = _ui_conf["show_attendance_list_timeout"]
+# Timeout for error state (triggered once a report has been sent)
+SHOW_ERROR_STATE_TIMEOUT = _ui_conf["show_error_timeout"]
+# Timeout for the presentation state
+SHOW_PRESENTATION_STATE_TIMEOUT = _ui_conf["show_consultation_timeout"]
+
+DEBUG_MODE = config.section("debug")["debug"]
 
 # Font used for attendance list displaying
 ATTENDANCE_LIST_FONT = join("assets", "fonts", "Inter_28pt-Regular.ttf")
@@ -102,19 +114,17 @@ class TeamBridgeViewModel(IStateMachine):
         self._model = model
         self._scanner = scanner
         self._reporter = reporter
-        self._cam_idx = _scanner_conf["camera_id"]
-        self._scan_rate = _scanner_conf["scan_rate"]
-        self._debug_mode = config.section("debug")["debug"]
 
         self._next_action = ViewModelAction.DEFAULT_ACTION
 
         # Live data are observed by the view
-        self._current_state = LiveData[str](str(self._state))
+        self._current_state = LiveData[str](repr(self._state))
         self._main_title_text = LiveData[str]("")
         self._main_subtitle_text = LiveData[str]("")
         self._panel_title_text = LiveData[str]("")
         self._panel_subtitle_text = LiveData[str]("")
         self._panel_content_text = LiveData[str]("")
+        self._leave_time = LiveData[Optional[float]](None)
         self._reporting_service = LiveData[bool](False)
 
     @property
@@ -129,26 +139,13 @@ class TeamBridgeViewModel(IStateMachine):
     def reporter(self) -> Optional[ReportingService]:
         return self._reporter
 
-    @property
-    def camera_idx(self) -> int:
-        return self._cam_idx
-
-    @property
-    def camera_scan_rate(self) -> float:
-        return self._scan_rate
-
-    @property
-    def debug_mode(self) -> bool:
-        return self._debug_mode
-
     def run(self):
         """
         Run the state machine. Must be called at fixed interval.
         """
-        # Run the state machine
         super().run()
 
-        # Update service status
+        # Update reporting service status
         self._reporting_service.value = not self._reporter or self._reporter.available
 
     def on_state_changed(
@@ -163,15 +160,6 @@ class TeamBridgeViewModel(IStateMachine):
         assert isinstance(self._state, _IViewModelState)
 
         self._current_state.value = repr(self._state)
-
-        # The texts for the view are updated on state change, as it is for a Moore
-        # state machine. This can be limiting in some cases where extra states must
-        # be added. This design might be re-evaluated in the future.
-        self._main_title_text.value = self._state.main_title_text
-        self._main_subtitle_text.value = self._state.main_subtitle_text
-        self._panel_title_text.value = self._state.panel_title_text
-        self._panel_subtitle_text.value = self._state.panel_subtitle_text
-        self._panel_content_text.value = self._state.panel_content_text
 
     @property
     def next_action(self) -> ViewModelAction:
@@ -265,6 +253,18 @@ class TeamBridgeViewModel(IStateMachine):
         return self._panel_content_text
 
     @property
+    def leave_time(self) -> LiveData[Optional[float]]:
+        """
+        Get the time at which the current state is programmed to leave
+        automatically. `None` is returned if the current state doesn't
+        time out.
+
+        Returns:
+            LiveData[Optional[float]]: Next state leave time.
+        """
+        return self._leave_time
+
+    @property
     def reporting_service_status(self) -> LiveData[bool]:
         """
         Get the reporting service status. If no reporting service is
@@ -287,26 +287,6 @@ class _IViewModelState(IStateBehavior, ABC):
         # Return the class name and remove leading underscore
         return self.__class__.__name__[1:]
 
-    @property
-    def main_title_text(self) -> str:
-        return ""  # Erase last text
-
-    @property
-    def main_subtitle_text(self) -> str:
-        return ""  # Erase last text
-
-    @property
-    def panel_title_text(self) -> str:
-        return ""  # Erase last text
-
-    @property
-    def panel_subtitle_text(self) -> str:
-        return ""  # Erase last text
-
-    @property
-    def panel_content_text(self) -> str:
-        return ""  # Erase last text
-
 
 class _InitialState(_IViewModelState):
     """
@@ -326,11 +306,14 @@ class _InitialState(_IViewModelState):
         Initial state entry: the barcode scanner is configured and
         opened.
         """
+        self.fsm.main_title_text.value = "Hors service"
+        self.fsm.panel_title_text.value = "Ouverture du scanner..."
+
         self.fsm.scanner.configure(
             regex=_scanner_conf["regex"],
             extract_group=_scanner_conf["regex_group"],
             timeout=_scanner_conf["scanned_id_delay"],
-            debug_mode=self.fsm.debug_mode,
+            debug_mode=DEBUG_MODE,
         )
 
         self.__open_scanner()
@@ -341,9 +324,7 @@ class _InitialState(_IViewModelState):
         some time depending on OS, device, etc.
         """
         try:
-            self.fsm.scanner.open(
-                cam_idx=self.fsm.camera_idx, scan_rate=self.fsm.camera_scan_rate
-            )
+            self.fsm.scanner.open(cam_idx=SCANNER_CAMERA_IDX, scan_rate=SCANNER_RATE_HZ)
 
         except RuntimeError:
             logger.warning(
@@ -366,20 +347,47 @@ class _InitialState(_IViewModelState):
         if time.time() > self._next_retry:
             self.__open_scanner()
 
-    @property
-    def main_title_text(self):
-        return "Hors service"
-
-    @property
-    def panel_title_text(self):
-        return "Ouverture du scanner..."
+    def exit(self):
+        self.fsm.main_title_text.value = ""
+        self.fsm.panel_title_text.value = ""
 
 
-class _WaitClockActionState(_IViewModelState):
+class _ScanningState(_IViewModelState, ABC):
     """
     Role:
-        Poll the barcode scanner until an employee's ID is found and start
-        a clock action.
+        Poll the barcode scanner until an employee's ID is found. This
+        state must be specified by another state.
+    """
+
+    def entry(self):
+        # Scan until a barcode is found
+        self.fsm.scanner.clear()  # Prevent staging barcode to show up
+        self.fsm.scanner.resume()
+
+    def do(self) -> Optional[IStateBehavior]:
+        if not self.fsm.scanner.is_scanning():
+            # Return to initial state, an error may have occurred
+            return _InitialState()
+
+        if self.fsm.scanner.available():
+            return self._next_state(self.fsm.scanner.read_next())
+
+    @abstractmethod
+    def _next_state(self, scanned_id: str) -> _IViewModelState:
+        """Called as soon as an ID is scanned."""
+        pass
+
+    def exit(self):
+        self.fsm.main_title_text.value = ""
+        self.fsm.main_subtitle_text.value = ""
+        self.fsm.scanner.pause()
+
+
+class _WaitClockActionState(_ScanningState):
+    """
+    Role:
+        Poll the barcode scanner until an employee's ID is found and
+        start a clock action.
     Entry:
         - Once the barcode scanner is initialized
         - After a consultation success
@@ -389,45 +397,26 @@ class _WaitClockActionState(_IViewModelState):
     """
 
     def entry(self):
-        # Set the next action accordingly
+        super().entry()
+
+        self.fsm.main_title_text.value = "Veuillez présenter votre badge"
+        self.fsm.main_subtitle_text.value = "Mode de timbrage"
         self.fsm.next_action = ViewModelAction.CLOCK_ACTION
-        # Make sure the barcode scanner is scanning on entry.
-        self.fsm.scanner.clear()  # Clear for safety
-        self.fsm.scanner.resume()
 
     def do(self) -> Optional[IStateBehavior]:
-        if not self.fsm.scanner.is_scanning():
-            # Return to initial state, an error may have occurred
-            return _InitialState()
 
-        # Manage state change
         if self.fsm.next_action == ViewModelAction.CONSULTATION:
-            # Move to waiting for consultation action
             return _WaitConsultationActionState()
-        elif self.fsm.next_action == ViewModelAction.ATTENDANCE_LIST:
+        if self.fsm.next_action == ViewModelAction.ATTENDANCE_LIST:
             return _LoadAttendanceList()
 
-        # Check if an employee ID is available
-        if self.fsm.scanner.available():
-            # Read scanned ID
-            scanned_id = self.fsm.scanner.read_next()
-            # Move to clock action state
-            return _ClockActionState(scanned_id)
+        return super().do()
 
-    def exit(self):
-        # Pause the scanner to prevent scanning multiple IDs while processing one
-        self.fsm.scanner.pause()
-
-    @property
-    def main_title_text(self):
-        return "Veuillez présenter votre badge"
-
-    @property
-    def main_subtitle_text(self):
-        return "Mode de timbrage"
+    def _next_state(self, scanned_id: str) -> _IViewModelState:
+        return _ClockActionState(scanned_id)
 
 
-class _WaitConsultationActionState(_IViewModelState):
+class _WaitConsultationActionState(_ScanningState):
     """
     Role:
         Poll the scanner until an employee's ID is found and start a
@@ -439,48 +428,30 @@ class _WaitConsultationActionState(_IViewModelState):
     """
 
     def entry(self):
-        # Set the next action accordingly
+        super().entry()
+
+        self.fsm.main_title_text.value = "Veuillez présenter votre badge"
+        self.fsm.main_subtitle_text.value = "Mode de consultation"
         self.fsm.next_action = ViewModelAction.CONSULTATION
-        # Make sure the barcode scanner is scanning on entry.
-        self.fsm.scanner.clear()  # Clear for safety
-        self.fsm.scanner.resume()
 
     def do(self) -> Optional[IStateBehavior]:
-        if not self.fsm.scanner.is_scanning():
-            # Return to initial state, an error may have occurred
-            return _InitialState()
 
-        # Manage state change
         if self.fsm.next_action == ViewModelAction.CLOCK_ACTION:
-            # Move to waiting for consultation action
             return _WaitClockActionState()
-        elif self.fsm.next_action == ViewModelAction.ATTENDANCE_LIST:
+        if self.fsm.next_action == ViewModelAction.ATTENDANCE_LIST:
             return _LoadAttendanceList()
 
-        # Check if an employee ID is available
-        if self.fsm.scanner.available():
-            # Read scanned ID
-            scanned_id = self.fsm.scanner.read_next()
-            # Move to clock action state
-            return _ConsultationActionState(scanned_id)
+        return super().do()
 
-    def exit(self):
-        # Pause the scanner to prevent scanning multiple IDs while processing one
-        self.fsm.scanner.pause()
-
-    @property
-    def main_title_text(self):
-        return "Veuillez présenter votre badge"
-
-    @property
-    def main_subtitle_text(self):
-        return "Mode de consultation"
+    def _next_state(self, scanned_id: str) -> _IViewModelState:
+        return _ConsultationActionState(scanned_id)
 
 
 class _ClockActionState(_IViewModelState):
     """
     Role:
-        Clock in an employee who's clocked out and out an employee who's clocked in.
+        Clock in an employee who's clocked out or clock out an employee
+        who's clocked in.
     Entry:
         - Once an id has been scanned
     Exit:
@@ -489,41 +460,34 @@ class _ClockActionState(_IViewModelState):
 
     def __init__(self, id: str):
         super().__init__()
-        # Save employee ID
         self._id = id
 
     def entry(self):
-        # Reset next action
         self.fsm.next_action = ViewModelAction.DEFAULT_ACTION
-        # Start a clock action task and save the task handle
+
         self._handle = self.fsm.model.start_clock_action_task(
             self._id, dt.datetime.now()
         )
 
     def do(self) -> Optional[IStateBehavior]:
-        # Get the task result if available
-        msg = self.fsm.model.get_result(self._handle)
-        if msg:
-            # The clock action task has completed
+        # Poll until the result is available
+        if msg := self.fsm.model.get_result(self._handle):
             if isinstance(msg, EmployeeEvent):
                 return _ClockSuccessState(msg)
             elif isinstance(msg, ModelError):
-                return _ErrorState(
-                    "Clock action task failed", msg, employee_id=self._id
-                )
+                return _ErrorState("Clock action task failed", msg)
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
     def exit(self):
-        # Drop the task handle, it has no effect if the task is finished
         self.fsm.model.drop(self._handle)
 
 
 class _ClockSuccessState(_IViewModelState):
     """
     Role:
-        After the clock in/out task succeeded, display the welcome message and choose the
-        next action. Currently it performs an automatic consultation.
+        After the clock in/out task succeeded, display the welcome
+        message and perform an automatic consultation.
     Entry:
         - After the clock in/out task succeeded
     Exit:
@@ -532,42 +496,35 @@ class _ClockSuccessState(_IViewModelState):
 
     def __init__(self, event: EmployeeEvent):
         super().__init__()
-        # Save employee's event
         self._evt = event
 
     def entry(self):
-        # Start a consultation task
         self._handle = self.fsm.model.start_consultation_task(
             self._evt.id, dt.datetime.now()
         )
 
+        self.fsm.main_title_text.value = self.__main_title_text()
+        self.fsm.main_subtitle_text.value = self.__main_subtitle_text()
+
     def do(self) -> Optional[IStateBehavior]:
-        # If a new ID is available, return to scanning state
-        if self.fsm.scanner.available():
-            return _WaitClockActionState()
-        # If the consultation is done, move in presentation state
-        msg = self.fsm.model.get_result(self._handle)
-        if msg:
+        # Move in presentation state as soon as the task is done
+        if msg := self.fsm.model.get_result(self._handle):
             if isinstance(msg, EmployeeData):
                 # Always send an error report when coming from clocking mode
-                return _ConsultationSuccessState(msg, timeout=20.0, should_report=True)
-            elif isinstance(msg, ModelError):
-                return _ErrorState(
-                    "Consultation task failed",
-                    msg,
-                    employee_id=self._evt.id,
-                    employee_name=self._evt.name,
-                    employee_firstname=self._evt.firstname,
+                return _ConsultationSuccessState(
+                    msg, timeout=SHOW_PRESENTATION_STATE_TIMEOUT, should_report=True
                 )
+            elif isinstance(msg, ModelError):
+                return _ErrorState("Consultation task failed", msg)
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
     def exit(self):
-        # Drop the task handle, it has no effect if the task is finished
         self.fsm.model.drop(self._handle)
+        self.fsm.main_title_text.value = ""
+        self.fsm.main_subtitle_text.value = ""
 
-    @property
-    def main_title_text(self):
+    def __main_title_text(self):
         # Format text according to event
         text = ""
         # Greetings
@@ -580,8 +537,7 @@ class _ClockSuccessState(_IViewModelState):
         # Return formatted text
         return text
 
-    @property
-    def main_subtitle_text(self):
+    def __main_subtitle_text(self):
         # Format text according to event
         text = ""
         # Greetings
@@ -610,40 +566,36 @@ class _ConsultationActionState(_IViewModelState):
 
     def __init__(self, id: str):
         super().__init__()
-        # Save employee's ID
         self._id = id
 
     def entry(self):
-        # Reset next action
         self.fsm.next_action = ViewModelAction.DEFAULT_ACTION
-        # Start a consultation task
         self._handle = self.fsm.model.start_consultation_task(
             self._id, dt.datetime.now()
         )
 
     def do(self) -> Optional[IStateBehavior]:
-        # Get the task result if available
-        msg = self.fsm.model.get_result(self._handle)
-        if msg:
-            # The consultation task has completed
+        # Move to presentation state as soon as the task is done
+        if msg := self.fsm.model.get_result(self._handle):
             if isinstance(msg, EmployeeData):
-                return _ConsultationSuccessState(msg, timeout=60.0)
-            elif isinstance(msg, ModelError):
-                return _ErrorState(
-                    "Consultation task failed", msg, employee_id=self._id
+                return _ConsultationSuccessState(
+                    msg, timeout=SHOW_PRESENTATION_STATE_TIMEOUT
                 )
+            elif isinstance(msg, ModelError):
+                return _ErrorState("Consultation task failed", msg)
             else:
                 raise RuntimeError(f"Unexpected message received {msg}")
 
     def exit(self):
-        # Drop the task handle, it has no effect if the task is finished
         self.fsm.model.drop(self._handle)
 
 
-class _ConsultationSuccessState(_IViewModelState):
+class _ConsultationSuccessState(_ScanningState):
     """
     Role:
         Show the result of the consultation.
+        If an employee scans its barcode while in consultation, a clock
+        action is automatically done.
     Entry:
         - When the consultation task is done
     Exit:
@@ -655,16 +607,21 @@ class _ConsultationSuccessState(_IViewModelState):
         self, data: EmployeeData, timeout: float = 15.0, should_report: bool = False
     ):
         super().__init__()
-        # Save data and quit option
         self._data = data
         self._timeout = timeout
         self._should_report = should_report
 
     def entry(self):
-        # Set leave time
-        self._leave = time.time() + self._timeout
+        super().entry()
 
-        # Send a warning / error report if configured
+        self.fsm.panel_title_text.value = self.__panel_title_text()
+        self.fsm.panel_content_text.value = self.__panel_content_text()
+
+        # Program state leaving time
+        self._leave = time.time() + self._timeout
+        self.fsm.leave_time.value = self._leave
+
+        # Send a warning / error report if configured for
         if self._should_report and self.fsm.reporter:
             self.__send_report(self.fsm.reporter)
 
@@ -698,10 +655,6 @@ class _ConsultationSuccessState(_IViewModelState):
         )
 
     def do(self) -> Optional[IStateBehavior]:
-        # Leave the state if an employee ID is available
-        if self.fsm.scanner.available():
-            return _WaitClockActionState()
-
         # Leave the state on reset signal
         if self.fsm.next_action == ViewModelAction.RESET_TO_CLOCK_ACTION:
             return _WaitClockActionState()
@@ -710,16 +663,24 @@ class _ConsultationSuccessState(_IViewModelState):
 
         # Leave the state when the timeout is elapsed
         if time.time() > self._leave:
-            # Set default state
             self.fsm.next_action = ViewModelAction.DEFAULT_ACTION
             return _WaitClockActionState()
 
-    @property
-    def panel_title_text(self):
+        return super().do()
+
+    def _next_state(self, scanned_id: str) -> _IViewModelState:
+        return _ClockActionState(scanned_id)
+
+    def exit(self):
+        super().exit()
+        self.fsm.panel_title_text.value = ""
+        self.fsm.panel_content_text.value = ""
+        self.fsm.leave_time.value = None
+
+    def __panel_title_text(self):
         return f"{self._data.firstname} {self._data.name}"
 
-    @property
-    def panel_content_text(self):
+    def __panel_content_text(self):
         data = self._data
 
         if data.dominant_error.status == AttendanceErrorStatus.ERROR:
@@ -894,13 +855,10 @@ class _LoadAttendanceList(_IViewModelState):
     """
 
     def entry(self):
-        # Schedule the attendance list task
         self._handle = self.fsm.model.start_attendance_list_task(dt.datetime.now())
-        # Prepare a task watchdog
-        self._timeout = time.time() + ATTENDANCE_LIST_TIMEOUT
+        self._timeout = time.time() + LOAD_ATTENDANCE_LIST_TIMEOUT
 
     def do(self) -> Optional[IStateBehavior]:
-        # Check task result
         if self.fsm.model.available(self._handle):
             result = self.fsm.model.get_result(self._handle)
 
@@ -908,11 +866,10 @@ class _LoadAttendanceList(_IViewModelState):
                 return _ShowAttendanceList(result)
             return _ErrorState("No attendance list result received.")
 
-        # Check watchdog
         if time.time() > self._timeout:
             return _ErrorState(
                 f"Timed out while loading attendance list "
-                f"({ATTENDANCE_LIST_TIMEOUT} sec)."
+                f"(more than {LOAD_ATTENDANCE_LIST_TIMEOUT} sec elapsed)."
             )
 
     def exit(self):
@@ -938,9 +895,12 @@ class _ShowAttendanceList(_IViewModelState):
         self._font = ImageFont.truetype(ATTENDANCE_LIST_FONT, size=32)
 
     def entry(self):
-        # Prepare timeout
-        self._timeout = time.time() + ATTENDANCE_LIST_TIMEOUT
-        # Show results
+        self.fsm.panel_title_text.value = "Liste des présences"
+        self.fsm.panel_content_text.value = self.__panel_content_text()
+
+        self._timeout = time.time() + SHOW_ATTENDANCE_LIST_TIMEOUT
+        self.fsm.leave_time.value = self._timeout
+
         logger.info(f"Fetched attendance list in {self._result.fetch_time:.2f} sec.")
         logger.info(
             f"Present: {", ".join([f"{info.firstname} {info.name} ({info.id})" 
@@ -956,20 +916,20 @@ class _ShowAttendanceList(_IViewModelState):
         )
 
     def do(self) -> Optional[IStateBehavior]:
-        # Leave the state on reset signal or timeout
         if self.fsm.next_action == ViewModelAction.RESET_TO_CLOCK_ACTION:
             return _WaitClockActionState()
         elif self.fsm.next_action == ViewModelAction.RESET_TO_CONSULTATION:
             return _WaitConsultationActionState()
+
         elif time.time() > self._timeout:
             return _WaitClockActionState()
 
-    @property
-    def panel_title_text(self):
-        return "Liste des présences"
+    def exit(self):
+        self.fsm.panel_title_text.value = ""
+        self.fsm.panel_content_text.value = ""
+        self.fsm.leave_time.value = None
 
-    @property
-    def panel_content_text(self):
+    def __panel_content_text(self):
         """
         Format the attendance list to be shown in the panel.
         """
@@ -1054,81 +1014,95 @@ class _ErrorState(_IViewModelState):
         - Upon acknowledgment by sending the reset to clock action signal
     """
 
-    def __init__(
-        self,
-        msg: str,
-        error: Optional[ModelError] = None,
-        employee_id: Optional[str] = None,
-        employee_name: Optional[str] = None,
-        employee_firstname: Optional[str] = None,
-    ):
+    def __init__(self, msg: str, error: Optional[ModelError] = None):
         super().__init__()
-        self._msg = msg
+        self._message = msg
         self._error = error
-        self._employee_id = employee_id
-        self._employee_name = employee_name
-        self._employee_firstname = employee_firstname
+        self._report = None
+        self._timeout = None
 
     def entry(self):
+        self.fsm.main_title_text.value = "Une erreur est survenue"
+        self.fsm.main_subtitle_text.value = "Veuillez vous adresser au secrétariat"
+
         # Reset next action to prevent wrong acknowledgment
         self.fsm.next_action = ViewModelAction.DEFAULT_ACTION
 
-        logger.error(f"State machine entered error state. Reason '{self._msg}'.")
+        logger.error(f"State machine entered error state. Reason '{self._message}'.")
         if self._error:
             logger.error(
                 f"A task failed with error ({self._error.error_code}) "
                 f"'{self._error.message}'."
             )
-        if self._employee_id:
-            logger.error(
-                f"Error occurred with employee ID='{self._employee_id}', "
-                f"name='{self._employee_name if self._employee_name else "unknown"}', "
-                f"firstname='{self._employee_firstname if self._employee_firstname else "unknown"}'."
-            )
+            if self._error.employee_id:
+                emp_id = self._error.employee_id
+                emp_name = (
+                    self._error.employee_name
+                    if self._error.employee_name
+                    else "unknown"
+                )
+                emp_firstname = (
+                    self._error.employee_firstname
+                    if self._error.employee_firstname
+                    else "unknown"
+                )
+                logger.error(
+                    f"Error occurred with employee ID='{emp_id}', "
+                    f"name='{emp_name}', "
+                    f"firstname='{emp_firstname}'."
+                )
 
-        # Send an error report if a reporter has been specified
-        if self.fsm.reporter:
-            body = (
-                "The application entered error state. The user must acknowledge "
-                "to continue.\n\nError message: "
-                f"{self._msg}"
-            )
+        # Try to send an application report
+        self.__send_report()
 
-            if self._error:
-                body += f"\nError code {self._error.error_code}"
-                body += f"\nSpecific message: {self._error.message}"
+    def __send_report(self):
+        """Build and send the appropriate error report."""
+        if self.fsm.reporter is None:
+            return
 
-            if self._employee_id:
-                self.__employee_report(self.fsm.reporter, body, self._employee_id)
-            else:
-                self.__simple_report(self.fsm.reporter, body)
+        body = f"The application entered error state.\n\nError message: {self._message}"
 
-    def __employee_report(self, reporter: ReportingService, body: str, id: str):
-        reporter.send_report(
-            EmployeeReport(
+        if not self._error:
+            # Most simple error report
+            self._report = Report(ReportSeverity.ERROR, "Runtime exception", body)
+
+        elif not self._error.employee_id:
+            # Has error code and message
+            body += f"\nError code: {self._error.error_code}"
+            body += f"\nSpecific message: {self._error.message}"
+            self._report = Report(ReportSeverity.ERROR, "Runtime exception", body)
+
+        else:
+            # Complete employee report
+            body += f"\nError code: {self._error.error_code}"
+            body += f"\nSpecific message: {self._error.message}"
+            self._report = EmployeeReport(
                 ReportSeverity.ERROR,
                 "Employee runtime exception",
                 body,
-                employee_id=id,
-                name=self._employee_name,
-                firstname=self._employee_firstname,
-            ).attach_logs()
-        )
+                employee_id=self._error.employee_id,
+                name=self._error.employee_name,
+                firstname=self._error.employee_firstname,
+            )
 
-    def __simple_report(self, reporter: ReportingService, body: str):
-        reporter.send_report(
-            Report(ReportSeverity.ERROR, "Runtime exception", body).attach_logs()
-        )
+        self.fsm.reporter.send_report(self._report.attach_logs())
 
     def do(self) -> Optional[IStateBehavior]:
         # Check if acknowledged
         if self.fsm.next_action == ViewModelAction.RESET_TO_CLOCK_ACTION:
             return _WaitClockActionState()
 
-    @property
-    def main_title_text(self):
-        return "Une erreur est survenue"
+        if self._report and self._report.is_sent() and self._timeout is None:
+            # Program the state timeout once a report has been sent
+            # successfully
+            self._timeout = time.time() + SHOW_ERROR_STATE_TIMEOUT
+            self.fsm.main_subtitle_text.value = "Veuillez réessayer ultérieurement"
+            self.fsm.leave_time.value = self._timeout
 
-    @property
-    def main_subtitle_text(self):
-        return "Veuillez vous adresser au secrétariat"
+        if self._timeout and time.time() > self._timeout:
+            return _WaitClockActionState()
+
+    def exit(self):
+        self.fsm.main_title_text.value = ""
+        self.fsm.main_subtitle_text.value = ""
+        self.fsm.leave_time.value = None

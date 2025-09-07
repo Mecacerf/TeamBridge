@@ -268,8 +268,14 @@ class TeamBridgeScheduler:
 
             return is_first_evt and is_morning and is_in_yesterday and is_dt_ok
 
+        # Prepare employee's name in case an error occurs early
+        name = "unknown"
+        firstname = "unknown"
+
         try:
             with self._tracker_pool.acquire(employee_id, datetime) as tracker:
+                name = tracker.name
+                firstname = tracker.firstname
                 # Register a midnight rollover if the condition is respected
                 if check_midnight_rollover(tracker):
                     # To indicate a rollover, a special clock-out event is
@@ -303,17 +309,24 @@ class TeamBridgeScheduler:
                 logger.info(f"Registered a {clock_evt!s} for {tracker!s}.")
 
                 return EmployeeEvent(
-                    name=tracker.name,
-                    firstname=tracker.firstname,
+                    name=name,
+                    firstname=firstname,
                     id=tracker.employee_id,
                     clock_evt=clock_evt,
                 )
 
         except TimeTrackerException as e:
-            logger.error(
-                f"An exception occurred with employee '{employee_id}'", exc_info=True
+            logger.exception(
+                f"An exception occurred with employee '{employee_id}' "
+                f"({firstname} {name})."
             )
-            return ModelError(error_code=0, message=str(e))
+            return ModelError(
+                error_code=0,
+                message=str(e),
+                employee_id=employee_id,
+                employee_name=name,
+                employee_firstname=firstname,
+            )
 
     def __consultation_task(
         self, employee_id: str, datetime: dt.datetime
@@ -321,8 +334,16 @@ class TeamBridgeScheduler:
         """
         Consultation of employee's information.
         """
+        # Prepare employee's name in case an error occurs early
+        name = "unknown"
+        firstname = "unknown"
+
         try:
             with self._tracker_pool.acquire(employee_id, datetime) as tracker:
+                name = tracker.name
+                firstname = tracker.firstname
+
+                # Validate tracker attendance data
                 validator = SimpleAttendanceValidator()
                 status = validator.validate(tracker, datetime)
 
@@ -342,8 +363,8 @@ class TeamBridgeScheduler:
                     tracker.analyze(datetime)
 
                 return EmployeeData(
-                    name=tracker.name,
-                    firstname=tracker.firstname,
+                    name=name,
+                    firstname=firstname,
                     id=employee_id,
                     date_errors=validator.date_errors,
                     dominant_error=validator.dominant_error,
@@ -368,10 +389,17 @@ class TeamBridgeScheduler:
                 )
 
         except TimeTrackerException as e:
-            logger.error(
-                f"An exception occurred with employee '{employee_id}'", exc_info=True
+            logger.exception(
+                f"An exception occurred with employee '{employee_id}' "
+                f"({firstname} {name})."
             )
-            return ModelError(error_code=0, message=str(e))
+            return ModelError(
+                error_code=0,
+                message=str(e),
+                employee_id=employee_id,
+                employee_name=name,
+                employee_firstname=firstname,
+            )
 
     def __attendance_list_task(self, datetime: dt.datetime) -> IModelMessage:
         """

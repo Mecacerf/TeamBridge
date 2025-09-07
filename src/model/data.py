@@ -130,10 +130,18 @@ class ModelError(IModelMessage):
     Attributes:
         error_code (int): Error code.
         message (str): Error description.
+        employee_id (Optional[str]): Employee id when related to an employee.
+        employee_name (Optional[str]): Employee name when related to an employee.
+        employee_firstname (Optional[str]): Employee firstname when related to
+            an employee.
     """
 
     error_code: int
     message: str
+
+    employee_id: Optional[str] = field(default=None)
+    employee_name: Optional[str] = field(default=None)
+    employee_firstname: Optional[str] = field(default=None)
 
 
 @dataclass(frozen=True)
@@ -144,7 +152,7 @@ class AttendanceList(IModelMessage):
     Attributes:
         present (list[EmployeeInfo]): List of present employees.
         absent (list[EmployeeInfo]): List of absent employees.
-        unkown (list[EmployeeInfo]): List of not fetchable employees.
+        unknown (list[EmployeeInfo]): List of not fetchable employees.
         fetch_time (float): Duration of the fetching process [s].
     """
 

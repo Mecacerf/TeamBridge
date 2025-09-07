@@ -57,6 +57,7 @@ def test_build_simple_report():
     assert dt.datetime.now() - report.created_at < dt.timedelta(minutes=1)
     assert report.content == "Report content"
     assert set(["example.png", "subprocess.log"]) == set(report.attachments)
+    assert not report.is_sent()
 
 
 @pytest.fixture

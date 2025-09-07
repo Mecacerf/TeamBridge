@@ -30,7 +30,7 @@ config = LocalConfig()
 # Cache folder to put evaluated spreadsheet files
 LIBREOFFICE_CACHE_FOLDER = ".tmp_calc"
 # LibreOffice subprocess timeout [s] to prevent indefinite blocking
-LIBREOFFICE_TIMEOUT = 15.0
+LIBREOFFICE_TIMEOUT = 10.0
 
 # Libre office program path
 _libreoffice_path = None
@@ -123,31 +123,28 @@ else:
     logger.info(f"Using LibreOffice installation under '{_libreoffice_path}'.")
 
 
-def evaluate_calc(file_path: pathlib.Path):
+def evaluate_calc(file_path: pathlib.Path, allow_retry: bool = True) -> None:
     """
-    Evaluate a spreadsheet file using LibreOffice calc in headless mode.
+    Evaluate a spreadsheet file using LibreOffice Calc in headless mode.
+    The file is re-saved (evaluated) to ensure formulas are calculated.
 
     Args:
-        file_path (str): Path to the spreadsheet file
+        file_path: Path to the spreadsheet file.
+        allow_retry: If True, retry once on timeout.
 
     Raises:
-        RuntimeError: No LibreOffice installation found.
-        FileExistsError: A previous evaluation didn't finish properly and
-            a file is still existing in the temporary folder.
-        RuntimeError: The LibreOffice execution returned an error.
-        TimeoutError: The LibreOffice execution timed out.
-        FileNotFoundError: LibreOffice didn't produce the expected output.
+        RuntimeError: LibreOffice not found or failed execution.
+        FileNotFoundError: Input file does not exist, or output not produced.
+        TimeoutError: Conversion timed out after one retry.
     """
     if _libreoffice_path is None:
         raise RuntimeError("No LibreOffice installation found in the filesystem.")
 
-    tmp_file = pathlib.Path(LIBREOFFICE_CACHE_FOLDER) / file_path.name
-    if tmp_file.exists():
-        raise FileExistsError(
-            f"The temporary file '{tmp_file}' already exists. A "
-            "previous evaluation may have failed."
-        )
+    if not file_path.exists():
+        raise FileNotFoundError(f"'{file_path}' does not exist.")
 
+    tmp_file = pathlib.Path(LIBREOFFICE_CACHE_FOLDER) / file_path.name
+    tmp_file.unlink(missing_ok=True)
     os.makedirs(LIBREOFFICE_CACHE_FOLDER, exist_ok=True)
 
     # Create and execute the LibreOffice command to evaluate and save a
@@ -157,36 +154,55 @@ def evaluate_calc(file_path: pathlib.Path):
     # occurs. The replacement (file move) is done only on success.
     # https://help.libreoffice.org/latest/km/text/shared/guide/start_parameters.html
     command = [
-        _libreoffice_path,  # LibreOffice executable path
+        _libreoffice_path,
         "--headless",
         "--norestore",
         "--nolockcheck",
         "--convert-to",
-        "xlsx",  # Convert to XLSX format
+        "xlsx",
         "--outdir",
-        str(LIBREOFFICE_CACHE_FOLDER),  # Output to the temp folder
-        str(file_path.resolve()),  # Path to the input spreadsheet
+        str(LIBREOFFICE_CACHE_FOLDER),
+        str(file_path.resolve()),
     ]
 
-    # Run the command as a subprocess
     try:
         result = subprocess.run(
             command,
-            check=True,  # Raise CalledProcessError if returncode != 0
-            capture_output=True,  # Capture stdout and stderr
-            timeout=LIBREOFFICE_TIMEOUT,  # Prevent indefinite hangs
+            check=True,
+            capture_output=True,
+            timeout=LIBREOFFICE_TIMEOUT,
         )
+
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
-            f"LibreOffice subprocess failed with return code {e.returncode}.\n"
+            f"LibreOffice failed with return code {e.returncode}.\n"
             f"command: {command}\n"
             f"stdout: {e.stdout.decode(errors='ignore')}\n"
             f"stderr: {e.stderr.decode(errors='ignore')}"
         ) from e
-    except subprocess.TimeoutExpired as e:
-        raise TimeoutError("LibreOffice evaluation timed out.") from e
 
-    # Check that the evaluated file was actually produced
+    except subprocess.TimeoutExpired as e:
+        stdout = e.stdout.decode(errors="ignore") if e.stdout else "unavailable"
+        stderr = e.stderr.decode(errors="ignore") if e.stderr else "unavailable"
+
+        if allow_retry:
+            logger.warning(
+                f"LibreOffice evaluation timed out, retrying once...\n"
+                f"command: {command}\n"
+                f"stdout: {stdout}\n"
+                f"stderr: {stderr}"
+            )
+            return evaluate_calc(file_path, allow_retry=False)
+
+        # No retry left, raise with logs
+        raise TimeoutError(
+            f"LibreOffice evaluation timed out.\n"
+            f"command: {command}\n"
+            f"stdout: {stdout}\n"
+            f"stderr: {stderr}"
+        ) from e
+
+    # Verify that LibreOffice actually produced the evaluated file
     if not tmp_file.exists():
         raise FileNotFoundError(
             f"LibreOffice did not produce the expected output file.\n"
@@ -195,6 +211,5 @@ def evaluate_calc(file_path: pathlib.Path):
             f"stderr: {result.stderr.decode(errors='ignore')}"
         )
 
-    # Evaluation succeeded without any error: replace original file with
-    # evaluated one
+    # Replace original file with evaluated one
     os.replace(tmp_file, file_path)

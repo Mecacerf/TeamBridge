@@ -286,8 +286,9 @@ class MainScreen(FloatLayout):
     consultation_button = ObjectProperty(None)
     clock_button = ObjectProperty(None)
     attendance_button = ObjectProperty(None)
-    # Linear progress bar
+    # Progress bars
     progress_bar = ObjectProperty(None)
+    timeout_bar = ObjectProperty(None)
     # Sliding box layout for information panel
     sliding_box_layout = ObjectProperty(None)
     # Collapse panel information icon
@@ -318,6 +319,7 @@ class MainScreen(FloatLayout):
         self._viewmodel.panel_title_text.observe(self.upd_panel_title)
         self._viewmodel.panel_subtitle_text.observe(self._upd_panel_subtitle)
         self._viewmodel.panel_content_text.observe(self._upd_panel_content)
+        self._viewmodel.leave_time.observe(self._upd_leave_time)
         # Observe the services status
         self._viewmodel.reporting_service_status.observe(
             self._upd_reporting_service_sts, init_call=True
@@ -351,6 +353,9 @@ class MainScreen(FloatLayout):
 
     def _upd_panel_content(self, txt: str):
         self.panel_content_text = txt
+
+    def _upd_leave_time(self, value: Optional[float]):
+        self.timeout_bar.program_timeout(value)
 
     def _upd_reporting_service_sts(self, status: bool):
         self.services_panel_text = "" if status else "\u26a0 Serveur SMTP \u26a0"
@@ -534,7 +539,7 @@ class IconButton(ButtonBehavior, RelativeLayout):
 
         # Store application instance
         app = App.get_running_app()
-        assert app is not None
+        assert app is not None and isinstance(app, TeamBridgeApp)
         self._app: TeamBridgeApp = app
 
         # Define private parameters
@@ -719,7 +724,7 @@ class LinearProgressBar(ProgressBar):
     is loading or not).
     """
 
-    # Progress bar opactity
+    # Progress bar opacity
     bar_alpha = NumericProperty(1.0)
 
     def __init__(self, **kwargs: dict[str, Any]):
@@ -776,6 +781,40 @@ class LinearProgressBar(ProgressBar):
         # Fade out the progress bar
         fadeout = Animation(bar_alpha=0.0, duration=0.4, transition="linear")
         fadeout.start(self)
+
+
+class TimeoutProgressBar(ProgressBar):
+    """
+    Timeout progress bar (shows the time before the state times out).
+    """
+
+    fill_color = ObjectProperty((1, 1, 1, 1))
+
+    def __init__(self, **kwargs: dict[str, Any]):
+        """
+        Initialize the linear progress bar.
+        """
+        super().__init__(**kwargs)
+        self._anim = None
+        self.value = 0.0
+        self.opacity = 0.0
+        
+
+    def program_timeout(self, timeout: Optional[float]):
+        """
+        Args:
+            Optional[float]: time at which the bar will be full, if any.
+        """
+        if timeout:
+            duration = timeout - time.time()
+            self.value = 0.0
+            self.opacity = 1.0
+            self._anim = Animation(value=1.0, duration=duration, transition="linear")
+            self._anim += Animation(opacity=0.0, duration=0.2, transition="linear")
+            self._anim.start(self)
+        elif self._anim:
+            self._anim.stop(self)
+            Animation(opacity=0.0, duration=0.2, transition="linear").start(self)
 
 
 class SlidingBoxLayout(BoxLayout):
