@@ -137,26 +137,6 @@ def load_reporter(config: LocalConfig) -> Any:
     return reporter
 
 
-def _set_locale(value: str):
-    """
-    Try to set the desired locale configuration.
-    """
-    # Try to set the local language setting
-    try:
-        locale.setlocale(locale.LC_TIME, value)
-        # Confirm the locale has been set
-        actual = locale.getlocale(locale.LC_TIME)
-        if actual[0] != value:
-            raise UnicodeError(f"Cannot set locale to '{value}'.")
-
-    except Exception as ex:
-        logger.warning(f"Unable to set the desired locale '{value}': {ex}")
-
-    actual = locale.getlocale(locale.LC_TIME)
-    encoding = locale.getpreferredencoding(False)
-    logger.info(f"Using locale {actual} with preferred encoding '{encoding}'.")
-
-
 def _load_translation():
     """
     Load the translation service.
@@ -275,11 +255,9 @@ def app_bootstrap() -> Any:
 
         logger.info(f"Application device identifier is '{general_conf["device"]}'.")
 
-        reporter = load_reporter(config)
-
-        if general_conf["locale"]:
-            _set_locale(general_conf["locale"])
         _load_translation()
+
+        reporter = load_reporter(config)
 
         backend = _load_backend(config, reporter)
         sleep_manager = _load_sleep_manager(config)

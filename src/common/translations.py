@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 from gettext import GNUTranslations
 import polib
+import locale
 
 # Internal libraries
 from local_config import LocalConfig
@@ -42,16 +43,39 @@ class LanguageService(SingletonRegister):
         language files.
         """
         self._translators: dict[str, GNUTranslations] = {}
+
+        general = LocalConfig().section("general")
+
+        self._set_locale(general["locale"])
         self._compile_po_files()
         self._load_languages()
 
-        def_lang = LocalConfig().section("general")["language"]
+        def_lang = general["language"]
         try:
             self._def_lang = self._translators[def_lang]
         except KeyError:
             raise FileNotFoundError(
                 f"No translation file found for default language '{def_lang}'."
             )
+
+    def _set_locale(self, value: str):
+        """
+        Try to set application locale configuration. It affects number
+        formats, decimal separator, currency, and date/time formatting
+        from the C library calls.
+        """
+        try:
+            locale.setlocale(locale.LC_ALL, value)
+
+            # Show actual configuration
+            actual = locale.getlocale(locale.LC_ALL)[0]
+            encoding = locale.getpreferredencoding(False)
+            logger.info(
+                f"Application locale is '{actual}' / "
+                f"python default encoding is '{encoding}'."
+            )
+        except (ValueError, locale.Error):
+            logger.exception(f"The locale '{value}' is unavailable on this system.")
 
     def _compile_po_files(self):
         """
@@ -106,4 +130,4 @@ class LanguageService(SingletonRegister):
         Returns:
             str: Translation for the message ID.
         """
-        return self.get_translation(lang).gettext(msgid)
+        return self.get_translator(lang).gettext(msgid)
