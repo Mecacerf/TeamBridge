@@ -713,13 +713,13 @@ class _ConsultationSuccessState(_ScanningState):
                 )
         else:
             # Extract and format
-            yty_bal = self._fmt_dt(
+            yty_bal = self._fmt_td(
                 data.yty_balance, data.min_allowed_balance, data.max_allowed_balance
             )
-            mty_bal = self._fmt_dt(data.month_to_yday_balance)
-            day_bal = self._fmt_dt(data.day_balance)
-            day_wtm = self._fmt_dt(data.day_worked_time)
-            day_stm = self._fmt_dt(data.day_schedule_time)
+            mty_bal = self._fmt_td(data.month_to_yday_balance)
+            day_bal = self._fmt_td(data.day_balance)
+            day_wtm = self._fmt_td(data.day_worked_time)
+            day_stm = self._fmt_td(data.day_schedule_time)
             mth_vac = self._fmt_days(data.month_vacation)
             rem_vac = self._fmt_days(data.remaining_vacation)
 
@@ -740,8 +740,8 @@ class _ConsultationSuccessState(_ScanningState):
                     rng = ""
                     if data.min_allowed_balance and data.max_allowed_balance:
                         rng = (
-                            f" ({self._fmt_dt(data.min_allowed_balance)} / "
-                            f"{self._fmt_dt(data.max_allowed_balance)})"
+                            f" ({self._fmt_td(data.min_allowed_balance)} / "
+                            f"{self._fmt_td(data.max_allowed_balance)})"
                         )
 
                     lines.append(
@@ -774,32 +774,22 @@ class _ConsultationSuccessState(_ScanningState):
 
         return "\n".join(lines)
 
-    def _fmt_dt(
+    def _fmt_td(
         self,
         td: Optional[dt.timedelta],
         td_min: Optional[dt.timedelta] = None,
         td_max: Optional[dt.timedelta] = None,
     ):
-        if td is None:
-            return "indisponible"
+        txt = self._fmt.format_td_balance(td)
 
         # Check if a warning must be shown
         warn = ""
-        if td_min and td < td_min:
-            warn = f" (\u26a0 min. {self._fmt_dt(td_min)} \u26a0)"
-        if td_max and td > td_max:
-            warn = f" (\u26a0 max. {self._fmt_dt(td_max)} \u26a0)"
+        if td and td_min and td < td_min:
+            warn = f" (\u26a0 min. {self._fmt_td(td_min)} \u26a0)"
+        if td and td_max and td > td_max:
+            warn = f" (\u26a0 max. {self._fmt_td(td_max)} \u26a0)"
 
-        total_minutes = int(td.total_seconds() // 60)
-        sign = "-" if total_minutes < 0 else ""
-        abs_minutes = abs(total_minutes)
-        hours, minutes = divmod(abs_minutes, 60)
-
-        if hours == 0:
-            return f"{sign}{minutes} minute{"s" if minutes > 1 else ""}{warn}"
-        elif minutes == 0:
-            return f"{sign}{hours}h{warn}"
-        return f"{sign}{hours}h{minutes:02}{warn}"
+        return txt + warn
 
     def _fmt_date(self, date: dt.date):
         return dt.date.strftime(date, "%d.%m.%Y")

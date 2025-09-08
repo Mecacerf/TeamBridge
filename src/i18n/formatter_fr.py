@@ -14,6 +14,7 @@ Contact: info@mecacerf.ch
 # Internal libraries
 from i18n.translations import LanguageFormatter
 import datetime as dt
+from typing import Optional
 
 
 class FrenchFormatter(LanguageFormatter):
@@ -28,3 +29,24 @@ class FrenchFormatter(LanguageFormatter):
             return "Bonjour"
         else:
             return "Bonsoir"
+        
+    def format_td_balance(self, td: Optional[dt.timedelta]) -> str:
+        if td is None:
+            return "indisponible"
+
+        total_minutes = int(td.total_seconds() // 60)
+        sign = "-" if total_minutes < 0 else ""
+        abs_minutes = abs(total_minutes)
+        hours, minutes = divmod(abs_minutes, 60)
+
+        if hours == 0:
+            return f"{sign}{minutes} minute{"s" if minutes > 1 else ""}"
+        elif minutes == 0:
+            return f"{sign}{hours}h"
+        return f"{sign}{hours}h{minutes:02}"
+
+    def format_date(self, date: Optional[dt.date]) -> str:
+        if date:
+            return dt.date.strftime(date, "%d.%m.%Y")
+        return "Date inconnue"
+    

@@ -40,6 +40,14 @@ class LanguageFormatter(ABC):
     def greeting(self, now: dt.datetime | dt.time, farewell: bool = False) -> str:
         pass
 
+    @abstractmethod
+    def format_td_balance(self, td: Optional[dt.timedelta]) -> str:
+        pass
+
+    @abstractmethod
+    def format_date(self, date: Optional[dt.date]) -> str:
+        pass
+
 
 from i18n.formatter_en import EnglishFormatter
 from i18n.formatter_fr import FrenchFormatter
