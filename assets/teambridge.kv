@@ -1,0 +1,354 @@
+# File: teambridge.kv
+# Author: Bastian Cerf
+# Date: 22/04/2025
+# Description: 
+#     This file defines the user interface layout and components.
+#
+# Company: Mecacerf SA
+# Website: http://mecacerf.ch
+# Contact: info@mecacerf.ch
+
+# Minimum required Kivy version
+#:kivy 2.3.0
+# Import required libraries
+#:import math math
+
+# Define the vertical layout sections of the view.
+# Adjust their size by modifying the properties below.
+#:set header_height_hint 0.16
+#:set buttons_height_hint 0.35
+#:set main_title_text_height_hint 0.25
+#:set footer_height_hint 0.15
+#:set top_space_height_hint 0.09
+
+#:set progress_bar_y_hint 0.015
+
+## Custom components ##
+
+<IconButton>:
+    size_hint: None, None
+    pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+    size: self.current_side, self.current_side
+
+    canvas.before:
+        Color:
+            rgba: 0, 0, 0, 0.2
+        RoundedRectangle:
+            pos: self.size[0]*0.03, -self.size[0]*0.03
+            size: self.size
+            radius: [self.size[0]*0.22]
+        Color:
+            rgba: self.background_color
+        RoundedRectangle:
+            pos: 0, 0
+            size: self.size
+            radius: [self.size[0]*0.2]
+
+    Image:
+        size_hint: 0.6, 0.6
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+        source: root.source
+        fit_mode: 'contain'
+
+<LinearProgressBar>:
+    # Use canvas.after to cover legacy bar
+    canvas.after:
+        Color:
+            rgba: app.theme.border_color
+        Rectangle:
+            pos: self.pos
+            size: self.size
+        Color:
+            rgba: (app.theme.primary_color[0], app.theme.primary_color[1], app.theme.primary_color[2], self.bar_alpha)
+        Rectangle:
+            pos: (self.x, self.y)
+            size: (self.width * (self.value / self.max) + self.width / 3.0 * math.sin(self.value / self.max * math.pi), self.height)
+        Color:
+            rgba: app.theme.border_color
+        Rectangle:
+            pos: self.pos
+            size: (self.width * (self.value / self.max) - self.width / 2.0 * math.sin(self.value / self.max * math.pi), self.height)
+
+<TimeoutProgressBar>:
+    # Use canvas.after to cover legacy bar
+    canvas.after:
+        Color:
+            rgba: app.theme.border_color
+        Rectangle:
+            pos: self.pos
+            size: self.size
+        Color:
+            rgba: (app.theme.secondary_color[0], app.theme.secondary_color[1], app.theme.secondary_color[2], 1.0)
+        Rectangle:
+            pos: self.pos
+            size: (self.width * self.value, self.height)
+        
+<SlidingBoxLayout>:
+    size_hint: 1, 1
+    pos_hint: self.current_pos
+
+<IconLabel>:
+    font_name: 'md-icons'
+    color: app.theme.primary_color
+    halign: 'center'
+    valign: 'center'
+    text_size: self.size
+    font_size: self.height * 0.6
+
+## Main application screen ##
+
+<MainScreen>:
+    consultation_button: consultation_button_id
+    clock_button: clock_button_id
+    attendance_button: attendance_button_id
+    progress_bar: progress_bar_id
+    timeout_bar: timeout_bar_id
+    sliding_box_layout: sliding_box_layout_id
+    collapse_panel_icon: collapse_panel_icon_id
+
+    # Main screen vertical box layout
+    BoxLayout:
+        size_hint: 1, 1
+        pos_hint: {'x': 0, 'y': 0}
+        orientation: 'vertical'
+
+        # Set the background color for the main screen
+        canvas.before:
+            Color:
+                rgba: app.theme.bg_color
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        # Main screen header
+        RelativeLayout:
+            size_hint: 1, header_height_hint
+
+            # Show hour and date
+            BoxLayout:
+                orientation: 'vertical'
+                pos_hint: {'x': 0.015, 'y': -0.05}
+                size_hint: 1, 1
+
+                Label:
+                    text: root.clock_time
+                    halign: 'left'
+                    valign: 'bottom'
+                    text_size: self.size
+                    font_size: self.parent.height * 0.4
+                    color: app.theme.text_secondary_color
+                    font_name: 'InterRegular'
+
+                Label:
+                    text: root.clock_date
+                    halign: 'left'
+                    valign: 'top'
+                    text_size: self.size
+                    font_size: self.parent.height * 0.2
+                    color: app.theme.text_secondary_color
+                    font_name: 'InterRegular'
+
+            BoxLayout:
+                orientation: 'horizontal'
+                pos_hint: {'right': 1.0, 'y': 0.0}
+                size_hint: 0.5, 0.93  # Keeps some margin with the top
+
+                # Show company name next to company logo
+                Label:
+                    size_hint: 0.9, 1
+                    text: "Mecacerf SA"
+                    color: app.theme.text_secondary_color
+                    halign: 'right'
+                    valign: 'center'
+                    text_size: self.size
+                    font_size: self.height * 0.37
+                    font_name: 'InterRegular'
+
+                Widget:
+                    size_hint_x: 0.018
+
+                # Right justified square logo 
+                # Putting it in a relative layout allows to magnify it slightly
+                # out of the box layout, which gives a nice effect closer to the
+                # original logo
+                RelativeLayout:
+                    size_hint_x: None
+                    size_hint_y: 1
+                    width: self.height  # The logo stays square
+
+                    Image:
+                        pos_hint: {'right': 0.95, 'top': 1.0}  # Anchor at top-right to exceed at bottom-left
+                        size_hint: 1.05, 1.05
+                        source: 'assets/images/company_logo.png'
+                        fit_mode: 'contain'
+
+
+        # Leave some space at the top to center the buttons     
+        Widget:
+            size_hint: 1, top_space_height_hint
+
+        # Horizontal box layout for buttons
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: 1, buttons_height_hint
+
+            # Left border
+            Widget:
+                size_hint: 0.1, 1
+
+            # Use 3 anchor layouts to center the square buttons
+            AnchorLayout:
+                size_hint: 0.26, 1
+                
+                ToggleIconButton:
+                    id: consultation_button_id
+                    source: 'assets/images/consultation.png'
+                    on_press: if self.button_enabled: root.on_consultation_press()
+        
+            AnchorLayout:
+                size_hint: 0.26, 1
+                
+                ToggleIconButton:
+                    id: clock_button_id
+                    source: 'assets/images/start_pause.png'
+                    on_press: if self.button_enabled: root.on_clock_action_press()
+
+            AnchorLayout:
+                size_hint: 0.26, 1
+
+                IconButton:
+                    id: attendance_button_id
+                    source: 'assets/images/attendance.png'
+                    on_press: if self.button_enabled: root.on_attendance_press()
+
+            # Right border
+            Widget:
+                size_hint: 0.1, 1
+
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, main_title_text_height_hint
+
+            Label:
+                size_hint_y: 0.4
+                text: root.main_subtitle_text
+                color: app.theme.text_secondary_color
+                halign: 'center'
+                valign: 'bottom'
+                text_size: self.size
+                font_size: self.height * 0.35
+                font_name: 'InterRegular'
+
+            Label:
+                size_hint_y: 0.6
+                text: root.main_title_text
+                color: root.main_title_color
+                halign: 'center'
+                valign: 'top'
+                text_size: self.size
+                font_size: self.height * 0.4
+                font_name: 'InterMedium'
+
+        Widget:
+            size_hint: 1, footer_height_hint
+
+    # The sliding box layout used to display information
+    # is drawn above the main screen.
+    SlidingBoxLayout:
+        id: sliding_box_layout_id
+        orientation: 'vertical'
+        collapsed_pos: {'x': 0, 'y': -1.0 + footer_height_hint}
+        expanded_pos: {'x': 0, 'y': -header_height_hint - 0.017}
+        duration: 0.6
+        on_panel_press: root.on_info_panel_press()
+
+        canvas.before:
+            Color:
+                rgba: app.theme.surface_color
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        # Draw the progress bar 
+        RelativeLayout:
+            size_hint: 1, None
+            height: self.parent.height * progress_bar_y_hint
+
+            LinearProgressBar:
+                id: progress_bar_id
+                size_hint: 1, 1
+            
+            TimeoutProgressBar:
+                id: timeout_bar_id
+                size_hint: 1, 1
+
+        # This horizontal box layout holds the information panel title
+        # that is always visible even when collapsed.
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: 1, footer_height_hint - progress_bar_y_hint
+
+            Widget:
+                size_hint_x: 0.02
+
+            BoxLayout:
+                size_hint_x: 0.48
+                orientation: 'vertical'
+
+                Label:
+                    text: root.panel_title_text
+                    color: app.theme.text_secondary_color
+                    halign: 'left'
+                    valign: 'bottom'
+                    text_size: self.size
+                    font_size: self.height * 0.6
+                    font_name: 'InterRegular'
+
+                Label:
+                    text: root.panel_subtitle_text
+                    color: app.theme.text_secondary_color
+                    halign: 'left'
+                    valign: 'top'
+                    text_size: self.size
+                    font_size: self.height * 0.6
+                    font_name: 'InterRegular'
+
+            Widget:
+                size_hint_x: 0.4
+
+            IconLabel:
+                id: collapse_panel_icon_id
+                size_hint_x: 0.1
+                icon_code: 'F015A'
+
+        # Hold the current information panel
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, 1 - footer_height_hint - progress_bar_y_hint
+
+            BoxLayout:
+                orientation: 'horizontal'
+                
+                Widget:
+                    size_hint_x: 0.02
+
+                Label:
+                    text: root.panel_content_text
+                    color: app.theme.text_secondary_color
+                    halign: 'left'
+                    valign: 'top'
+                    text_size: self.size
+                    font_size: self.height * 0.05
+                    font_name: 'InterRegular'
+
+    # Bottom-right Label above everything to show services errors
+    Label:
+        pos_hint: {'right': 0.99, 'y': 0.015}
+        size_hint: .5, .1
+        halign: 'right'
+        valign: 'bottom'
+        font_size: self.height * 0.4
+        text_size: self.size
+        text: root.services_panel_text
+        color: app.theme.error_color
+        font_name: 'InterRegular'

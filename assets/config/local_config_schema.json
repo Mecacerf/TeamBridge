@@ -1,0 +1,188 @@
+{
+  "general": {
+    "device": {
+      "type": "str",
+      "default": "TeamBridge Device",
+      "comment": "Identifier/name of the device"
+    },
+    "frontend": {
+      "type": "str",
+      "required": true,
+      "default": "Kivy"
+    },
+    "locale": {
+      "type": "str",
+      "default": "fr_CH"
+    }
+  },
+  "repository": {
+    "repository": {
+      "type": "str",
+      "required": true,
+      "default": "samples/",
+      "comment": "Path to remote spreadsheets repository"
+    },
+    "year_regex": {
+      "type": "str",
+      "required": true,
+      "default": "(?<!\\d)(\\d{4})(?!\\d)",
+      "comment": "Regular expression to match year in folder names, must match 4 digits"
+    }
+  },
+  "repository.rules": {
+    "last_morning_clock_out_time": {
+      "type": "str",
+      "required": true,
+      "default": "05:00",
+      "match": "(?:[01]\\d|2[0-3]):[0-5]\\d",
+      "comment": "A midnight rollover is done if the employee clocks out between midnight and this hour (HH:MM)"
+    },
+    "max_work_duration": {
+      "type": "str",
+      "required": true,
+      "default": "08:00",
+      "match": "(?:[01]\\d|2[0-3]):[0-5]\\d",
+      "comment": "A midnight rollover is done if the delta time from clock-in to now is smaller than this duration (HH:MM)"
+    }
+  },
+  "scanner": {
+    "camera_id": {
+      "type": "int",
+      "required": true,
+      "default": 0,
+      "comment": "Camera device identifier",
+      "min": 0
+    },
+    "scan_rate": {
+      "type": "int",
+      "required": true,
+      "default": 4,
+      "comment": "Camera scanning rate [Hz], higher rate improves scan speed while consuming more CPU",
+      "min": 1
+    },
+    "regex": {
+      "type": "str",
+      "required": true,
+      "default": "teambridge@(\\w+)",
+      "comment": "Regular expression the scanned codes must match to be considered"
+    },
+    "regex_group": {
+      "type": "int",
+      "required": true,
+      "default": 1,
+      "comment": "Regex group index to extract the ID from"
+    },
+    "scanned_id_delay": {
+      "type": "float",
+      "required": true,
+      "default": 10.0,
+      "comment": "Delay [s] to prevent rescanning the same ID twice"
+    }
+  },
+  "ui": {
+    "fullscreen": {
+      "type": "bool",
+      "required": true,
+      "default": false
+    },
+    "dark_mode": {
+      "type": "bool",
+      "required": true,
+      "default": false
+    },
+    "load_attendance_list_timeout": {
+      "type": "float",
+      "required": true,
+      "default": 90.0,
+      "min": 1.0
+    },
+    "show_attendance_list_timeout": {
+      "type": "float",
+      "required": true,
+      "default": 30.0,
+      "min": 1.0
+    },
+    "show_consultation_timeout": {
+      "type": "float",
+      "required": true,
+      "default": 60.0,
+      "min": 1.0
+    },
+    "show_error_timeout": {
+      "type": "float",
+      "required": true,
+      "default": 20.0,
+      "min": 1.0,
+      "comment": "This timeout is started as soon as a report has been sent successfully"
+    }
+  },
+  "sleep": {
+    "sleep_timeout": {
+      "type": "int",
+      "default": 120,
+      "comment": "Sleep mode inactivity timeout [s], left empty to disable",
+      "min": 0
+    },
+    "sleep_brightness": {
+      "type": "int",
+      "default": 0,
+      "comment": "Screen brightness percentage [0-100] in sleep mode",
+      "min": 0,
+      "max": 100
+    },
+    "work_brightness": {
+      "type": "int",
+      "comment": "Screen brightness percentage [0-100] in working mode, left empty to select at startup",
+      "min": 0,
+      "max": 100
+    }
+  },
+  "report.general": {
+    "report_severity": {
+      "type": "str",
+      "enum": ["info", "warning", "error", "critical"],
+      "default": "info",
+      "comment": "All reports with a severity >= to this value are sent, possibilities: info, warning, error or critical"
+    },
+    "employee_error_level": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "comment": "All employee errors that are >= to this value are reported"
+    }
+  },
+  "report.email": {
+    "smtp_server": {
+      "type": "str",
+      "comment": "SMTP server URL, such as smtp.gmail.com, leave empty to disable email reports"
+    },
+    "smtp_port": {
+      "type": "int",
+      "default": 587,
+      "min": 0,
+      "max": 65535
+    },
+    "sender_address": {
+      "type": "str"
+    },
+    "sender_password": {
+      "type": "str"
+    },
+    "recipient_address": {
+      "type": "str"
+    }
+  },
+  "dependencies": {
+    "libreoffice": {
+      "type": "str",
+      "comment": "Path to a LibreOffice executable"
+    }
+  },
+  "debug": {
+    "debug": {
+      "type": "bool",
+      "required": true,
+      "default": false
+    }
+  }
+}
