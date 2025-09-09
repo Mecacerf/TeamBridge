@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-File: time_tracker_factory.py
-Author: Bastian Cerf
-Date: 17/05/2025
-Description:
-    Abstract factory for creating time tracker instances. The concrete
-    type of the time tracker is defined by the subclass implementation.
+Abstract factory for creating time tracker instances. The concrete
+type of the time tracker is defined by the subclass implementation.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-File: spreadsheet_time_tracker.py
-Author: Bastian Cerf
-Date: 21/02/2025
-Description:
-    Implementation of the time tracker analyzer abstract class using
-    spreadsheet files for data storage and data analysis. This
-    implementation works with the `sheets_repository` module to access
-    and manipulate files on a remote repository.
+Implementation of the time tracker analyzer abstract class using
+spreadsheet files for data storage and data analysis. This
+implementation works with the `sheets_repository` module to access
+and manipulate files on a remote repository.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

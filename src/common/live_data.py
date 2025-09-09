@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-File: live_data.py
-Author: Bastian Cerf
-Date: 02/03/2025
-Description:
-    A live data is a holder of a generic type variable that can be
-    observed as defined by the observer pattern.
+A live data is a holder of a generic type variable that can be
+observed as defined by the observer pattern.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 from typing import Generic, TypeVar, Callable

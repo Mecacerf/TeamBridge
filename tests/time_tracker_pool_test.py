@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: time_tracker_pool_test.py
-Author: Bastian Cerf
-Date: 02/09/2025
-Description:
-    Unit test the time tracker pool module.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard library
 from datetime import date, datetime

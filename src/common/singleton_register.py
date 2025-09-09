@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-File: singleton_register.py
-Author: Bastian Cerf
-Date: 02/06/2025
-Description:
-    Abstract base class to create one singleton instance per subclass.
-    Any class inheriting from `SingletonRegister` will be created only
-    once at first access. Subsequent calls to the constructor will
-    always return the only instance.
+Abstract base class to create one singleton instance per subclass.
+Any class inheriting from `SingletonRegister` will be created only
+once at first access. Subsequent calls to the constructor will
+always return the only instance.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

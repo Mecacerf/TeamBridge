@@ -1,37 +1,36 @@
 #!/usr/bin/env python3
 """
-File: config_parser.py
+Read and parse a configuration file in the .ini format. The file
+data is validated against a provided JSON schema. A default .ini
+file can be automatically created from the schema if non-existent.
+
+The .ini file is organized in sections containing key-value pairs.
+The JSON schema reflects this structure by declaring one block by
+section and one inner-block by key-value pair. This inner-block
+contains information such as the value type, default value and
+constraints.
+
+Supported key-value pair parameters:
+- type: the value type as int, float, str or bool
+- required: tells if the value is required or can be empty, notes that
+    the key cannot be missing
+- default: the default value used when creating the default .ini file
+    from the schema (JSON) file
+- comment: optional comment to add before the key-value pair when
+    creating the default .ini file
+- min/max: optionally constrains int and float values in a specified
+    range
+- enum: optionally define a preset of accepted values (only for strings)
+- match: optionally specify a regular expression the string value must
+    match
+Only the type parameter is absolutely required.
+
+---
+TeamBridge - An open-source timestamping application
+
 Author: Bastian Cerf
-Date: 12/08/2025
-Description:
-    Read and parse a configuration file in the .ini format. The file
-    data is validated against a provided JSON schema. A default .ini
-    file can be automatically created from the schema if non-existent.
-
-    The .ini file is organized in sections containing key-value pairs.
-    The JSON schema reflects this structure by declaring one block by
-    section and one inner-block by key-value pair. This inner-block
-    contains information such as the value type, default value and
-    constraints.
-
-    Supported key-value pair parameters:
-    - type: the value type as int, float, str or bool
-    - required: tells if the value is required or can be empty, notes that
-        the key cannot be missing
-    - default: the default value used when creating the default .ini file
-        from the schema (JSON) file
-    - comment: optional comment to add before the key-value pair when
-        creating the default .ini file
-    - min/max: optionally constrains int and float values in a specified
-        range
-    - enum: optionally define a preset of accepted values (only for strings)
-    - match: optionally specify a regular expression the string value must
-        match
-    Only the type parameter is absolutely required.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: sheets_repository_test.py
-Author: Bastian Cerf
-Date: 18/05/2025
-Description:
-    Unit test of the spreadsheets repository module.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import pytest

@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: config_parser_test.py
-Author: Bastian Cerf
-Date: 18/08/2025
-Description:
-    Unit test the configuration parser module.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import pytest

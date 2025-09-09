@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-File: libreoffice.py
-Author: Bastian Cerf
-Date: 18/05/2025
-Description:
-    This module provides functionality to load, evaluate and save a
-    spreadsheet file using LibreOffice calc in headless mode.
+This module provides functionality to load, evaluate and save a
+spreadsheet file using LibreOffice calc in headless mode.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

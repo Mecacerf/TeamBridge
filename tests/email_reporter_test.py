@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: email_reporter_test.py
-Author: Bastian Cerf
-Date: 31/08/2025
-Description:
-    Unit tests for the email reporter module.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import pytest

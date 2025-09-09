@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: conftest.py
-Author: Bastian Cerf
-Date: 24/06//2025
-Description:
-    Group different classes mocks for tests purpose.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import logging

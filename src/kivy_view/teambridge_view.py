@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """
-File: time_tracker_view.py
-Author: Bastian Cerf
-Date: 02/03/2025
-Description:
-    This Kivy-based view displays dynamic text content provided by the
-    ViewModel and interacts with it through the next action signal. It
-    serves as the presentation layer, updating its interface based on
-    ViewModel data and sending user-triggered events back to the ViewModel
-    to drive application logic.
+This Kivy-based view displays dynamic text content provided by the
+ViewModel and interacts with it through the next action signal. It
+serves as the presentation layer, updating its interface based on
+ViewModel data and sending user-triggered events back to the ViewModel
+to drive application logic.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # pyright: reportGeneralTypeIssues=false

@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """
-File: sleep_management.py
-Author: Bastian Cerf
-Date: 09/05/2025
-Description:
-    This module allows to enable / disable the program sleep mode.
-    It is used to prevent the computer from going to sleep while the
-    program is running.
-    Currently, it only works on Windows.
+This module manages application sleep mode.
+It is used to prevent the host computer from going to sleep while the
+application is running.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

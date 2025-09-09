@@ -1,17 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: teambridge_viewmodel_test.py
-Author: Bastian Cerf
-Date: 20/04/2025
-Description:
-    Description:
-        Unit test the TeamBridgeViewModel module to validate expected
-        behaviors.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import time

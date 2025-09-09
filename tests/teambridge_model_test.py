@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: teambridge_model_test.py
-Author: Bastian Cerf
-Date: 13/04/2025
-Description:
-    Unit test the TeamBridgeScheduler to validate expected behaviors.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import time

@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """
-File: local_config.py
+Read, parse and validate the local configuration file
+`local_config.ini` against its schema under
+`assets/config/local_config_schema.json`.
+
+The `LocalConfig` class is a thread-safe singleton loaded at
+startup that can be accessed from any place of the application.
+
+---
+TeamBridge - An open-source timestamping application
+
 Author: Bastian Cerf
-Date: 15/08/2025
-Description:
-    Read, parse and validate the local configuration file
-    `local_config.ini` against its schema under
-    `assets/config/local_config_schema.json`.
-
-    The `LocalConfig` class is a thread-safe singleton loaded at
-    startup that can be accessed from any place of the application.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
 """
-File: time_tracker.py
-Author: Bastian Cerf
-Date: 17/02/2025
-Description:
-    Base abstract classes for accessing and managing an employee's data.
-    Three interfaces that inherit from each other are provided:
-    - The `Employee` just give access to basic information that aren't
-        related to a specific date and time (such as name, id).
-    - The `TimeTracker` offers simple access to raw attendance data. It
-        allows to read and write clock events, vacation and attendance
-        errors.
-    - The `TimeTrackerAnalyzer` goes one step further by analyzing and
-        computing the attendance data to provide different information,
-        such as total of scheduled work, worked time, vacation and so
-        on. The computing engine is implementation dependent and may not
-        be Python. For this reason the access to these data is restricted
-        by a flag `analyzed`. The data must be analyzed before access.
+Base abstract classes for accessing and managing an employee's data.
+Three interfaces that inherit from each other are provided:
+- The `Employee` just gives access to basic information that aren't
+    related to a specific date and time (such as name, id).
+- The `TimeTracker` offers simple access to raw attendance data. It
+    allows to read and write clock events, vacation and attendance
+    errors.
+- The `TimeTrackerAnalyzer` goes one step further by analyzing and
+    computing the attendance data to provide different kind of 
+    information, such as total of scheduled work, worked time, vacation 
+    and so on. The computing engine is implementation dependent and may 
+    not be Python. For this reason the access to these data is restricted
+    by a flag `analyzed`. The data must be analyzed before access.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

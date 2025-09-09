@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-File: __init__.py
+TeamBridge - An open-source timestamping application
+
 Author: Bastian Cerf
-Date: 11/05/2025
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Expose everything from data and scheduler modules

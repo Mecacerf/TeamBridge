@@ -1,25 +1,17 @@
 #!/usr/bin/env python3
 """
-File: time_tracker_test.py
-Author: Bastian Cerf
-Date: 18/05/2025
-Description:
-    Unit tests for the time tracker module.
+Unit tests for the time tracker module.
 
-    These tests are implementation-agnostic and follow a black-box testing
-    approach. For instance, values are written and read exclusively through
-    the time tracker interface to verify correctness—without accessing the
-    underlying storage directly (e.g., spreadsheets, databases, etc.). This
-    strategy ensures that all time tracker implementations can be tested
-    uniformly, focusing on their observable behavior.
+These tests are implementation-agnostic and follow a black-box testing
+approach. For instance, values are written and read exclusively through
+the time tracker interface to verify correctness—without accessing the
+underlying storage directly (e.g., spreadsheets, databases, etc.). This
+strategy ensures that all time tracker implementations can be tested
+uniformly, focusing on their observable behavior.
 
-    The tests assume that a known dataset is already present in the data
-    storage system. To inspect the test data, it is recommended to open the
-    corresponding unit test spreadsheet file.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+The tests assume that a known dataset is already present in the data
+storage system. To inspect the test data, it is recommended to open the
+corresponding unit test spreadsheet file.
 """
 
 # Standard libraries

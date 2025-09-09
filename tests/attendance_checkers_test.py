@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-File: attendance_checkers_test.py
-Author: Bastian Cerf
-Date: 23/07/2025
-Description:
-    Unit tests for the attendance checkers modules.
-
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
-"""
 
 # Standard libraries
 import pytest

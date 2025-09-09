@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-File: teambridge_scheduler.py
-Author: Bastian Cerf
-Date: 02/03/2025
-Description:
-    Provides an asynchronous way to manipulate employee time trackers.
-    The scheduler allows to execute different tasks and get their result
-    once finished.
+Provides an asynchronous way of manipulating employee time trackers.
+The scheduler allows to execute different tasks and get their result
+once finished.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries

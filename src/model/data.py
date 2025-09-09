@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-File: data.py
-Author: Bastian Cerf
-Date: 11/05/2025
-Description:
-    Provides dataclasses used to communicate sets of information about
-    employees between the program components.
+Provides dataclasses to communicate employee information between the 
+application components.
 
-Company: Mecacerf SA
-Website: http://mecacerf.ch
-Contact: info@mecacerf.ch
+---
+TeamBridge - An open-source timestamping application
+
+Author: Bastian Cerf
+Copyright (C) 2025 Mecacerf SA
+License: AGPL-3.0 <https://www.gnu.org/licenses/>
 """
 
 # Standard libraries
