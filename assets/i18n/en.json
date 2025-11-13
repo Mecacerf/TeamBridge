@@ -1,0 +1,52 @@
+{
+  "scanner.offline.title": "Out of service",
+  "scanner.offline.opening": "Starting barcode scanner...",
+  "scanner.wait_badge": "Please present your badge",
+  "scanner.mode.clock": "Clock mode",
+  "scanner.mode.consultation": "Consultation mode",
+
+  "clock.success.title.in": "Clock-in recorded",
+  "clock.success.title.out": "Clock-out recorded",
+  "clock.success.greeting.morning": "Good morning {firstname}",
+  "clock.success.greeting.evening": "Good evening {firstname}",
+  "clock.success.greeting.bye": "Goodbye {firstname}",
+
+  "consultation.error.blocked.line1": "Errors prevent the information from being displayed correctly.",
+  "consultation.error.blocked.line2": "Please contact the office.",
+  "consultation.error.list_title": "\u26a0 Issue{suffix}:",
+  "consultation.error.unknown_date": "   \u2022 unknown date: {description}",
+
+  "consultation.summary.present": "\u2022 Present: {value}",
+  "consultation.summary.prev_total_balance": "\u2022 Total balance as of yesterday: {value}",
+  "consultation.summary.prev_month_balance": "\u2022 Monthly balance as of yesterday: {value}",
+  "consultation.summary.day_balance": "\u2022 Today's balance: {day_balance} ({worked} / {scheduled})",
+  "consultation.summary.month_vacation": "\u2022 Vacation this month: {value}",
+  "consultation.summary.remaining_vacation": "\u2022 Vacation to plan: {value}",
+  "consultation.summary.out_of_range": "   \u26a0 Out of the allowed range{range}, please adjust promptly \u26a0",
+  "consultation.summary.warning_title": "\u26a0 Issue{suffix}:",
+  "consultation.summary.warning_item": "   \u2022 {date}: {description}",
+
+  "attendance_list.title": "Attendance list",
+  "attendance_list.empty": "Nobody is listed.",
+  "attendance_list.more_names": "+ {count} hidden...",
+
+  "error.state.title": "An error occurred",
+  "error.state.subtitle": "Please contact the office",
+  "error.state.retry_later": "Please try again later",
+
+  "services.smtp.offline": "\u26a0 SMTP server \u26a0",
+
+  "common.yes": "yes",
+  "common.no": "no",
+  "common.unavailable": "unavailable",
+
+  "plural.s": "s",
+
+  "duration.minutes": "{sign}{value} minute{plural}{warn}",
+  "duration.hours": "{sign}{hours}h{warn}",
+  "duration.hours_minutes": "{sign}{hours}h{minutes}{warn}",
+  "duration.min_warning": " (\u26a0 min {value} \u26a0)",
+  "duration.max_warning": " (\u26a0 max {value} \u26a0)",
+  "duration.day_suffix": "d",
+  "duration.day_zero": "0{unit}"
+}

@@ -30,6 +30,7 @@ from PIL import ImageFont
 from common.state_machine import *
 from common.live_data import LiveData  # For view communication
 from common.reporter import ReportingService, ReportSeverity, Report, EmployeeReport
+from common.i18n import translate as _, plural_suffix
 from model import *  # Task scheduling
 from platform_io.barcode_scanner import BarcodeScanner  # Employee ID detection
 from core.time_tracker import ClockAction  # Domain model enums
@@ -305,8 +306,8 @@ class _InitialState(_IViewModelState):
         Initial state entry: the barcode scanner is configured and
         opened.
         """
-        self.fsm.main_title_text.value = "Hors service"
-        self.fsm.panel_title_text.value = "Ouverture du scanner..."
+        self.fsm.main_title_text.value = _("scanner.offline.title")
+        self.fsm.panel_title_text.value = _("scanner.offline.opening")
 
         self.fsm.scanner.configure(
             regex=_scanner_conf["regex"],
@@ -398,8 +399,8 @@ class _WaitClockActionState(_ScanningState):
     def entry(self):
         super().entry()
 
-        self.fsm.main_title_text.value = "Veuillez présenter votre badge"
-        self.fsm.main_subtitle_text.value = "Mode de timbrage"
+        self.fsm.main_title_text.value = _("scanner.wait_badge")
+        self.fsm.main_subtitle_text.value = _("scanner.mode.clock")
         self.fsm.next_action = ViewModelAction.CLOCK_ACTION
 
     def do(self) -> Optional[IStateBehavior]:
@@ -429,8 +430,8 @@ class _WaitConsultationActionState(_ScanningState):
     def entry(self):
         super().entry()
 
-        self.fsm.main_title_text.value = "Veuillez présenter votre badge"
-        self.fsm.main_subtitle_text.value = "Mode de consultation"
+        self.fsm.main_title_text.value = _("scanner.wait_badge")
+        self.fsm.main_subtitle_text.value = _("scanner.mode.consultation")
         self.fsm.next_action = ViewModelAction.CONSULTATION
 
     def do(self) -> Optional[IStateBehavior]:
@@ -524,33 +525,20 @@ class _ClockSuccessState(_IViewModelState):
         self.fsm.main_subtitle_text.value = ""
 
     def __main_title_text(self):
-        # Format text according to event
-        text = ""
-        # Greetings
         if self._evt.clock_evt.action == ClockAction.CLOCK_IN:
-            text = "Entrée "
-        else:
-            text = "Sortie "
-        # Clock action
-        text += "enregistrée"
-        # Return formatted text
-        return text
+            return _("clock.success.title.in")
+        return _("clock.success.title.out")
 
     def __main_subtitle_text(self):
-        # Format text according to event
-        text = ""
-        # Greetings
         if self._evt.clock_evt.action == ClockAction.CLOCK_IN:
             if self._evt.clock_evt.time.hour < 16:
-                text += "Bonjour"
-            else:
-                text += "Bonsoir"
-        else:
-            text += "Au revoir"
-        # Employee's firstname
-        text += f" {self._evt.firstname}"
-        # Return formatted text
-        return text
+                return _(
+                    "clock.success.greeting.morning", firstname=self._evt.firstname
+                )
+            return _(
+                "clock.success.greeting.evening", firstname=self._evt.firstname
+            )
+        return _("clock.success.greeting.bye", firstname=self._evt.firstname)
 
 
 class _ConsultationActionState(_IViewModelState):
@@ -685,8 +673,8 @@ class _ConsultationSuccessState(_ScanningState):
         if data.dominant_error.status == AttendanceErrorStatus.ERROR:
             # Show the error panel
             lines = [
-                "Des erreurs empêchent l'affichage correct des informations. ",
-                "Veuillez vous adresser au secrétariat.",
+                _("consultation.error.blocked.line1"),
+                _("consultation.error.blocked.line2"),
                 "",
             ]
 
@@ -697,10 +685,15 @@ class _ConsultationSuccessState(_ScanningState):
                 if error.status is AttendanceErrorStatus.ERROR
             }
 
-            lines.append(f"\u26a0 Erreur{"" if len(data.date_errors) == 1 else "s"}:")
+            suffix = plural_suffix(len(self._data.date_errors))
+            lines.append(_("consultation.error.list_title", suffix=suffix))
             lines.extend(
                 [
-                    f"   \u2022 {self._fmt_date(date)}: {err.description}"
+                    _(
+                        "consultation.summary.warning_item",
+                        date=self._fmt_date(date),
+                        description=err.description,
+                    )
                     for date, err in self._data.date_errors.items()
                     if err.status is AttendanceErrorStatus.ERROR
                 ]
@@ -709,7 +702,10 @@ class _ConsultationSuccessState(_ScanningState):
             # The dominant error may not be in the scanned range
             if len(errors) == 0:
                 lines.append(
-                    f"   \u2022 date inconnue: {data.dominant_error.description}"
+                    _(
+                        "consultation.error.unknown_date",
+                        description=data.dominant_error.description,
+                    )
                 )
         else:
             # Extract and format
@@ -725,8 +721,14 @@ class _ConsultationSuccessState(_ScanningState):
 
             # Normal information panel
             lines = [
-                f"\u2022 Présent: {'oui' if data.clocked_in else 'non'}",
-                f"\u2022 Balance totale au jour précédent: {yty_bal}",
+                _(
+                    "consultation.summary.present",
+                    value=_("common.yes") if data.clocked_in else _("common.no"),
+                ),
+                _(
+                    "consultation.summary.prev_total_balance",
+                    value=yty_bal,
+                ),
             ]
 
             # Add a warning line if balance is out of range
@@ -744,27 +746,50 @@ class _ConsultationSuccessState(_ScanningState):
                         )
 
                     lines.append(
-                        f"   \u26a0 Hors de la plage autorisée{rng}, "
-                        "veuillez régulariser rapidement \u26a0"
+                        _(
+                            "consultation.summary.out_of_range",
+                            range=rng,
+                        )
                     )
 
             lines.extend(
                 [
-                    f"\u2022 Balance du mois au jour précédent: {mty_bal}",
-                    f"\u2022 Balance du jour: {day_bal} ({day_wtm} / {day_stm})",
-                    f"\u2022 Vacances ce mois: {mth_vac}",
-                    f"\u2022 Vacances à planifier: {rem_vac}",
+                    _(
+                        "consultation.summary.prev_month_balance",
+                        value=mty_bal,
+                    ),
+                    _(
+                        "consultation.summary.day_balance",
+                        day_balance=day_bal,
+                        worked=day_wtm,
+                        scheduled=day_stm,
+                    ),
+                    _(
+                        "consultation.summary.month_vacation",
+                        value=mth_vac,
+                    ),
+                    _(
+                        "consultation.summary.remaining_vacation",
+                        value=rem_vac,
+                    ),
                 ]
             )
 
             # Add errors if any
             if data.date_errors:
                 lines.append(
-                    f"\u26a0 Problème{"" if len(data.date_errors) == 1 else "s"}:"
+                    _(
+                        "consultation.summary.warning_title",
+                        suffix=plural_suffix(len(data.date_errors)),
+                    )
                 )
                 lines.extend(
                     [
-                        f"   \u2022 {self._fmt_date(date)}: {err.description}"
+                        _(
+                            "consultation.summary.warning_item",
+                            date=self._fmt_date(date),
+                            description=err.description,
+                        )
                         for date, err in data.date_errors.items()
                     ]
                 )
@@ -778,14 +803,14 @@ class _ConsultationSuccessState(_ScanningState):
         td_max: Optional[dt.timedelta] = None,
     ):
         if td is None:
-            return "indisponible"
+            return _("common.unavailable")
 
         # Check if a warning must be shown
         warn = ""
         if td_min and td < td_min:
-            warn = f" (\u26a0 min. {self._fmt_dt(td_min)} \u26a0)"
+            warn = _("duration.min_warning", value=self._fmt_dt(td_min))
         if td_max and td > td_max:
-            warn = f" (\u26a0 max. {self._fmt_dt(td_max)} \u26a0)"
+            warn = _("duration.max_warning", value=self._fmt_dt(td_max))
 
         total_minutes = int(td.total_seconds() // 60)
         sign = "-" if total_minutes < 0 else ""
@@ -793,10 +818,25 @@ class _ConsultationSuccessState(_ScanningState):
         hours, minutes = divmod(abs_minutes, 60)
 
         if hours == 0:
-            return f"{sign}{minutes} minute{"s" if minutes > 1 else ""}{warn}"
+            plural = "" if minutes == 1 else _("plural.s")
+            return _(
+                "duration.minutes",
+                sign=sign,
+                value=minutes,
+                plural=plural,
+                warn=warn,
+            )
         elif minutes == 0:
-            return f"{sign}{hours}h{warn}"
-        return f"{sign}{hours}h{minutes:02}{warn}"
+            return _("duration.hours", sign=sign, hours=hours, warn=warn)
+
+        minutes_str = f"{minutes:02}"
+        return _(
+            "duration.hours_minutes",
+            sign=sign,
+            hours=hours,
+            minutes=minutes_str,
+            warn=warn,
+        )
 
     def _fmt_date(self, date: dt.date):
         return dt.date.strftime(date, "%d.%m.%Y")
@@ -808,7 +848,9 @@ class _ConsultationSuccessState(_ScanningState):
         E.g., 1.26 → '1j ¼', 0.48 → '½j', 1.93 → '2j'
         """
         if days is None:
-            return "indisponible"
+            return _("common.unavailable")
+
+        unit = _("duration.day_suffix")
 
         # Manual thresholds
         thresholds = [
@@ -831,13 +873,13 @@ class _ConsultationSuccessState(_ScanningState):
 
         parts = []
         if integer > 0:
-            parts.append(f"{integer}j")
+            parts.append(f"{integer}{unit}")
             if fraction_symbol:
                 parts.append(fraction_symbol)
         elif fraction_symbol:
-            parts.append(f"{fraction_symbol}j")
+            parts.append(f"{fraction_symbol}{unit}")
         else:
-            parts.append("0j")
+            parts.append(_("duration.day_zero", unit=unit))
 
         return " ".join(parts)
 
@@ -894,7 +936,7 @@ class _ShowAttendanceList(_IViewModelState):
         self._font = ImageFont.truetype(ATTENDANCE_LIST_FONT, size=32)
 
     def entry(self):
-        self.fsm.panel_title_text.value = "Liste des présences"
+        self.fsm.panel_title_text.value = _("attendance_list.title")
         self.fsm.panel_content_text.value = self.__panel_content_text()
 
         self._timeout = time.time() + SHOW_ATTENDANCE_LIST_TIMEOUT
@@ -951,12 +993,14 @@ class _ShowAttendanceList(_IViewModelState):
         names = [self.__truncate(name, MAX_NAME_LENGTH) for name in names]
 
         if len(names) == 0:
-            names = ["Il n'y a personne."]
+            names = [_("attendance_list.empty")]
 
         max_names = MAX_COL_ENTRIES * MAX_COL_NUMBER
         if len(names) > max_names:
             # Replace the last name to show the list continues
-            names[max_names - 1] = f"+ {len(names) - max_names + 1} cachés..."
+            names[max_names - 1] = _(
+                "attendance_list.more_names", count=len(names) - max_names + 1
+            )
 
         ncols = min(ceil(len(names) / MAX_COL_ENTRIES), MAX_COL_NUMBER)
 
@@ -1021,8 +1065,8 @@ class _ErrorState(_IViewModelState):
         self._timeout = None
 
     def entry(self):
-        self.fsm.main_title_text.value = "Une erreur est survenue"
-        self.fsm.main_subtitle_text.value = "Veuillez vous adresser au secrétariat"
+        self.fsm.main_title_text.value = _("error.state.title")
+        self.fsm.main_subtitle_text.value = _("error.state.subtitle")
 
         # Reset next action to prevent wrong acknowledgment
         self.fsm.next_action = ViewModelAction.DEFAULT_ACTION
@@ -1095,7 +1139,7 @@ class _ErrorState(_IViewModelState):
             # Program the state timeout once a report has been sent
             # successfully
             self._timeout = time.time() + SHOW_ERROR_STATE_TIMEOUT
-            self.fsm.main_subtitle_text.value = "Veuillez réessayer ultérieurement"
+            self.fsm.main_subtitle_text.value = _("error.state.retry_later")
             self.fsm.leave_time.value = self._timeout
 
         if self._timeout and time.time() > self._timeout:

@@ -64,6 +64,7 @@ from viewmodel.teambridge_viewmodel import *
 from platform_io.sleep_manager import SleepManager
 from .view_theme import *
 from common.reporter import ReportingService, ReportSeverity, Report
+from common.i18n import translate as _
 
 # Set Kivy window icon
 Window.set_icon("assets/images/company_logo_small.png")
@@ -357,7 +358,7 @@ class MainScreen(FloatLayout):
         self.timeout_bar.program_timeout(value)
 
     def _upd_reporting_service_sts(self, status: bool):
-        self.services_panel_text = "" if status else "\u26a0 Serveur SMTP \u26a0"
+        self.services_panel_text = "" if status else _("services.smtp.offline")
 
     def _on_state_change(self, state: str):
         """

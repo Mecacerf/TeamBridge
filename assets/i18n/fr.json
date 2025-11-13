@@ -1,0 +1,52 @@
+{
+  "scanner.offline.title": "Hors service",
+  "scanner.offline.opening": "Ouverture du scanner...",
+  "scanner.wait_badge": "Veuillez présenter votre badge",
+  "scanner.mode.clock": "Mode de timbrage",
+  "scanner.mode.consultation": "Mode de consultation",
+
+  "clock.success.title.in": "Entrée enregistrée",
+  "clock.success.title.out": "Sortie enregistrée",
+  "clock.success.greeting.morning": "Bonjour {firstname}",
+  "clock.success.greeting.evening": "Bonsoir {firstname}",
+  "clock.success.greeting.bye": "Au revoir {firstname}",
+
+  "consultation.error.blocked.line1": "Des erreurs empêchent l'affichage correct des informations.",
+  "consultation.error.blocked.line2": "Veuillez vous adresser au secrétariat.",
+  "consultation.error.list_title": "\u26a0 Erreur{suffix}:",
+  "consultation.error.unknown_date": "   \u2022 date inconnue: {description}",
+
+  "consultation.summary.present": "\u2022 Présent: {value}",
+  "consultation.summary.prev_total_balance": "\u2022 Balance totale au jour précédent: {value}",
+  "consultation.summary.prev_month_balance": "\u2022 Balance du mois au jour précédent: {value}",
+  "consultation.summary.day_balance": "\u2022 Balance du jour: {day_balance} ({worked} / {scheduled})",
+  "consultation.summary.month_vacation": "\u2022 Vacances ce mois: {value}",
+  "consultation.summary.remaining_vacation": "\u2022 Vacances à planifier: {value}",
+  "consultation.summary.out_of_range": "   \u26a0 Hors de la plage autorisée{range}, veuillez régulariser rapidement \u26a0",
+  "consultation.summary.warning_title": "\u26a0 Problème{suffix}:",
+  "consultation.summary.warning_item": "   \u2022 {date}: {description}",
+
+  "attendance_list.title": "Liste des présences",
+  "attendance_list.empty": "Il n'y a personne.",
+  "attendance_list.more_names": "+ {count} cachés...",
+
+  "error.state.title": "Une erreur est survenue",
+  "error.state.subtitle": "Veuillez vous adresser au secrétariat",
+  "error.state.retry_later": "Veuillez réessayer ultérieurement",
+
+  "services.smtp.offline": "\u26a0 Serveur SMTP \u26a0",
+
+  "common.yes": "oui",
+  "common.no": "non",
+  "common.unavailable": "indisponible",
+
+  "plural.s": "s",
+
+  "duration.minutes": "{sign}{value} minute{plural}{warn}",
+  "duration.hours": "{sign}{hours}h{warn}",
+  "duration.hours_minutes": "{sign}{hours}h{minutes}{warn}",
+  "duration.min_warning": " (\u26a0 min. {value} \u26a0)",
+  "duration.max_warning": " (\u26a0 max. {value} \u26a0)",
+  "duration.day_suffix": "j",
+  "duration.day_zero": "0{unit}"
+}
