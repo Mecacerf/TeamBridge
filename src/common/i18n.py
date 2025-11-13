@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 _DEFAULT_LANGUAGE = "en"
 _I18N_DIR = join("assets", "i18n")
 
+try:
+    _LOCAL_CONFIG = LocalConfig()
+except ConfigError:
+    logger.exception("Unable to initialize LocalConfig while setting up i18n.")
+    _LOCAL_CONFIG = None
+
 
 def _normalize_language(value: Optional[str]) -> str:
     if not value:
@@ -44,11 +50,14 @@ class Translator(SingletonRegister):
         self._fallback_language = fallback_language
 
         if language is None:
-            try:
-                config = LocalConfig()
-                language = _normalize_language(config.section("general")["locale"])
-            except (KeyError, ConfigError):
-                language = _DEFAULT_LANGUAGE
+            language = _DEFAULT_LANGUAGE
+            if _LOCAL_CONFIG is not None:
+                try:
+                    language = _normalize_language(
+                        _LOCAL_CONFIG.section("general")["locale"]
+                    )
+                except (KeyError, ConfigError):
+                    logger.warning("Invalid or missing locale in local configuration. Defaulting to '%s'.", _DEFAULT_LANGUAGE)
 
         self._language = language or _DEFAULT_LANGUAGE
         self._catalog = self._load_catalog(self._language)
