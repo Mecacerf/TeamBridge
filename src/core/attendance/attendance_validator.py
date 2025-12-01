@@ -251,7 +251,7 @@ class AttendanceValidator(ABC):
                 end_rng = until.date()
             elif mode is ErrorsReadMode.MONTH_ONLY:
                 start_rng = dt.date(tracker.tracked_year, until.month, 1)
-                end_rng = dt.date(tracker.tracked_year, until.month + 1, 1)
+                end_rng = (start_rng + dt.timedelta(days=32)).replace(day=1)
             elif mode is ErrorsReadMode.WHOLE_YEAR:
                 start_rng = dt.date(tracker.tracked_year, 1, 1)
                 end_rng = dt.date(tracker.tracked_year + 1, 1, 1)
